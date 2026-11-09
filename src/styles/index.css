@@ -1,0 +1,177 @@
+@import 'tailwindcss';
+
+/* Onest, self-hosted variable font (400–600), subsets from Google Fonts (OFL). */
+@font-face {
+  font-family: 'Onest';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('/fonts/onest-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Onest';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('/fonts/onest-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Onest';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('/fonts/onest-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/*
+ * Design tokens (design/support.js, «Дизайн-система v0.1»).
+ * light-dark(): first value — светлая тема, second — тёмная.
+ * Theme: system by default; <html data-theme="light|dark"> forces one.
+ */
+:root {
+  color-scheme: light dark;
+
+  --bg: light-dark(#f6f4ef, #171614);
+  --card: light-dark(#ffffff, #211f1c);
+  --sub: light-dark(#efece6, #2b2925);
+  --line: light-dark(#e7e3da, #322f2a);
+  --line2: light-dark(#d5d0c4, #45413a);
+  --ink: light-dark(#22201c, #f1eee7);
+  --ink2: light-dark(#5c574e, #bcb6aa);
+  --ink3: light-dark(#706a5f, #9a9488);
+  --dis: light-dark(#aba597, #5e594f);
+  --inv: light-dark(#22201c, #f1eee7);
+  --inv2: light-dark(#47433c, #d2ccc0);
+  --on-inv: light-dark(#ffffff, #1a1917);
+
+  --money: light-dark(#5e8c6a, #8dba98);
+  --money-soft: light-dark(#e6efe8, #243128);
+  --work: light-dark(#5a7db0, #8eaad8);
+  --work-soft: light-dark(#e5ecf6, #232b38);
+  --study: light-dark(#8a79be, #b2a3e2);
+  --study-soft: light-dark(#eeeaf7, #2c283a);
+  --body: light-dark(#cc7f66, #e6a28b);
+  --body-soft: light-dark(#f8eae4, #382a24);
+
+  --amber: light-dark(#b58419, #d4a443);
+  --amber-ink: light-dark(#82600f, #e2b65a);
+  --amber-soft: light-dark(#f7eed8, #352c1b);
+  --red: light-dark(#a93d33, #eb8576);
+  --red-soft: light-dark(#f8e5e1, #3b2421);
+
+  --scrim: light-dark(rgba(34, 32, 28, 0.36), rgba(0, 0, 0, 0.55));
+  --shadow-color: light-dark(rgba(34, 32, 28, 0.12), rgba(0, 0, 0, 0.45));
+  --seg-shadow-color: light-dark(rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.4));
+}
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-bg: var(--bg);
+  --color-card: var(--card);
+  --color-sub: var(--sub);
+  --color-line: var(--line);
+  --color-line2: var(--line2);
+  --color-ink: var(--ink);
+  --color-ink2: var(--ink2);
+  --color-ink3: var(--ink3);
+  --color-dis: var(--dis);
+  --color-inv: var(--inv);
+  --color-inv2: var(--inv2);
+  --color-on-inv: var(--on-inv);
+  --color-money: var(--money);
+  --color-money-soft: var(--money-soft);
+  --color-work: var(--work);
+  --color-work-soft: var(--work-soft);
+  --color-study: var(--study);
+  --color-study-soft: var(--study-soft);
+  --color-body: var(--body);
+  --color-body-soft: var(--body-soft);
+  --color-amber: var(--amber);
+  --color-amber-ink: var(--amber-ink);
+  --color-amber-soft: var(--amber-soft);
+  --color-red: var(--red);
+  --color-red-soft: var(--red-soft);
+  --color-scrim: var(--scrim);
+
+  --font-sans: 'Onest', system-ui, sans-serif;
+
+  /* Four sizes only: Подпись 13/18 · Основной 16/24 · Заголовок 20/28 · Крупный 32/40 */
+  --text-cap: 13px;
+  --text-cap--line-height: 18px;
+  --text-body: 16px;
+  --text-body--line-height: 24px;
+  --text-title: 20px;
+  --text-title--line-height: 28px;
+  --text-big: 32px;
+  --text-big--line-height: 40px;
+  --text-big--letter-spacing: -0.01em;
+
+  --shadow-sheet: 0 8px 32px var(--shadow-color);
+  --shadow-seg: 0 1px 2px var(--seg-shadow-color);
+
+  --animate-skeleton: skeleton 1.2s ease-in-out infinite;
+  @keyframes skeleton {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.45;
+    }
+  }
+}
+
+@layer base {
+  html,
+  body {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 24px;
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+  }
+  a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+  }
+  button {
+    cursor: pointer;
+  }
+  :focus-visible {
+    outline: 2px solid var(--work);
+    outline-offset: 2px;
+  }
+  [lang='de'] {
+    hyphens: auto;
+  }
+}
+
+@utility pb-safe {
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+}
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}

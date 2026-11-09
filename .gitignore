@@ -1,0 +1,42 @@
+# Private data — never commit
+data/
+*.xlsx
+*.xls
+*.csv
+exports/
+backup*/
+lifehub-export-*.json
+.env
+.env.*
+!.env.example
+
+# Design handoff bundle (reference only)
+design/
+
+# Build / deps
+node_modules/
+dist/
+dev-dist/
+coverage/
+*.tsbuildinfo
+.vercel/
+
+# Supabase local
+supabase/.temp/
+supabase/.branches/
+
+# Tests
+test-results/
+playwright-report/
+playwright/.auth/
+tests/e2e/.auth/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
