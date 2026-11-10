@@ -46,6 +46,7 @@
 ### Безопасность и приватность
 
 - RLS на каждой таблице: колонка `user_id uuid not null default auth.uid()`, политики `using (user_id = auth.uid()) with check (user_id = auth.uid())` для select/insert/update/delete.
+- Права явно в миграциях (в проекте выключено «Automatically expose new tables», включено «Enable automatic RLS»): `grant select, insert, update, delete` для `authenticated` и `service_role` (импорт); у `anon` прав нет.
 - Secret key (`sb_secret_…`, роль `service_role`) никогда не попадает во фронтенд, в переменные с префиксом `VITE_`, в git и в логи. Сборка падает, если в `VITE_*` оказался секретный ключ.
 - `.gitignore`: `.env*`, `data/`, `*.xlsx`, экспортированные дампы.
 - Фото не хранятся (только отметки «фото сделано»).

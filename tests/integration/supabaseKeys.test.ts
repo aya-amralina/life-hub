@@ -14,12 +14,13 @@ describe.skipIf(!ready)('live: supabase-js with sb_publishable_ / sb_secret_ key
     expect(secret!.startsWith('sb_secret_')).toBe(true)
   })
 
-  it('publishable key without a session sees no data (RLS)', async () => {
+  it('publishable key without a session has no privileges (anon: no GRANTs)', async () => {
     const sb = createClient(url!, publishable!, { auth: { persistSession: false, autoRefreshToken: false } })
-    const { data, error } = await sb.from('items').select('id').limit(1)
-    // anon has no grants → permission error; otherwise RLS → empty list. Never rows.
-    if (error) expect(error.code).toMatch(/^(42501|PGRST3\d\d)$/)
-    else expect(data).toEqual([])
+    for (const table of ['weeks', 'items'] as const) {
+      const { data, error } = await sb.from(table).select('id').limit(1)
+      expect(data).toBeNull()
+      expect(error?.code).toBe('42501') // permission denied
+    }
   })
 
   it('signups are disabled', async () => {

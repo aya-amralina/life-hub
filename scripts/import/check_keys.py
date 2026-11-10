@@ -50,11 +50,12 @@ def main() -> int:
             report(bool(settings.get("external", {}).get("email")), "вход по e-mail включён")
         except SupabaseError as err:
             report(False, f"publishable key → Auth settings: {err}")
-        try:
-            _, rows, _ = public.request("GET", "/rest/v1/items", query={"select": "id", "limit": "1"})
-            report(rows == [], "publishable key без входа → данных не видно (RLS)")
-        except SupabaseError as err:
-            report(err.status in (401, 403), f"publishable key без входа → доступ закрыт ({err.status})")
+        for table in ("weeks", "items"):
+            try:
+                public.request("GET", f"/rest/v1/{table}", query={"select": "id", "limit": "1"})
+                report(False, f"publishable key без входа → {table}: доступ есть, а у anon не должно быть прав")
+            except SupabaseError as err:
+                report(err.code == "42501", f"publishable key без входа → {table}: прав нет ({err.code or err.status})")
     else:
         report(False, "VITE_SUPABASE_PUBLISHABLE_KEY не задан")
 

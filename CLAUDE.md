@@ -70,6 +70,15 @@ public/                      # иконки PWA, шрифт Onest (woff2, self-h
 - Тап-зоны ≥ 44px. Тексты интерфейса на русском, короткие и тёплые, без капса.
 - Запросы к Supabase — только из `features/*/api.ts` через TanStack Query; оптимистичные обновления для отметок.
 - Каждая таблица: `id`, `user_id default auth.uid()`, `created_at`, `updated_at` (триггер), `source_id` (уникален с `user_id`), RLS с 4 политиками `user_id = auth.uid()`.
+- **Права — явно в миграции, у каждой новой таблицы** (в проекте выключено «Automatically expose new tables», включено «Enable automatic RLS», поэтому default privileges нет). Сразу после `create table`:
+  ```sql
+  alter table public.<t> enable row level security;
+  revoke all on table public.<t> from anon, public;
+  grant select, insert, update, delete on table public.<t> to authenticated;
+  grant select, insert, update, delete on table public.<t> to service_role;  -- secret key (import), bypasses RLS
+  call private.add_owner_policies('public.<t>');  -- 4 политики + триггер updated_at
+  ```
+  `anon` (publishable key без входа) — никаких прав, ни на таблицы, ни на функции. Правило проверяет `tests/unit/migrations.test.ts`.
 - Миграции: новая миграция на каждое изменение схемы, старые не редактируем после `db push`.
 - Имена: компоненты `PascalCase.tsx`, остальное `camelCase.ts`; без default export, кроме страниц для lazy-роутов.
 
@@ -98,4 +107,5 @@ GitHub (приватный `life-hub`, `main` = прод) → Vercel Hobby (пр
 - 2026-11-09: часовой пояс — через `Intl.DateTimeFormat` с `Europe/Berlin`, без `@date-fns/tz`.
 - 2026-11-09: шрифт Onest хранится в `public/fonts` (self-hosted): работает офлайн и не обращается к Google Fonts.
 - 2026-11-09: проверки импорта (раздел 6) — `tests/integration/import*`, читает базу с secret key и считает теми же функциями из `lib/rules`.
+- 2026-11-10: в проекте Supabase выключено «Automatically expose new tables» и включено «Enable automatic RLS» → GRANT пишутся явно у каждой таблицы: `authenticated` и `service_role` — select/insert/update/delete, `anon` — ничего. `service_role` нужен скрипту импорта: RLS он обходит, но без GRANT получит permission denied.
 - 2026-11-10: переход на новые ключи Supabase: `VITE_SUPABASE_PUBLISHABLE_KEY` (`sb_publishable_`) и `SUPABASE_SECRET_KEY` (`sb_secret_`) вместо anon / service_role. supabase-js ≥ 2.119 распознаёт их сам; импорт и тесты шлют ключ только в `apikey`. Legacy-ключи скрипты отвергают.

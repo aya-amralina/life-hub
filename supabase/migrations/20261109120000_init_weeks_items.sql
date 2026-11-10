@@ -7,6 +7,7 @@
 -- Helpers live in a schema that PostgREST does not expose.
 create schema if not exists private;
 revoke all on schema private from public, anon, authenticated;
+-- Trigger functions in `private` fire without schema USAGE for the caller; nothing here is callable via the API.
 
 -- updated_at = now() on every update, unless the writer sets updated_at explicitly
 -- (the importer carries «Aktualisiert» from Excel, which drives rule 9 «Status alt»).
@@ -23,8 +24,10 @@ begin
 end;
 $$;
 
--- Standard owner-only setup for a user table: RLS on, 4 policies, updated_at trigger, no anon access.
-create or replace procedure private.setup_owned_table(tbl regclass)
+-- Owner-only RLS policies + updated_at trigger for a user table.
+-- Privileges are NOT granted here: every table states its GRANTs explicitly (see below), because the
+-- project has «Automatically expose new tables» off — no default privileges for any API role.
+create or replace procedure private.add_owner_policies(tbl regclass)
 language plpgsql
 set search_path = ''
 as $$
@@ -32,10 +35,6 @@ declare
   t text := tbl::text;           -- e.g. public.items
   n text := split_part(t, '.', 2);
 begin
-  execute format('alter table %s enable row level security', t);
-  execute format('revoke all on %s from anon', t);
-  execute format('grant select, insert, update, delete on %s to authenticated', t);
-
   execute format('create policy %I on %s for select to authenticated using (user_id = (select auth.uid()))', n || '_select_own', t);
   execute format('create policy %I on %s for insert to authenticated with check (user_id = (select auth.uid()))', n || '_insert_own', t);
   execute format('create policy %I on %s for update to authenticated using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()))', n || '_update_own', t);
@@ -65,7 +64,12 @@ create table public.weeks (
   unique (user_id, start_date),
   unique (user_id, source_id)
 );
-call private.setup_owned_table('public.weeks');
+-- Access: RLS on; authenticated — CRUD on own rows; anon — nothing; service_role — local importer only.
+alter table public.weeks enable row level security;
+revoke all on table public.weeks from anon, public;
+grant select, insert, update, delete on table public.weeks to authenticated;
+grant select, insert, update, delete on table public.weeks to service_role;  -- secret key (import), bypasses RLS
+call private.add_owner_policies('public.weeks');
 
 -- ───────────────────────────── items ─────────────────────────────
 -- Tasks / checklist points / visits across all spheres.
@@ -100,7 +104,12 @@ create table public.items (
   updated_at   timestamptz not null default now(),
   unique (user_id, source_id)
 );
-call private.setup_owned_table('public.items');
+-- Access: RLS on; authenticated — CRUD on own rows; anon — nothing; service_role — local importer only.
+alter table public.items enable row level security;
+revoke all on table public.items from anon, public;
+grant select, insert, update, delete on table public.items to authenticated;
+grant select, insert, update, delete on table public.items to service_role;  -- secret key (import), bypasses RLS
+call private.add_owner_policies('public.items');
 
 create index items_user_sphere_idx on public.items (user_id, sphere);
 create index items_user_open_due_idx on public.items (user_id, coalesce(ready_by, due_date)) where done_at is null;
