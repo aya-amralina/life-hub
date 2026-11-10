@@ -108,11 +108,12 @@
 
   --font-sans: 'Onest', system-ui, sans-serif;
 
-  /* Four sizes only: Подпись 13/18 · Основной 16/24 · Заголовок 20/28 · Крупный 32/40 */
+  /* Four sizes only: Подпись text-cap 13/18 · Основной text-base 16/24 · Заголовок text-title 20/28 · Крупный text-big 32/40.
+     Not «text-body»: that name is the Тело sphere colour (--color-body). */
   --text-cap: 13px;
   --text-cap--line-height: 18px;
-  --text-body: 16px;
-  --text-body--line-height: 24px;
+  --text-base: 16px;
+  --text-base--line-height: 24px;
   --text-title: 20px;
   --text-title--line-height: 28px;
   --text-big: 32px;

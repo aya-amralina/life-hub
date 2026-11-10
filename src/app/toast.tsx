@@ -27,7 +27,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toast && (
           <div
             key={toast.id}
-            className="pointer-events-auto flex items-center gap-3 rounded-xl bg-inv py-1 pr-1 pl-4 text-body text-on-inv shadow-sheet"
+            className="pointer-events-auto flex items-center gap-3 rounded-xl bg-inv py-1 pr-1 pl-4 text-base text-on-inv shadow-sheet"
           >
             <Check size={20} strokeWidth={2} aria-hidden="true" className="flex-none" />
             <span className="min-w-0 flex-1 py-2.5 tabular-nums">{toast.text}</span>

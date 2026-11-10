@@ -25,7 +25,7 @@ function saveEmail(email: string): void {
 }
 
 const field =
-  'h-12 w-full rounded-xl border border-line2 bg-card px-4 text-body text-ink outline-none focus:border-ink2'
+  'h-12 w-full rounded-xl border border-line2 bg-card px-4 text-base text-ink outline-none focus:border-ink2'
 
 /**
  * Main: e-mail + password (signInWithPassword) — the iPhone password manager fills both fields
@@ -72,7 +72,7 @@ export function LoginScreen() {
     <main className="pt-safe mx-auto flex min-h-dvh max-w-[400px] flex-col justify-center gap-8 px-4 py-12">
       <div className="flex flex-col gap-2">
         <h1 className="m-0 text-big font-semibold tracking-[-0.01em]">Life Hub</h1>
-        <p className="m-0 text-body text-ink2">Деньги, работа, учёба и тело — спокойно, в одном месте.</p>
+        <p className="m-0 text-base text-ink2">Деньги, работа, учёба и тело — спокойно, в одном месте.</p>
       </div>
 
       {!supabaseConfigured && (
@@ -125,7 +125,7 @@ export function LoginScreen() {
       {linkSentTo ? (
         <div role="status" className="flex items-start gap-3 rounded-2xl border border-line bg-card p-4">
           <Mail size={20} strokeWidth={1.75} className="mt-0.5 flex-none text-ink2" aria-hidden="true" />
-          <div className="text-body">
+          <div className="text-base">
             Ссылка ушла на <span className="font-semibold [overflow-wrap:anywhere]">{linkSentTo}</span>. Открой письмо в этом
             же браузере — вход случится сам.
           </div>

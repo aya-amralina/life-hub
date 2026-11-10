@@ -51,7 +51,7 @@ export function CheckItem({
         className={cn('flex min-w-0 flex-1 flex-col gap-0.5 pt-2.5', onOpen && 'cursor-pointer')}
         onClick={onOpen}
       >
-        <div lang={lang} className={cn('text-body [overflow-wrap:anywhere]', muted ? 'text-ink3' : 'text-ink')}>
+        <div lang={lang} className={cn('text-base [overflow-wrap:anywhere]', muted ? 'text-ink3' : 'text-ink')}>
           {title}
         </div>
         {meta && (

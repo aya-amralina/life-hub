@@ -23,7 +23,7 @@ export function Button({
     <button
       type={type}
       className={cn(
-        'inline-flex items-center justify-center gap-2 rounded-xl text-body font-semibold transition-transform duration-100 select-none disabled:cursor-default',
+        'inline-flex items-center justify-center gap-2 rounded-xl text-base font-semibold transition-transform duration-100 select-none disabled:cursor-default',
         VARIANT[variant],
         className,
       )}

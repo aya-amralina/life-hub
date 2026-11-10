@@ -74,7 +74,7 @@ function ItemForm({ onDone }: { onDone: () => void }) {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           enterKeyHint="done"
-          className="h-12 rounded-xl border border-line2 bg-card px-4 text-body text-ink outline-none focus:border-ink2"
+          className="h-12 rounded-xl border border-line2 bg-card px-4 text-base text-ink outline-none focus:border-ink2"
           placeholder="Например, записаться к врачу"
         />
       </label>
@@ -105,7 +105,7 @@ function ItemForm({ onDone }: { onDone: () => void }) {
             aria-label="Другая дата"
             value={custom ? date : ''}
             onChange={(e) => setDate(e.target.value || today)}
-            className="h-11 rounded-xl border border-line2 bg-card px-3 text-body text-ink"
+            className="h-11 rounded-xl border border-line2 bg-card px-3 text-base text-ink"
           />
         </div>
       </fieldset>

@@ -56,7 +56,7 @@ export function InstallHint({ compact = false }: { compact?: boolean }) {
   return (
     <div className="flex items-start gap-3 rounded-2xl border border-line bg-card p-4">
       <div className="flex min-w-0 flex-1 flex-col gap-2">
-        <div className="text-body font-semibold">Поставь Life Hub на телефон</div>
+        <div className="text-base font-semibold">Поставь Life Hub на телефон</div>
         {canPrompt ? (
           <Button
             variant="secondary"

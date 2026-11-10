@@ -31,7 +31,7 @@ export function SegmentedTabs<T extends string>({
             disabled={s.disabled}
             onClick={() => onChange(s.value)}
             className={cn(
-              'flex min-w-0 flex-1 items-center justify-center truncate rounded-lg px-2 text-body',
+              'flex min-w-0 flex-1 items-center justify-center truncate rounded-lg px-2 text-base',
               compact ? 'h-9' : 'h-10',
               active ? 'bg-card font-semibold text-ink shadow-seg' : 'text-ink2 disabled:text-dis',
             )}

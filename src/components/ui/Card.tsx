@@ -25,7 +25,7 @@ export function CardHeader({
     <>
       {dotClass && <span className={cn('size-2 flex-none rounded-full', dotClass)} />}
       {icon}
-      <h2 className="m-0 flex-1 text-body font-semibold">{title}</h2>
+      <h2 className="m-0 flex-1 text-base font-semibold">{title}</h2>
       {context && <span className="text-cap text-ink2 tabular-nums">{context}</span>}
       {to && <ChevronRight size={20} strokeWidth={1.75} className="text-ink3" aria-hidden="true" />}
     </>

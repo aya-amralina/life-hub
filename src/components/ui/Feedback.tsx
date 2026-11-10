@@ -20,7 +20,7 @@ export function SkeletonCard({ className }: { className?: string }) {
 export function EmptyState({ title, children, className }: { title: string; children?: ReactNode; className?: string }) {
   return (
     <div className={cn('flex flex-col gap-1 rounded-2xl border border-line bg-card p-4', className)}>
-      <div className="text-body font-semibold">{title}</div>
+      <div className="text-base font-semibold">{title}</div>
       {children && <div className="text-cap text-ink2">{children}</div>}
     </div>
   )
