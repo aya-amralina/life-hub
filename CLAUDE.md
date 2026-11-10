@@ -1,6 +1,6 @@
 # Life Hub — правила проекта
 
-Личное PWA, заменяет четыре Excel-трекера (деньги, работа Localiser, учёба WiSe 26/27, тело/глоу-ап). Пользователь один.
+Личное PWA, заменяет четыре Excel-трекера (деньги, работа Localiser, учёба WiSe 26/27, тело/глоу-ап). Пользователь один (плюс отдельный тестовый пользователь только для автотестов).
 Главный документ — `docs/SPEC.md`. План и прогресс — `docs/PLAN.md`. Дизайн — `design/` (не в git, только справка).
 
 ## Источники правды
@@ -24,8 +24,8 @@ npm run dev            # http://localhost:5173
 npm run build          # tsc -b && vite build
 npm run lint           # eslint
 npm test               # vitest run (unit, без сети)
-npm run test:e2e       # playwright; вход формой e-mail + пароль (LIFEHUB_EMAIL, LIFEHUB_PASSWORD в .env.local)
-npm run test:integration # живые тесты против Supabase (ключи, RLS, регистрация выключена), нужен .env.local
+npm run test:e2e       # playwright; входит только под тестовым пользователем (LIFEHUB_TEST_EMAIL, LIFEHUB_TEST_PASSWORD)
+npm run test:integration # живые тесты против Supabase под тестовым пользователем (ключи, права, RLS, изоляция), нужен .env.local
 npm run test:import    # проверки импорта против базы (раздел 6 SPEC), нужен SUPABASE_SECRET_KEY
 npm run check:keys     # Python: формат ключей, доступ secret/publishable, регистрация выключена
 npm run db:push        # npx supabase db push — применить миграции к проекту
@@ -88,8 +88,9 @@ public/                      # иконки PWA, шрифт Onest (woff2, self-h
 - Ключи только нового формата. `SUPABASE_SECRET_KEY` (`sb_secret_…`) — только в `.env.local` и только для `scripts/import` и интеграционных тестов (e2e его не использует). Никогда во фронтенде, в `VITE_*`, в git. `vite.config.ts` падает при секрете в `VITE_*`.
 - Во фронтенде только `VITE_SUPABASE_URL` и `VITE_SUPABASE_PUBLISHABLE_KEY` (`sb_publishable_…`).
 - Ключи нового формата — не JWT: в своих запросах (Python, fetch в тестах) кладём их только в `apikey`, без `Authorization: Bearer`.
+- **Тесты не трогают настоящие данные.** e2e и `test:integration` входят только под тестовым пользователем (`LIFEHUB_TEST_EMAIL` / `LIFEHUB_TEST_PASSWORD`, через `tests/testUser.ts`, который падает при совпадении с `LIFEHUB_EMAIL`). `LIFEHUB_EMAIL` — настоящая почта, только для импорта и `check:keys`. Тесты, которые пишут данные, пишут только от тестового пользователя и убирают за собой; secret key в тестах — только для чтения (поиск пользователя, счётчики).
 - Вход: основной — e-mail + пароль (`signInWithPassword`), запасной — magic link для браузера (`signInWithOtp`, `shouldCreateUser: false`). Входа кодом нет. Регистрация в Supabase выключена, пользователь один и создан вручную с паролем.
-- Форма входа: `autocomplete="username"` у e-mail и `autocomplete="current-password"` у пароля, `name`/`id` у полей — чтобы менеджер паролей iPhone подставлял данные. Пароль не логируем и не храним (кроме e2e: `LIFEHUB_PASSWORD` в `.env.local`).
+- Форма входа: `autocomplete="username"` у e-mail и `autocomplete="current-password"` у пароля, `name`/`id` у полей — чтобы менеджер паролей iPhone подставлял данные. Пароль не логируем и не храним (кроме тестового пользователя: `LIFEHUB_TEST_PASSWORD` в `.env.local`).
 
 ## Деплой
 GitHub (приватный `life-hub`, `main` = прод) → Vercel Hobby (пресет Vite, env `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` для Production и Preview, `vercel.json` — SPA rewrite). Supabase Free, Frankfurt.
@@ -100,6 +101,7 @@ GitHub (приватный `life-hub`, `main` = прод) → Vercel Hobby (пр
 - 2026-11-09: задачи Работы импортируются только из «Dev Aufgaben». «Organisatirisch» неактуален — не импортируется и не сравнивается. Строке с пустым Titel (Branch `fix/h2_secret_logging`) задаётся название «PR 1: Secret-Logging fixen».
 - 2026-11-09: «Календарь» (Budget) — «Счёт» → `transactions.account` сопоставленной операции, «Что сделать» → её `note`. Задачи не создаются; в `--dry-run` — отдельный список строк, похожих на открытые действия, для ручного выбора.
 - 2026-11-09: экраны дизайна придут новым handoff до UI этапа 2; если нет — собираю из компонентов и подгоняю позже.
+- 2026-11-10: для автотестов — отдельный пользователь Supabase (`LIFEHUB_TEST_EMAIL` / `LIFEHUB_TEST_PASSWORD`); `LIFEHUB_EMAIL` — настоящая почта для импорта и `check:keys`. Интеграционный тест проверяет, что тестовый пользователь не видит строк настоящего.
 - 2026-11-10: вход — e-mail + пароль (`signInWithPassword`); magic link — запасной вариант только для браузера. Причины: шаблоны писем в Supabase без своего SMTP менять нельзя, а стандартный Magic Link содержит только ссылку; установленная PWA на iOS не делит хранилище с Safari, так что ссылка из почты в приложение не логинит. Вход кодом и `supabase/templates/` удалены. `flowType: 'implicit'` — чтобы ссылка работала в любом браузере.
 - 2026-11-09: TypeScript 6.0.x (typescript-eslint пока не поддерживает 7.x). Node 24 через nvm.
 - 2026-11-09: цвета Tailwind по умолчанию сброшены (`--color-*: initial`) — в классах доступны только токены дизайна. Тема через CSS `light-dark()` + `data-theme` на `<html>`.

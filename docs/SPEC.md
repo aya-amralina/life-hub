@@ -33,7 +33,7 @@
 2. **Supabase Free** — один проект, регион Frankfurt (eu-central-1).
    - Схема — только миграциями: `supabase/migrations/*.sql`, применяются `npx supabase db push`.
    - Auth: e-mail + пароль (основной способ, `signInWithPassword`); magic link — запасной вариант для браузера. Своего SMTP нет, шаблоны писем стандартные. Site URL = прод-адрес на Vercel. Redirect URLs: прод-адрес, `http://localhost:5173` (нужны для magic link).
-   - Мой пользователь создаётся вручную с паролем (Dashboard → Authentication → Users), после этого регистрация новых пользователей выключена.
+   - Мой пользователь и отдельный тестовый пользователь создаются вручную с паролем (Dashboard → Authentication → Users), после этого регистрация новых пользователей выключена. Автотесты входят только под тестовым пользователем (`LIFEHUB_TEST_EMAIL`, `LIFEHUB_TEST_PASSWORD`) и не трогают мои данные; `LIFEHUB_EMAIL` — моя почта для импорта.
    - Бесплатный проект ставится на паузу после 7 дней без активности. При ежедневном использовании это не грозит. Опционально (этап 4): GitHub Action раз в сутки делает лёгкий запрос к базе.
 3. **Vercel Hobby** — импорт репозитория, пресет Vite.
    - Env: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` (Production и Preview).

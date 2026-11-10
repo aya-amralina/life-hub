@@ -1,9 +1,10 @@
 import { expect, test } from '@playwright/test'
+import { supabaseConfigured, testUser } from '../testUser'
 
-const email = process.env.LIFEHUB_EMAIL
-const password = process.env.LIFEHUB_PASSWORD
-// Real project URL, not the .env.example placeholder.
-const configured = /^https:\/\/[a-z0-9]+\.supabase\.co\/?$/.test(process.env.VITE_SUPABASE_URL ?? '')
+// Signs in only as the dedicated test user (LIFEHUB_TEST_*), never as the real account.
+const user = testUser()
+const live = supabaseConfigured()
+const NEEDS = 'needs VITE_SUPABASE_URL (real project), LIFEHUB_TEST_EMAIL, LIFEHUB_TEST_PASSWORD in .env.local'
 
 test('login screen', async ({ page }) => {
   await page.goto('/')
@@ -20,20 +21,20 @@ test('login screen', async ({ page }) => {
 })
 
 test('wrong password shows a calm error', async ({ page }) => {
-  test.skip(!configured || !email, 'needs VITE_SUPABASE_URL (real project), LIFEHUB_EMAIL in .env.local')
+  test.skip(!live || !user, NEEDS)
   await page.goto('/login')
-  await page.getByLabel('E-mail').fill(email!)
+  await page.getByLabel('E-mail').fill(user!.email)
   await page.getByLabel('Пароль').fill('definitely-not-the-password')
   await page.getByRole('button', { name: 'Войти', exact: true }).click()
   await expect(page.getByRole('alert')).toHaveText('Неверная почта или пароль.')
 })
 
 test('e-mail + password → «Сегодня»', async ({ page }) => {
-  test.skip(!configured || !email || !password, 'needs VITE_SUPABASE_URL (real project), LIFEHUB_EMAIL, LIFEHUB_PASSWORD in .env.local')
+  test.skip(!live || !user, NEEDS)
 
   await page.goto('/login')
-  await page.getByLabel('E-mail').fill(email!)
-  await page.getByLabel('Пароль').fill(password!)
+  await page.getByLabel('E-mail').fill(user!.email)
+  await page.getByLabel('Пароль').fill(user!.password)
   await page.getByRole('button', { name: 'Войти', exact: true }).click()
 
   await expect(page.getByRole('navigation', { name: 'Разделы' })).toBeVisible()
