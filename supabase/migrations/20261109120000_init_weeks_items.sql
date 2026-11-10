@@ -1,6 +1,8 @@
 -- Life Hub · 0001 · base helpers, weeks, items
 -- Every user table: id, user_id (default auth.uid()), created_at, updated_at (trigger), source_id
 -- (unique per user, for idempotent Excel import) and RLS «own rows only» for select/insert/update/delete.
+-- Roles: the publishable key (sb_publishable_) runs as `anon`, a signed-in user as `authenticated`,
+-- the secret key (sb_secret_, local import only) as `service_role`, which bypasses RLS.
 
 -- Helpers live in a schema that PostgREST does not expose.
 create schema if not exists private;

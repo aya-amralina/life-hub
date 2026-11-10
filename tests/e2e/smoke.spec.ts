@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 const url = process.env.VITE_SUPABASE_URL
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+const secretKey = process.env.SUPABASE_SECRET_KEY
 const email = process.env.LIFEHUB_EMAIL
 
 test('login screen', async ({ page }) => {
@@ -12,12 +12,13 @@ test('login screen', async ({ page }) => {
 })
 
 test('magic link → «Сегодня»', async ({ page }) => {
-  test.skip(!url || !serviceKey || !email, 'needs VITE_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, LIFEHUB_EMAIL in .env.local')
+  test.skip(!url || !secretKey || !email, 'needs VITE_SUPABASE_URL, SUPABASE_SECRET_KEY, LIFEHUB_EMAIL in .env.local')
 
   // Admin API issues a one-time magic link for the existing user (no e-mail is sent).
+  // sb_secret_ keys are not JWTs: they go only in `apikey`, never as `Authorization: Bearer`.
   const res = await fetch(`${url}/auth/v1/admin/generate_link`, {
     method: 'POST',
-    headers: { apikey: serviceKey!, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json' },
+    headers: { apikey: secretKey!, 'Content-Type': 'application/json' },
     body: JSON.stringify({ type: 'magiclink', email, redirect_to: 'http://localhost:5173' }),
   })
   expect(res.ok, `generate_link HTTP ${res.status}`).toBe(true)

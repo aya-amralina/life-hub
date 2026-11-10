@@ -14,10 +14,12 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:import": "vitest run --config vitest.import.config.ts",
+    "test:import": "vitest run --config vitest.integration.config.ts tests/integration/import",
     "db:push": "supabase db push",
     "db:types": "supabase gen types typescript --linked --schema public > src/lib/db/types.ts",
-    "icons": "python3 scripts/make_icons.py"
+    "icons": "python3 scripts/make_icons.py",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "check:keys": "python3 scripts/import/check_keys.py"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",

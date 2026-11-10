@@ -25,7 +25,9 @@ npm run build          # tsc -b && vite build
 npm run lint           # eslint
 npm test               # vitest run (unit, без сети)
 npm run test:e2e       # playwright (нужен .env.local)
-npm run test:import    # проверки импорта против базы (раздел 6 SPEC), нужен service_role
+npm run test:integration # живые тесты против Supabase (ключи, RLS, регистрация выключена), нужен .env.local
+npm run test:import    # проверки импорта против базы (раздел 6 SPEC), нужен SUPABASE_SECRET_KEY
+npm run check:keys     # Python: формат ключей, доступ secret/publishable, регистрация выключена
 npm run db:push        # npx supabase db push — применить миграции к проекту
 npm run db:types       # сгенерировать src/lib/db/types.ts из схемы
 python3 scripts/import/import.py --dry-run   # сводка импорта без записи
@@ -46,7 +48,7 @@ src/
   features/<sphere>/         # today | money | work | study | body | review | settings | auth
     *Screen.tsx, components, api.ts (хуки TanStack Query)
   lib/
-    supabase.ts              # клиент (только anon key)
+    supabase.ts              # клиент (только publishable key)
     db/types.ts              # сгенерированные типы
     rules/*.ts (+ .test.ts)  # бизнес-правила раздела 4 — чистые функции
     dates.ts, format.ts      # Берлин «сегодня», недели, форматы «32,50 €», «10.12», «Пн»
@@ -74,12 +76,13 @@ public/                      # иконки PWA, шрифт Onest (woff2, self-h
 ## Безопасность и приватность (жёстко)
 - `data/`, `*.xlsx`, `.env*`, экспорты — никогда в git. Перед каждым коммитом: `git status` и проверка, что их нет в индексе.
 - Не выводить содержимое строк Excel и базы в логи/терминал — только счётчики, агрегаты, номера строк с ошибками.
-- `SUPABASE_SERVICE_ROLE_KEY` — только в `.env.local` и только для `scripts/import` и `test:import`. Никогда во фронтенде, в `VITE_*`, в git.
-- Во фронтенде только `VITE_SUPABASE_URL` и `VITE_SUPABASE_ANON_KEY`.
+- Ключи только нового формата. `SUPABASE_SECRET_KEY` (`sb_secret_…`) — только в `.env.local` и только для `scripts/import`, интеграционных и e2e-тестов. Никогда во фронтенде, в `VITE_*`, в git. `vite.config.ts` падает при секрете в `VITE_*`.
+- Во фронтенде только `VITE_SUPABASE_URL` и `VITE_SUPABASE_PUBLISHABLE_KEY` (`sb_publishable_…`).
+- Ключи нового формата — не JWT: в своих запросах (Python, fetch в тестах) кладём их только в `apikey`, без `Authorization: Bearer`.
 - Вход только magic link, `shouldCreateUser: false`; регистрация в Supabase выключена.
 
 ## Деплой
-GitHub (приватный `life-hub`, `main` = прод) → Vercel Hobby (пресет Vite, env `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` для Production и Preview, `vercel.json` — SPA rewrite). Supabase Free, Frankfurt.
+GitHub (приватный `life-hub`, `main` = прод) → Vercel Hobby (пресет Vite, env `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` для Production и Preview, `vercel.json` — SPA rewrite). Supabase Free, Frankfurt.
 
 ## Решения (журнал)
 - 2026-11-09: файлы в `data/` называются иначе, чем в SPEC (`WiSe26_27.xlsx`, `Глоу ап — трекер.xlsx`) → импорт ищет файлы по шаблону.
@@ -94,4 +97,5 @@ GitHub (приватный `life-hub`, `main` = прод) → Vercel Hobby (пр
 - 2026-11-09: контексты React (`authContext.ts`, `toastContext.ts`) отдельно от провайдеров — для fast refresh.
 - 2026-11-09: часовой пояс — через `Intl.DateTimeFormat` с `Europe/Berlin`, без `@date-fns/tz`.
 - 2026-11-09: шрифт Onest хранится в `public/fonts` (self-hosted): работает офлайн и не обращается к Google Fonts.
-- 2026-11-09: проверки импорта (раздел 6) — Vitest-проект `import`, читает базу с service_role и считает теми же функциями из `lib/rules`.
+- 2026-11-09: проверки импорта (раздел 6) — `tests/integration/import*`, читает базу с secret key и считает теми же функциями из `lib/rules`.
+- 2026-11-10: переход на новые ключи Supabase: `VITE_SUPABASE_PUBLISHABLE_KEY` (`sb_publishable_`) и `SUPABASE_SECRET_KEY` (`sb_secret_`) вместо anon / service_role. supabase-js ≥ 2.119 распознаёт их сам; импорт и тесты шлют ключ только в `apikey`. Legacy-ключи скрипты отвергают.

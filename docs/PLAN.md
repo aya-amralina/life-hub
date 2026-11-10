@@ -21,7 +21,7 @@
 11. Тесты: Vitest — `lib/dates`, `lib/format`; Playwright — дымовой: вход + «Сегодня».
 12. 👤 **Твои действия** (дам точные шаги):
     - создать приватный репозиторий `life-hub` на GitHub и настроить доступ для `git push` из WSL (SSH-ключ или токен);
-    - создать проект Supabase Free (Frankfurt), вписать `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` в `.env.local`, выполнить `npx supabase login`;
+    - создать проект Supabase Free (Frankfurt), вписать `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` (`sb_publishable_…`), `SUPABASE_SECRET_KEY` (`sb_secret_…`) в `.env.local`, выполнить `npx supabase login`;
     - в Supabase Auth: Site URL, Redirect URLs, создать своего пользователя, выключить регистрацию;
     - импортировать репозиторий в Vercel и задать env-переменные.
 

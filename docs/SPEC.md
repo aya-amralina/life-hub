@@ -36,15 +36,17 @@
    - После создания моего пользователя — выключить регистрацию новых пользователей.
    - Бесплатный проект ставится на паузу после 7 дней без активности. При ежедневном использовании это не грозит. Опционально (этап 4): GitHub Action раз в сутки делает лёгкий запрос к базе.
 3. **Vercel Hobby** — импорт репозитория, пресет Vite.
-   - Env: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (Production и Preview).
+   - Env: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` (Production и Preview).
    - `vercel.json` с rewrite всех путей на `/index.html` (SPA).
    - Preview-деплой на каждую ветку.
-4. **Локально** — `.env.local` с теми же переменными плюс `SUPABASE_SERVICE_ROLE_KEY` только для скрипта импорта.
+4. **Локально** — `.env.local` с теми же переменными плюс `SUPABASE_SECRET_KEY` только для скрипта импорта и локальных тестов.
+
+**Ключи API — только нового формата** (legacy `anon` / `service_role` JWT Supabase выводит из употребления к концу 2026): `sb_publishable_…` во фронтенде, `sb_secret_…` локально. Это не JWT: они передаются только в заголовке `apikey`, никогда как `Authorization: Bearer`. Publishable работает от роли Postgres `anon`, secret — от `service_role` (обходит RLS).
 
 ### Безопасность и приватность
 
 - RLS на каждой таблице: колонка `user_id uuid not null default auth.uid()`, политики `using (user_id = auth.uid()) with check (user_id = auth.uid())` для select/insert/update/delete.
-- `service_role` ключ никогда не попадает во фронтенд, в переменные с префиксом `VITE_`, в git и в логи.
+- Secret key (`sb_secret_…`, роль `service_role`) никогда не попадает во фронтенд, в переменные с префиксом `VITE_`, в git и в логи. Сборка падает, если в `VITE_*` оказался секретный ключ.
 - `.gitignore`: `.env*`, `data/`, `*.xlsx`, экспортированные дампы.
 - Фото не хранятся (только отметки «фото сделано»).
 - Скрипт импорта не печатает содержимое строк — только счётчики и ошибки с номером строки.

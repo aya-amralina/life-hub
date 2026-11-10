@@ -18,7 +18,9 @@ npm run dev                  # http://localhost:5173
 
 ```bash
 npm run lint && npm test && npm run build
-npm run test:e2e             # Playwright; вход в тесте — через admin API, нужен service_role в .env.local
+npm run test:e2e             # Playwright; вход в тесте — через admin API, нужен SUPABASE_SECRET_KEY в .env.local
+npm run test:integration     # живые проверки Supabase: ключи, RLS, регистрация выключена
+npm run check:keys           # то же со стороны скрипта импорта (Python)
 ```
 
 ### Переменные окружения
@@ -26,9 +28,11 @@ npm run test:e2e             # Playwright; вход в тесте — через
 | Переменная | Где | Зачем |
 | --- | --- | --- |
 | `VITE_SUPABASE_URL` | `.env.local`, Vercel | адрес проекта Supabase |
-| `VITE_SUPABASE_ANON_KEY` | `.env.local`, Vercel | публичный ключ (данные защищены RLS) |
-| `SUPABASE_SERVICE_ROLE_KEY` | **только** `.env.local` | импорт из Excel и тесты; никогда во фронтенд, в `VITE_*` или в git |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | `.env.local`, Vercel | публичный ключ `sb_publishable_…` (данные защищены RLS) |
+| `SUPABASE_SECRET_KEY` | **только** `.env.local` | секретный ключ `sb_secret_…`: импорт из Excel и тесты; никогда во фронтенд, в `VITE_*` или в git |
 | `LIFEHUB_EMAIL` | `.env.local` | твой e-mail: импорт и e2e-тест находят по нему пользователя |
+
+Ключи — только нового формата (Supabase → Project Settings → API Keys), legacy `anon` / `service_role` не используются. Если в `VITE_*` случайно окажется `sb_secret_…`, сборка упадёт.
 
 ## База данных
 
@@ -49,7 +53,7 @@ npm run db:types                         # обновить src/lib/db/types.ts
 2. Новые миграции применить до пуша кода, который на них опирается: `npm run db:push`.
 3. После деплоя открыть приложение на телефоне — service worker обновится сам при следующем запуске.
 
-Первичная настройка (один раз): приватный репозиторий на GitHub → Supabase Free (Frankfurt) → Vercel Hobby (пресет Vite, env `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` для Production и Preview). В Supabase Auth: Site URL = прод-адрес, Redirect URLs = прод-адрес и `http://localhost:5173`, свой пользователь создан, регистрация выключена, в шаблон письма «Magic Link» добавлен код `{{ .Token }}` (текст — `supabase/templates/magic_link.html`).
+Первичная настройка (один раз): приватный репозиторий на GitHub → Supabase Free (Frankfurt) → Vercel Hobby (пресет Vite, env `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` для Production и Preview). В Supabase Auth: Site URL = прод-адрес, Redirect URLs = прод-адрес и `http://localhost:5173`, свой пользователь создан, регистрация выключена, в шаблон письма «Magic Link» добавлен код `{{ .Token }}` (текст — `supabase/templates/magic_link.html`).
 
 ## Вход
 
