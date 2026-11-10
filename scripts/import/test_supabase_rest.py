@@ -42,6 +42,19 @@ class EnvTest(unittest.TestCase):
         cfg = config_from_env({**base, "SUPABASE_SECRET_KEY": SECRET})
         self.assertEqual(cfg.secret_key, SECRET)
 
+    def test_config_rejects_malformed_url(self):
+        for bad in ("https://abc.supabase.co.", "https://abc.supabase.co/rest/v1", "http://abc.supabase.co"):
+            with self.assertRaises(ConfigError, msg=bad):
+                config_from_env({"VITE_SUPABASE_URL": bad, "SUPABASE_SECRET_KEY": SECRET})
+        cfg = config_from_env({"VITE_SUPABASE_URL": "https://abc.supabase.co/", "SUPABASE_SECRET_KEY": SECRET})
+        self.assertEqual(cfg.url, "https://abc.supabase.co")
+
+    def test_network_error_is_clean(self):
+        rec = Recorder([urllib.error.URLError(OSError("ssl"))])
+        with self.assertRaises(SupabaseError) as ctx:
+            SupabaseRest(URL, SECRET, rec).request("GET", "/rest/v1/items")
+        self.assertEqual(ctx.exception.code, "network")
+
     def test_config_rejects_placeholder_url(self):
         with self.assertRaises(ConfigError):
             config_from_env({"VITE_SUPABASE_URL": "https://YOUR-PROJECT.supabase.co", "SUPABASE_SECRET_KEY": SECRET})

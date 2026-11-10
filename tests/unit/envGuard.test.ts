@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assertNoSecretInClientEnv } from '../../vite.config'
+import { assertNoSecretInClientEnv, assertSupabaseUrl } from '../../vite.config'
 
 describe('secret keys never reach the client bundle', () => {
   it('accepts the publishable key', () => {
@@ -17,4 +17,15 @@ describe('secret keys never reach the client bundle', () => {
   it('ignores non-VITE variables (server-only secret is fine)', () => {
     expect(() => assertNoSecretInClientEnv({ SUPABASE_SECRET_KEY: 'sb_secret_abc' })).not.toThrow()
   })
+})
+
+describe('VITE_SUPABASE_URL format', () => {
+  it('accepts the project URL', () => {
+    expect(() => assertSupabaseUrl({ VITE_SUPABASE_URL: 'https://abcdefghijklmnopqrst.supabase.co' })).not.toThrow()
+    expect(() => assertSupabaseUrl({})).not.toThrow()
+  })
+  it.each(['https://abc.supabase.co.', 'https://abc.supabase.co/rest/v1', 'http://abc.supabase.co', 'https://YOUR-PROJECT.supabase.co'])(
+    'rejects %s',
+    (url) => expect(() => assertSupabaseUrl({ VITE_SUPABASE_URL: url })).toThrow(/VITE_SUPABASE_URL/),
+  )
 })

@@ -15,8 +15,18 @@ export function assertNoSecretInClientEnv(env: Record<string, string>): void {
   }
 }
 
+/** VITE_SUPABASE_URL, when set, must be exactly https://<ref>.supabase.co (no path, no trailing dot). */
+export function assertSupabaseUrl(env: Record<string, string>): void {
+  const url = env.VITE_SUPABASE_URL
+  if (url && !/^https:\/\/[a-z0-9]+\.supabase\.co\/?$/.test(url)) {
+    throw new Error('VITE_SUPABASE_URL must look like https://<ref>.supabase.co (no path, no trailing dot)')
+  }
+}
+
 export default defineConfig(({ mode }) => {
-  assertNoSecretInClientEnv(loadEnv(mode, process.cwd(), 'VITE_'))
+  const clientEnv = loadEnv(mode, process.cwd(), 'VITE_')
+  assertNoSecretInClientEnv(clientEnv)
+  assertSupabaseUrl(clientEnv)
 
   return {
     plugins: [

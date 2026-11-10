@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -21,6 +22,7 @@ from typing import Any, Callable
 ROOT = Path(__file__).resolve().parents[2]
 USER_AGENT = "life-hub-import/1.0"
 
+PROJECT_URL = re.compile(r"^https://[a-z0-9]+\.supabase\.co$")
 SECRET_PREFIX = "sb_secret_"
 PUBLISHABLE_PREFIX = "sb_publishable_"
 
@@ -76,6 +78,8 @@ def config_from_env(env: dict[str, str]) -> Config:
         raise ConfigError("VITE_SUPABASE_URL не задан в .env.local")
     if "YOUR-PROJECT" in url:
         raise ConfigError("VITE_SUPABASE_URL — ещё плейсхолдер из .env.example: впиши адрес проекта (Project Settings → API)")
+    if not PROJECT_URL.match(url):
+        raise ConfigError("VITE_SUPABASE_URL должен выглядеть как https://<ref>.supabase.co — без пути и без точки в конце")
     if not secret:
         raise ConfigError("SUPABASE_SECRET_KEY не задан в .env.local")
     if not secret.startswith(SECRET_PREFIX):
@@ -131,6 +135,9 @@ class SupabaseRest:
                 return resp.status, payload, {k.lower(): v for k, v in resp.headers.items()}
         except urllib.error.HTTPError as err:
             raise _safe_error(err.code, err.read()) from None
+        except (urllib.error.URLError, TimeoutError) as err:
+            reason = getattr(err, "reason", err)
+            raise SupabaseError(0, "network", f"нет соединения ({type(reason).__name__})") from None
 
     # ── helpers used by the importer ──
 
