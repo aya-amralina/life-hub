@@ -1,0 +1,69 @@
+import { addDaysISO, daysBetween, parseISODate, type ISODate } from '../dates'
+import { isItemOpen, type ItemLike } from './items'
+
+export const CAPACITY_DEFAULT = { base: 27, max: 36 } as const
+export const CAPACITY_HALF = { base: 13.5, max: 18 } as const
+
+export type WeekCapacityLike = {
+  id: string
+  start_date: ISODate
+  place_mode: string | null
+  capacity_base_h: number | null
+  capacity_max_h: number | null
+}
+
+/** Capacity of the week: explicit values, else ½-mode 13,5 / 18, else 27 / 36. */
+export function weekCapacity(week: WeekCapacityLike | null | undefined): { base: number; max: number } {
+  const half = week?.place_mode?.includes('½') ?? false
+  const fallback = half ? CAPACITY_HALF : CAPACITY_DEFAULT
+  return { base: week?.capacity_base_h ?? fallback.base, max: week?.capacity_max_h ?? fallback.max }
+}
+
+export type StudyItemLike = ItemLike & { sphere: string; week_id: string | null; hours_est: number | null }
+
+/** Study items of the week: by week_id, or (no week_id) by deadline within Mon–Sun. */
+export function studyItemsOfWeek<T extends StudyItemLike>(items: readonly T[], weekStart: ISODate, weekId: string | null): T[] {
+  const weekEnd = addDaysISO(weekStart, 6)
+  return items.filter((i) => {
+    if (i.sphere !== 'study') return false
+    if (i.week_id !== null) return i.week_id === weekId
+    return i.due_date !== null && i.due_date >= weekStart && i.due_date <= weekEnd
+  })
+}
+
+export type LoadStatus = 'ok' | 'tight' | 'over'
+export const LOAD_LABEL: Record<LoadStatus, string> = { ok: 'ок', tight: 'нужен Do/Sa ½', over: 'перегруз' }
+
+/** Rule 7: Σ hours_est of the week's study items vs capacity: ≤ base «ок», ≤ max «нужен Do/Sa ½», > max «перегруз». */
+export function weekLoad(items: readonly Pick<StudyItemLike, 'hours_est'>[], capacity: { base: number; max: number }) {
+  const hours = Math.round(items.reduce((s, i) => s + (Number(i.hours_est) || 0), 0) * 100) / 100
+  const status: LoadStatus = hours <= capacity.base ? 'ok' : hours <= capacity.max ? 'tight' : 'over'
+  return { hours, ...capacity, status }
+}
+
+/** Hours already closed this week (done items). */
+export function hoursDone(items: readonly StudyItemLike[]): number {
+  return Math.round(items.filter((i) => !isItemOpen(i)).reduce((s, i) => s + (Number(i.hours_est) || 0), 0) * 100) / 100
+}
+
+/**
+ * Rule 6 «Готово к» = deadline − 2 days; if that lands on Monday or Sunday, move to the previous Saturday.
+ * Example: deadline Wed 28.10 → Mon 26.10 → Sat 24.10.
+ */
+export function readyBy(due: ISODate): ISODate {
+  const d = addDaysISO(due, -2)
+  const dow = parseISODate(d).getDay() // 0 Sun … 6 Sat
+  if (dow === 1) return addDaysISO(d, -2)
+  if (dow === 0) return addDaysISO(d, -1)
+  return d
+}
+
+/** Nearest open test (type «Тест») from today, with a countdown in days. */
+export function nextTest<T extends StudyItemLike & { type: string | null }>(items: readonly T[], today: ISODate) {
+  let best: T | null = null
+  for (const i of items) {
+    if (i.sphere !== 'study' || i.type !== 'Тест' || !isItemOpen(i) || i.due_date === null || i.due_date < today) continue
+    if (best === null || i.due_date < best.due_date!) best = i
+  }
+  return best ? { item: best, days: daysBetween(today, best.due_date!) } : null
+}

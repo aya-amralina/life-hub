@@ -1,29 +1,49 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import type { Tables, TablesInsert } from '@/lib/db/types'
+import type { Tables, TablesInsert, TablesUpdate } from '@/lib/db/types'
 
-export type Item = Tables<'items'>
+export type Item = Pick<
+  Tables<'items'>,
+  | 'id'
+  | 'sphere'
+  | 'title'
+  | 'type'
+  | 'status'
+  | 'priority'
+  | 'area'
+  | 'due_date'
+  | 'due_time'
+  | 'ready_by'
+  | 'week_id'
+  | 'hours_est'
+  | 'waiting_on'
+  | 'people'
+  | 'synergy'
+  | 'trap'
+  | 'data_status'
+  | 'next_step'
+  | 'done_at'
+  | 'sort_order'
+  | 'updated_at'
+>
 
-const ITEM_FIELDS =
-  'id, user_id, sphere, title, type, status, priority, area, due_date, due_time, ready_by, week_id, hours_est, waiting_on, people, links, synergy, trap, data_status, next_step, clickup, notes, outcome, done_at, sort_order, source_id, created_at, updated_at'
+// List fields only: long texts (notes, outcome, links) are loaded on the item card.
+const LIST_FIELDS =
+  'id, sphere, title, type, status, priority, area, due_date, due_time, ready_by, week_id, hours_est, waiting_on, people, synergy, trap, data_status, next_step, done_at, sort_order, updated_at'
 
-export const itemKeys = {
-  all: ['items'] as const,
-  today: () => [...itemKeys.all, 'today'] as const,
-}
+export const itemKeys = { all: ['items'] as const }
 
-/** Open items + items closed in the last 36 h (enough to cover «today» in Berlin). */
-export function useTodayItems() {
+/** All items (a few hundred at most) — every sphere screen derives its view from this one cache. */
+export function useItems() {
   return useQuery({
-    queryKey: itemKeys.today(),
+    queryKey: itemKeys.all,
     queryFn: async (): Promise<Item[]> => {
-      const since = new Date(Date.now() - 36 * 3600 * 1000).toISOString()
       const { data, error } = await supabase
         .from('items')
-        .select(ITEM_FIELDS)
-        .or(`done_at.is.null,done_at.gte.${since}`)
+        .select(LIST_FIELDS)
+        .order('sort_order')
         .order('due_date', { ascending: true, nullsFirst: false })
-        .limit(1000)
+        .limit(5000)
       if (error) throw error
       return data
     },
@@ -34,36 +54,42 @@ export function useCreateItem() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (item: TablesInsert<'items'>) => {
-      const { data, error } = await supabase.from('items').insert(item).select(ITEM_FIELDS).single()
+      const { data, error } = await supabase.from('items').insert(item).select(LIST_FIELDS).single()
       if (error) throw error
       return data
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: itemKeys.all }),
+    onSuccess: (row) => qc.setQueryData<Item[]>(itemKeys.all, (old) => (old ? [...old, row] : [row])),
+    onSettled: () => qc.invalidateQueries({ queryKey: itemKeys.all }),
   })
 }
 
-/** Check / uncheck an item. Optimistic: the checkbox flips instantly. */
-export function useToggleItem() {
+/** Patch an item. Optimistic: the list updates instantly, rolls back on error. */
+export function useUpdateItem() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ id, done }: { id: string; done: boolean }) => {
-      const { error } = await supabase
-        .from('items')
-        .update({ done_at: done ? new Date().toISOString() : null })
-        .eq('id', id)
+    mutationFn: async ({ id, patch }: { id: string; patch: TablesUpdate<'items'> }) => {
+      const { error } = await supabase.from('items').update(patch).eq('id', id)
       if (error) throw error
     },
-    onMutate: async ({ id, done }) => {
-      await qc.cancelQueries({ queryKey: itemKeys.today() })
-      const prev = qc.getQueryData<Item[]>(itemKeys.today())
-      qc.setQueryData<Item[]>(itemKeys.today(), (old) =>
-        old?.map((i) => (i.id === id ? { ...i, done_at: done ? new Date().toISOString() : null } : i)),
+    onMutate: async ({ id, patch }) => {
+      await qc.cancelQueries({ queryKey: itemKeys.all })
+      const prev = qc.getQueryData<Item[]>(itemKeys.all)
+      qc.setQueryData<Item[]>(itemKeys.all, (old) =>
+        old?.map((i) => (i.id === id ? ({ ...i, ...patch, updated_at: new Date().toISOString() } as Item) : i)),
       )
       return { prev }
     },
-    onError: (_err, _vars, ctx) => {
-      if (ctx?.prev) qc.setQueryData(itemKeys.today(), ctx.prev)
-    },
+    onError: (_e, _v, ctx) => ctx?.prev && qc.setQueryData(itemKeys.all, ctx.prev),
     onSettled: () => qc.invalidateQueries({ queryKey: itemKeys.all }),
   })
+}
+
+/** Check / uncheck. */
+export function useToggleItem() {
+  const update = useUpdateItem()
+  return {
+    ...update,
+    mutate: ({ id, done }: { id: string; done: boolean }) =>
+      update.mutate({ id, patch: { done_at: done ? new Date().toISOString() : null } }),
+  }
 }

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { supabaseConfigured, testUser } from '../testUser'
+import { tab } from './helpers'
 
 // Signs in only as the dedicated test user (LIFEHUB_TEST_*), never as the real account.
 const user = testUser()
@@ -41,6 +42,6 @@ test('e-mail + password → «Сегодня»', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'Настройки' })).toBeVisible()
   await expect(page.getByText(/Горит|Ничего не горит/).first()).toBeVisible()
 
-  await page.getByRole('link', { name: 'Работа' }).click()
+  await tab(page, 'Работа')
   await expect(page.getByRole('heading', { name: 'Работа' })).toBeVisible()
 })

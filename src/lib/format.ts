@@ -14,9 +14,18 @@ function nbsp(s: string): string {
 
 /** Euro amount from cents: 3250 → '32,50 €'. `whole` drops ',00' for round sums: 2000 → '20 €'. */
 export function formatEur(cents: number, opts: { whole?: boolean } = {}): string {
-  const value = cents / 100
+  const value = cents / 100 || 0 // −0 → 0: Intl would print «-0,00»
   const isWhole = Number.isInteger(value)
   return nbsp((opts.whole && isWhole ? eurWhole : eur).format(value))
+}
+
+const num2 = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const num0 = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 })
+
+/** Amount without the currency sign, for «16,20 / 20 €»: 1620 → '16,20', with `whole` 2000 → '20'. */
+export function formatAmount(cents: number, opts: { whole?: boolean } = {}): string {
+  const value = cents / 100 || 0
+  return nbsp((opts.whole && Number.isInteger(value) ? num0 : num2).format(value))
 }
 
 /** Euro amount from a decimal (as stored in numeric(10,2)) to integer cents. */
@@ -34,4 +43,14 @@ export function parseEurInput(input: string): number | null {
 /** 27.5 → '27,5 ч' */
 export function formatHours(h: number): string {
   return `${decimal1.format(h)}\u00a0ч`
+}
+
+/** Apply a key to an amount string like '4,6' — at most 2 decimals, 6 integer digits. */
+export function applyAmountKey(current: string, key: string): string {
+  if (key === 'del') return current.slice(0, -1)
+  if (key === ',') return current.includes(',') ? current : (current || '0') + ','
+  const [int = '', dec] = current.split(',')
+  if (dec !== undefined) return dec.length >= 2 ? current : current + key
+  if (int === '0') return key
+  return int.length >= 6 ? current : current + key
 }

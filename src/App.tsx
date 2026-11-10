@@ -5,7 +5,10 @@ import { ToastProvider } from '@/app/toast'
 import { AppShell } from '@/components/layout/AppShell'
 import { LoginScreen } from '@/features/auth/LoginScreen'
 import { SettingsScreen } from '@/features/settings/SettingsScreen'
-import { SpherePlaceholder } from '@/features/SpherePlaceholder'
+import { BodyScreen } from '@/features/body/BodyScreen'
+import { MoneyScreen } from '@/features/money/MoneyScreen'
+import { StudyScreen } from '@/features/study/StudyScreen'
+import { WorkScreen } from '@/features/work/WorkScreen'
 import { TodayScreen } from '@/features/today/TodayScreen'
 
 const queryClient = new QueryClient({
@@ -20,10 +23,10 @@ const router = createBrowserRouter([
     element: <AppShell />,
     children: [
       { index: true, element: <TodayScreen /> },
-      { path: 'money/*', element: <SpherePlaceholder title="Деньги" soon="Неделя, лимиты и быстрая трата — на этапе 2." /> },
-      { path: 'work/*', element: <SpherePlaceholder title="Работа" soon="Список задач со статусами — на этапе 2." /> },
-      { path: 'study/*', element: <SpherePlaceholder title="Учёба" soon="Неделя: ёмкость, предметы и чекбоксы — на этапе 2." /> },
-      { path: 'body/*', element: <SpherePlaceholder title="Тело" soon="Отметка дня и этапы — на этапе 2." /> },
+      { path: 'money/*', element: <MoneyScreen /> },
+      { path: 'work/*', element: <WorkScreen /> },
+      { path: 'study/*', element: <StudyScreen /> },
+      { path: 'body/*', element: <BodyScreen /> },
       { path: 'settings', element: <SettingsScreen /> },
       { path: '*', element: <Navigate to="/" replace /> },
     ],

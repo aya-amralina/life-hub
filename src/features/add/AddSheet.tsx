@@ -2,14 +2,15 @@ import { useCallback, useState, type FormEvent } from 'react'
 import { BottomSheet } from '@/components/ui/BottomSheet'
 import { Button } from '@/components/ui/Button'
 import { Chip } from '@/components/ui/Chip'
-import { EmptyState } from '@/components/ui/Feedback'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { useToast } from '@/app/toastContext'
+import type { AddMode } from '@/app/addSheetContext'
 import { SPHERE_CLASS, SPHERE_LABEL, type Sphere } from '@/lib/constants'
 import { addDaysISO, formatRelativeDay, todayBerlin } from '@/lib/dates'
 import { useCreateItem } from '@/features/items/api'
-
-type Mode = 'expense' | 'item' | 'note'
+import { newItem } from '@/features/items/newItem'
+import { useCreateNote } from '@/features/notes/api'
+import { ExpenseForm } from '@/features/money/ExpenseForm'
 
 const MODES = [
   { value: 'expense', label: 'Трата' },
@@ -19,50 +20,72 @@ const MODES = [
 
 const SPHERE_ORDER: Sphere[] = ['personal', 'work', 'study', 'body', 'money']
 
+const field = 'h-12 rounded-xl border border-line2 bg-card px-4 text-base text-ink outline-none focus:border-ink2'
+
 /** «+» sheet: трата / пункт / заметка. */
-export function AddSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [mode, setMode] = useState<Mode>('item')
+export function AddSheet({
+  open,
+  onClose,
+  mode,
+  onMode,
+  sphere,
+}: {
+  open: boolean
+  onClose: () => void
+  mode: AddMode
+  onMode: (m: AddMode) => void
+  sphere: Sphere
+}) {
   const close = useCallback(() => onClose(), [onClose])
   return (
     <BottomSheet
       open={open}
       onClose={close}
       label="Добавить"
-      header={<SegmentedTabs segments={MODES} value={mode} onChange={setMode} compact label="Что добавить" />}
+      header={<SegmentedTabs segments={MODES} value={mode} onChange={onMode} compact label="Что добавить" />}
     >
-      {mode === 'item' && <ItemForm onDone={close} />}
-      {mode === 'expense' && (
-        <EmptyState title="Быстрая трата — на следующем этапе">Пока траты живут в Excel, скоро переедут сюда.</EmptyState>
-      )}
-      {mode === 'note' && <EmptyState title="Заметки — на следующем этапе">Появятся вместе с разделами сфер.</EmptyState>}
+      {mode === 'expense' && <ExpenseForm onDone={close} />}
+      {mode === 'item' && <ItemForm onDone={close} initialSphere={sphere} />}
+      {mode === 'note' && <NoteForm onDone={close} initialSphere={sphere} />}
     </BottomSheet>
   )
 }
 
-function ItemForm({ onDone }: { onDone: () => void }) {
+function SpherePicker({ value, onChange }: { value: Sphere; onChange: (s: Sphere) => void }) {
+  return (
+    <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+      <legend className="mb-2 text-cap font-semibold text-ink2">Сфера</legend>
+      <div className="flex flex-wrap gap-2">
+        {SPHERE_ORDER.map((s) => (
+          <Chip key={s} selected={value === s} dotClass={SPHERE_CLASS[s].dot} onClick={() => onChange(s)}>
+            {SPHERE_LABEL[s]}
+          </Chip>
+        ))}
+      </div>
+    </fieldset>
+  )
+}
+
+function ItemForm({ onDone, initialSphere }: { onDone: () => void; initialSphere: Sphere }) {
   const today = todayBerlin()
+  const tomorrow = addDaysISO(today, 1)
   const [title, setTitle] = useState('')
-  const [sphere, setSphere] = useState<Sphere>('personal')
+  const [sphere, setSphere] = useState<Sphere>(initialSphere === 'money' ? 'money' : initialSphere)
   const [date, setDate] = useState<string>(today)
   const create = useCreateItem()
   const toast = useToast()
-
-  const dateChoices = [today, addDaysISO(today, 1)]
-  const custom = !dateChoices.includes(date)
+  const custom = date !== '' && date !== today && date !== tomorrow
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
     const t = title.trim()
     if (!t) return
-    create.mutate(
-      { sphere, title: t, due_date: date || null },
-      {
-        onSuccess: () => {
-          toast({ text: `Пункт добавлен · ${date ? formatRelativeDay(date, today) : 'без даты'}` })
-          onDone()
-        },
+    create.mutate(newItem(sphere, t, date || null), {
+      onSuccess: () => {
+        toast({ text: `Пункт добавлен · ${date ? formatRelativeDay(date, today) : 'без даты'}` })
+        onDone()
       },
-    )
+    })
   }
 
   return (
@@ -74,27 +97,19 @@ function ItemForm({ onDone }: { onDone: () => void }) {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           enterKeyHint="done"
-          className="h-12 rounded-xl border border-line2 bg-card px-4 text-base text-ink outline-none focus:border-ink2"
+          lang={sphere === 'work' ? 'de' : undefined}
+          className={field}
           placeholder="Например, записаться к врачу"
         />
       </label>
-      <fieldset className="flex flex-col gap-2">
-        <legend className="mb-2 text-cap font-semibold text-ink2">Сфера</legend>
-        <div className="flex flex-wrap gap-2">
-          {SPHERE_ORDER.map((s) => (
-            <Chip key={s} selected={sphere === s} dotClass={SPHERE_CLASS[s].dot} onClick={() => setSphere(s)}>
-              {SPHERE_LABEL[s]}
-            </Chip>
-          ))}
-        </div>
-      </fieldset>
-      <fieldset className="flex flex-col gap-2">
+      <SpherePicker value={sphere} onChange={setSphere} />
+      <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
         <legend className="mb-2 text-cap font-semibold text-ink2">Когда</legend>
         <div className="flex flex-wrap gap-2">
           <Chip selected={date === today} onClick={() => setDate(today)}>
             Сегодня
           </Chip>
-          <Chip selected={date === dateChoices[1]} onClick={() => setDate(dateChoices[1]!)}>
+          <Chip selected={date === tomorrow} onClick={() => setDate(tomorrow)}>
             Завтра
           </Chip>
           <Chip selected={date === ''} onClick={() => setDate('')}>
@@ -111,6 +126,49 @@ function ItemForm({ onDone }: { onDone: () => void }) {
       </fieldset>
       {create.isError && <p className="m-0 text-cap text-ink2">Не получилось сохранить. Проверь сеть и попробуй ещё раз.</p>}
       <Button type="submit" disabled={!title.trim() || create.isPending}>
+        Сохранить
+      </Button>
+    </form>
+  )
+}
+
+function NoteForm({ onDone, initialSphere }: { onDone: () => void; initialSphere: Sphere }) {
+  const [text, setText] = useState('')
+  const [sphere, setSphere] = useState<Sphere>(initialSphere)
+  const create = useCreateNote()
+  const toast = useToast()
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    const [first = '', ...rest] = text.trim().split('\n')
+    if (!first.trim()) return
+    create.mutate(
+      { sphere, title: first.trim(), body_md: rest.join('\n').trim() || null },
+      {
+        onSuccess: () => {
+          toast({ text: `Заметка сохранена · ${SPHERE_LABEL[sphere]}` })
+          onDone()
+        },
+      },
+    )
+  }
+
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-6">
+      <label className="flex flex-col gap-2">
+        <span className="text-cap font-semibold text-ink2">Заметка</span>
+        <textarea
+          autoFocus
+          rows={4}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          className="rounded-xl border border-line2 bg-card px-4 py-3 text-base text-ink outline-none focus:border-ink2"
+          placeholder="Первая строка станет заголовком"
+        />
+      </label>
+      <SpherePicker value={sphere} onChange={setSphere} />
+      {create.isError && <p className="m-0 text-cap text-ink2">Не получилось сохранить. Проверь сеть и попробуй ещё раз.</p>}
+      <Button type="submit" disabled={!text.trim() || create.isPending}>
         Сохранить
       </Button>
     </form>
