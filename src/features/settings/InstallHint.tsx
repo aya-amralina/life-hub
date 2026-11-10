@@ -71,7 +71,7 @@ export function InstallHint({ compact = false }: { compact?: boolean }) {
         ) : (
           <div className="text-cap text-ink2">
             В Safari нажми <Share size={14} strokeWidth={1.75} className="inline align-[-2px]" aria-label="Поделиться" /> и
-            выбери «На экран „Домой“». Войти в приложении можно кодом из письма.
+            выбери «На экран „Домой“». В приложении входи почтой и паролем — менеджер паролей подставит их сам.
           </div>
         )}
       </div>

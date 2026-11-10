@@ -5,7 +5,8 @@ const url = process.env.VITE_SUPABASE_URL
 const publishable = process.env.VITE_SUPABASE_PUBLISHABLE_KEY
 const secret = process.env.SUPABASE_SECRET_KEY
 const email = process.env.LIFEHUB_EMAIL
-const ready = Boolean(url && publishable && secret && email)
+const password = process.env.LIFEHUB_PASSWORD
+const ready = /^https:\/\/[a-z0-9]+\.supabase\.co\/?$/.test(url ?? '') && Boolean(publishable && secret && email)
 
 // Statuses and counts only — no row contents in output.
 describe.skipIf(!ready)('live: supabase-js with sb_publishable_ / sb_secret_ keys', () => {
@@ -42,5 +43,17 @@ describe.skipIf(!ready)('live: supabase-js with sb_publishable_ / sb_secret_ key
     const { error, count } = await admin.from('weeks').select('id', { count: 'exact', head: true })
     expect(error).toBeNull()
     expect(typeof count).toBe('number')
+  })
+
+  it.skipIf(!password)('password sign-in works and the user can read own rows (authenticated GRANT + RLS)', async () => {
+    const sb = createClient(url!, publishable!, { auth: { persistSession: false, autoRefreshToken: false } })
+    const { data, error } = await sb.auth.signInWithPassword({ email: email!, password: password! })
+    expect(error).toBeNull()
+    expect(data.session?.access_token).toBeTruthy()
+    for (const table of ['weeks', 'items'] as const) {
+      const res = await sb.from(table).select('id', { count: 'exact', head: true })
+      expect(res.error).toBeNull()
+    }
+    await sb.auth.signOut()
   })
 })

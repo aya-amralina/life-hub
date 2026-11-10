@@ -4,6 +4,7 @@ import { Mail } from 'lucide-react'
 import { useAuth } from '@/app/authContext'
 import { Button } from '@/components/ui/Button'
 import { supabase, supabaseConfigured } from '@/lib/supabase'
+import { authMessage } from './authMessage'
 
 const EMAIL_KEY = 'lifehub.email'
 
@@ -15,59 +16,56 @@ function loadEmail(): string {
   }
 }
 
-/** Human message for Supabase auth errors; never shows raw server text with details. */
-function authMessage(err: { message?: string; status?: number; code?: string }): string {
-  const m = (err.message ?? '').toLowerCase()
-  if (err.status === 429 || m.includes('rate limit') || m.includes('security purposes'))
-    return 'Слишком часто. Подожди минуту и попробуй снова.'
-  if (m.includes('signups not allowed') || m.includes('not found') || err.code === 'otp_disabled')
-    return 'Этот адрес не подключён к Life Hub.'
-  if (m.includes('expired') || m.includes('invalid')) return 'Код не подошёл или устарел. Запроси новое письмо.'
-  if (m.includes('fetch') || m.includes('network')) return 'Нет сети. Попробуй, когда появится связь.'
-  return 'Не получилось. Попробуй ещё раз.'
+function saveEmail(email: string): void {
+  try {
+    localStorage.setItem(EMAIL_KEY, email)
+  } catch {
+    // storage unavailable — the password manager still fills the field
+  }
 }
 
 const field =
   'h-12 w-full rounded-xl border border-line2 bg-card px-4 text-body text-ink outline-none focus:border-ink2'
 
+/**
+ * Main: e-mail + password (signInWithPassword) — the iPhone password manager fills both fields
+ * (autocomplete="username" / "current-password"). Fallback for a browser: magic link by e-mail.
+ */
 export function LoginScreen() {
   const { session, loading } = useAuth()
   const [email, setEmail] = useState(loadEmail)
-  const [sentTo, setSentTo] = useState<string | null>(null)
-  const [code, setCode] = useState('')
+  const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [linkSentTo, setLinkSentTo] = useState<string | null>(null)
 
   if (!loading && session) return <Navigate to="/" replace />
 
-  const send = async (e?: FormEvent) => {
-    e?.preventDefault()
-    const addr = email.trim().toLowerCase()
-    if (!addr) return
+  const normalizedEmail = email.trim().toLowerCase()
+
+  const signIn = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!normalizedEmail || !password) return
+    setBusy(true)
+    setError(null)
+    const { error: err } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password })
+    setBusy(false)
+    if (err) return setError(authMessage(err))
+    saveEmail(normalizedEmail)
+  }
+
+  const sendLink = async () => {
+    if (!normalizedEmail) return setError('Впиши почту — ссылка придёт на неё.')
     setBusy(true)
     setError(null)
     const { error: err } = await supabase.auth.signInWithOtp({
-      email: addr,
+      email: normalizedEmail,
       options: { shouldCreateUser: false, emailRedirectTo: window.location.origin },
     })
     setBusy(false)
     if (err) return setError(authMessage(err))
-    try {
-      localStorage.setItem(EMAIL_KEY, addr)
-    } catch {
-      // ignore
-    }
-    setSentTo(addr)
-  }
-
-  const verify = async (e: FormEvent) => {
-    e.preventDefault()
-    if (!sentTo) return
-    setBusy(true)
-    setError(null)
-    const { error: err } = await supabase.auth.verifyOtp({ email: sentTo, token: code.trim(), type: 'email' })
-    setBusy(false)
-    if (err) setError(authMessage(err))
+    saveEmail(normalizedEmail)
+    setLinkSentTo(normalizedEmail)
   }
 
   return (
@@ -83,63 +81,62 @@ export function LoginScreen() {
         </p>
       )}
 
-      {sentTo === null ? (
-        <form onSubmit={send} className="flex flex-col gap-4">
-          <label className="flex flex-col gap-2">
-            <span className="text-cap font-semibold text-ink2">E-mail</span>
-            <input
-              type="email"
-              inputMode="email"
-              autoComplete="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={field}
-            />
-          </label>
-          <Button type="submit" disabled={busy || !email.trim()}>
-            Отправить ссылку
-          </Button>
-        </form>
-      ) : (
-        <form onSubmit={verify} className="flex flex-col gap-4">
-          <div className="flex items-start gap-3 rounded-2xl border border-line bg-card p-4">
-            <Mail size={20} strokeWidth={1.75} className="mt-0.5 flex-none text-ink2" aria-hidden="true" />
-            <div className="text-body">
-              Письмо ушло на <span className="font-semibold [overflow-wrap:anywhere]">{sentTo}</span>. Открой ссылку — или
-              введи код из письма здесь. На телефоне в установленном приложении нужен код.
-            </div>
-          </div>
-          <label className="flex flex-col gap-2">
-            <span className="text-cap font-semibold text-ink2">Код из письма</span>
-            <input
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              pattern="[0-9]{6,10}"
-              maxLength={10}
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-              className={`${field} text-title tracking-[0.2em] tabular-nums`}
-            />
-          </label>
-          <Button type="submit" disabled={busy || code.length < 6}>
-            Войти
-          </Button>
-          <div className="flex gap-2">
-            <Button variant="quiet" onClick={() => send()} disabled={busy}>
-              Отправить ещё раз
-            </Button>
-            <Button variant="quiet" onClick={() => (setSentTo(null), setCode(''), setError(null))}>
-              Другой адрес
-            </Button>
-          </div>
-        </form>
-      )}
+      <form onSubmit={signIn} method="post" action="/login" className="flex flex-col gap-4">
+        <label className="flex flex-col gap-2">
+          <span className="text-cap font-semibold text-ink2">E-mail</span>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            inputMode="email"
+            autoComplete="username"
+            autoCapitalize="none"
+            spellCheck={false}
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={field}
+          />
+        </label>
+        <label className="flex flex-col gap-2">
+          <span className="text-cap font-semibold text-ink2">Пароль</span>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className={field}
+          />
+        </label>
+        <Button type="submit" disabled={busy || !normalizedEmail || !password}>
+          Войти
+        </Button>
+      </form>
 
       {error && (
         <p role="alert" className="m-0 text-cap font-semibold text-amber-ink">
           {error}
         </p>
+      )}
+
+      {linkSentTo ? (
+        <div role="status" className="flex items-start gap-3 rounded-2xl border border-line bg-card p-4">
+          <Mail size={20} strokeWidth={1.75} className="mt-0.5 flex-none text-ink2" aria-hidden="true" />
+          <div className="text-body">
+            Ссылка ушла на <span className="font-semibold [overflow-wrap:anywhere]">{linkSentTo}</span>. Открой письмо в этом
+            же браузере — вход случится сам.
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col items-start gap-1">
+          <Button variant="quiet" className="-mx-3" onClick={sendLink} disabled={busy}>
+            Войти по ссылке из письма
+          </Button>
+          <span className="text-cap text-ink2">Запасной способ для браузера. В установленном приложении входи паролем.</span>
+        </div>
       )}
     </main>
   )

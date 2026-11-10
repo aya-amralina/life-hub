@@ -74,6 +74,8 @@ def config_from_env(env: dict[str, str]) -> Config:
     publishable = env.get("VITE_SUPABASE_PUBLISHABLE_KEY") or None
     if not url.startswith("https://"):
         raise ConfigError("VITE_SUPABASE_URL не задан в .env.local")
+    if "YOUR-PROJECT" in url:
+        raise ConfigError("VITE_SUPABASE_URL — ещё плейсхолдер из .env.example: впиши адрес проекта (Project Settings → API)")
     if not secret:
         raise ConfigError("SUPABASE_SECRET_KEY не задан в .env.local")
     if not secret.startswith(SECRET_PREFIX):

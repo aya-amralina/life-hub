@@ -24,7 +24,7 @@ npm run dev            # http://localhost:5173
 npm run build          # tsc -b && vite build
 npm run lint           # eslint
 npm test               # vitest run (unit, без сети)
-npm run test:e2e       # playwright (нужен .env.local)
+npm run test:e2e       # playwright; вход формой e-mail + пароль (LIFEHUB_EMAIL, LIFEHUB_PASSWORD в .env.local)
 npm run test:integration # живые тесты против Supabase (ключи, RLS, регистрация выключена), нужен .env.local
 npm run test:import    # проверки импорта против базы (раздел 6 SPEC), нужен SUPABASE_SECRET_KEY
 npm run check:keys     # Python: формат ключей, доступ secret/publishable, регистрация выключена
@@ -85,10 +85,11 @@ public/                      # иконки PWA, шрифт Onest (woff2, self-h
 ## Безопасность и приватность (жёстко)
 - `data/`, `*.xlsx`, `.env*`, экспорты — никогда в git. Перед каждым коммитом: `git status` и проверка, что их нет в индексе.
 - Не выводить содержимое строк Excel и базы в логи/терминал — только счётчики, агрегаты, номера строк с ошибками.
-- Ключи только нового формата. `SUPABASE_SECRET_KEY` (`sb_secret_…`) — только в `.env.local` и только для `scripts/import`, интеграционных и e2e-тестов. Никогда во фронтенде, в `VITE_*`, в git. `vite.config.ts` падает при секрете в `VITE_*`.
+- Ключи только нового формата. `SUPABASE_SECRET_KEY` (`sb_secret_…`) — только в `.env.local` и только для `scripts/import` и интеграционных тестов (e2e его не использует). Никогда во фронтенде, в `VITE_*`, в git. `vite.config.ts` падает при секрете в `VITE_*`.
 - Во фронтенде только `VITE_SUPABASE_URL` и `VITE_SUPABASE_PUBLISHABLE_KEY` (`sb_publishable_…`).
 - Ключи нового формата — не JWT: в своих запросах (Python, fetch в тестах) кладём их только в `apikey`, без `Authorization: Bearer`.
-- Вход только magic link, `shouldCreateUser: false`; регистрация в Supabase выключена.
+- Вход: основной — e-mail + пароль (`signInWithPassword`), запасной — magic link для браузера (`signInWithOtp`, `shouldCreateUser: false`). Входа кодом нет. Регистрация в Supabase выключена, пользователь один и создан вручную с паролем.
+- Форма входа: `autocomplete="username"` у e-mail и `autocomplete="current-password"` у пароля, `name`/`id` у полей — чтобы менеджер паролей iPhone подставлял данные. Пароль не логируем и не храним (кроме e2e: `LIFEHUB_PASSWORD` в `.env.local`).
 
 ## Деплой
 GitHub (приватный `life-hub`, `main` = прод) → Vercel Hobby (пресет Vite, env `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` для Production и Preview, `vercel.json` — SPA rewrite). Supabase Free, Frankfurt.
@@ -99,7 +100,7 @@ GitHub (приватный `life-hub`, `main` = прод) → Vercel Hobby (пр
 - 2026-11-09: задачи Работы импортируются только из «Dev Aufgaben». «Organisatirisch» неактуален — не импортируется и не сравнивается. Строке с пустым Titel (Branch `fix/h2_secret_logging`) задаётся название «PR 1: Secret-Logging fixen».
 - 2026-11-09: «Календарь» (Budget) — «Счёт» → `transactions.account` сопоставленной операции, «Что сделать» → её `note`. Задачи не создаются; в `--dry-run` — отдельный список строк, похожих на открытые действия, для ручного выбора.
 - 2026-11-09: экраны дизайна придут новым handoff до UI этапа 2; если нет — собираю из компонентов и подгоняю позже.
-- 2026-11-09: письмо magic link содержит и ссылку, и код (`{{ .Token }}`): установленная PWA на iOS не делит хранилище с Safari, поэтому в приложении вход по коду (`verifyOtp`), в браузере — по ссылке. `flowType: 'implicit'`, чтобы ссылка работала в любом браузере.
+- 2026-11-10: вход — e-mail + пароль (`signInWithPassword`); magic link — запасной вариант только для браузера. Причины: шаблоны писем в Supabase без своего SMTP менять нельзя, а стандартный Magic Link содержит только ссылку; установленная PWA на iOS не делит хранилище с Safari, так что ссылка из почты в приложение не логинит. Вход кодом и `supabase/templates/` удалены. `flowType: 'implicit'` — чтобы ссылка работала в любом браузере.
 - 2026-11-09: TypeScript 6.0.x (typescript-eslint пока не поддерживает 7.x). Node 24 через nvm.
 - 2026-11-09: цвета Tailwind по умолчанию сброшены (`--color-*: initial`) — в классах доступны только токены дизайна. Тема через CSS `light-dark()` + `data-theme` на `<html>`.
 - 2026-11-09: синхронизация между устройствами — refetch TanStack Query при фокусе и восстановлении сети (без Supabase Realtime).

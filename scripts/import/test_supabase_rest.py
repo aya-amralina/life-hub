@@ -42,6 +42,10 @@ class EnvTest(unittest.TestCase):
         cfg = config_from_env({**base, "SUPABASE_SECRET_KEY": SECRET})
         self.assertEqual(cfg.secret_key, SECRET)
 
+    def test_config_rejects_placeholder_url(self):
+        with self.assertRaises(ConfigError):
+            config_from_env({"VITE_SUPABASE_URL": "https://YOUR-PROJECT.supabase.co", "SUPABASE_SECRET_KEY": SECRET})
+
     def test_config_rejects_secret_in_vite_var(self):
         with self.assertRaises(ConfigError):
             config_from_env({"VITE_SUPABASE_URL": URL, "SUPABASE_SECRET_KEY": SECRET, "VITE_SUPABASE_PUBLISHABLE_KEY": SECRET})

@@ -6,14 +6,14 @@
 ---
 
 ## Этап 1. Каркас
-**Готово, когда:** прод-ссылка `*.vercel.app` открывается, приложение ставится на телефон, вход по magic link работает, данные синхронизируются между телефоном и ноутбуком.
+**Готово, когда:** прод-ссылка `*.vercel.app` открывается, приложение ставится на телефон, вход по e-mail и паролю работает (magic link — запасной в браузере), данные синхронизируются между телефоном и ноутбуком.
 
 1. Окружение: Node 24 через nvm (сейчас стоит Node 20, а свежим React Router, supabase-js и Vitest нужен ≥ 22), `.nvmrc`, `engines` в package.json.
 2. Проект: Vite + React + TS strict, Tailwind v4, React Router, TanStack Query, ESLint, Vitest, Playwright; `git init`, `.gitignore` (уже создан).
 3. Дизайн-система → код: токены светлой и тёмной темы (CSS-переменные + `@theme`), шрифт Onest (self-hosted), тема «как в системе / светлая / тёмная».
 4. Базовые компоненты: Button, Card, SegmentedTabs, TabBar, Fab «+», BottomSheet (пока пустой), Toast, Skeleton, EmptyState, OfflinePill.
 5. Supabase: `supabase init`, миграция 0001 — общие функции (триггер `updated_at`), таблицы `weeks` и `items`, индексы, `unique (user_id, source_id)`, RLS + 4 политики.
-6. Авторизация: экран «Вход» (e-mail → «Отправить ссылку», `shouldCreateUser: false`), обработка возврата по ссылке, защита роутов, выход.
+6. Авторизация: экран «Вход» (e-mail + пароль → `signInWithPassword`, autocomplete для менеджера паролей; запасная кнопка magic link, `shouldCreateUser: false`), обработка возврата по ссылке, защита роутов, выход.
 7. Оболочка: таб-бар «Сегодня · Деньги · Работа · Учёба · Тело», роуты сфер с заглушками, «+» на всех экранах, пустой «Сегодня» (дата, пустые состояния), «Настройки» (тема, выход).
 8. Проверка синхронизации: на «Сегодня» временный блок «Заметка дня» — один пункт в `items` (sphere personal), видно с обоих устройств. Уберу на этапе 2.
 9. PWA: manifest (имя, цвета из токенов, `display: standalone`), иконки 192/512/maskable + apple-touch-icon, service worker (precache оболочки), подсказка «Добавить на экран» для iOS.
