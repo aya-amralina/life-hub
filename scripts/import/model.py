@@ -16,6 +16,8 @@ from typing import Any
 @dataclass
 class Batch:
     today: dt.date
+    # date of the first import: week budgets that ended before it came as «Неделя N (факт)» (decision 2026-11-11)
+    anchor: dt.date | None = None
     rows: dict[str, list[dict[str, Any]]] = field(default_factory=lambda: defaultdict(list))
     weeks: dict[dt.date, dict[str, Any]] = field(default_factory=dict)
     report: list[str] = field(default_factory=list)

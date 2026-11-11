@@ -80,6 +80,7 @@ function emptyLog(date: ISODate): Partial<DailyLog> {
     outside: false,
     water: false,
     body_cream: false,
+    care: [],
     minimum_mode: false,
     face_evening: null,
     energy: null,

@@ -202,7 +202,7 @@ describe('rule 18a: week budgets («Неделя N»)', async () => {
     t('w4', '2026-11-02', 'expense', 100, { is_planned: true, week_budget: true }), // finished week
     t('w5', '2026-11-09', 'expense', 100, { is_planned: true, week_budget: true }), // current week
     t('w6', '2026-11-16', 'expense', 100, { is_planned: true, week_budget: true }), // later week
-    t('coffee', '2026-11-10', 'expense', 30, { confirmed_at: '2026-11-10T10:00:00Z' }), // spent from the app
+    t('coffee', '2026-11-10', 'expense', 30, { confirmed_at: '2026-11-10T10:00:00Z', category: 'Кофейни и перекусы' }), // spent from the app
   ]
   it('never asks «Списалось?»', () => expect(plannedQuestions(txs, today)).toEqual([]))
   it('finished week drops out; current costs max(budget, spent); later counts in full', () => {
@@ -210,9 +210,33 @@ describe('rule 18a: week budgets («Неделя N»)', async () => {
     expect(balanceAt(txs, '2026-12-31', 'plan', today)).toBe(80000)
   })
   it('spent over the budget: the current week costs what was spent', () => {
-    const over = [...txs, t('big', '2026-11-11', 'expense', 150, { confirmed_at: '2026-11-11T10:00:00Z' })]
+    const over = [...txs, t('big', '2026-11-11', 'expense', 150, { confirmed_at: '2026-11-11T10:00:00Z', category: 'Продукты' })]
     // 1000 − 180 spent − 0 rest − 100 (w6)
     expect(balanceAt(over, '2026-12-31', 'plan', today)).toBe(72000)
   })
   it('fact never includes week budgets', () => expect(balanceAt(txs, '2026-12-31', 'fact', today)).toBe(97000))
+  it('a one-off purchase of the plan (no weekly category) does not eat the week budget', () => {
+    const shoes = [...txs, t('shoes', '2026-11-10', 'expense', 50, { confirmed_at: '2026-11-10T10:00:00Z' })]
+    // 1000 − 30 − 70 (rest of w5) − 100 (w6) − 50 shoes
+    expect(balanceAt(shoes, '2026-12-31', 'plan', today)).toBe(75000)
+  })
+})
+
+describe('rule 26: a week with «Неделя N (факт)» — app expenses stay in categories, not in the balance', async () => {
+  const { balanceAt, moneyWeek } = await import('./money')
+  const t = (date: string, kind: string, amount_eur: number, x: Record<string, unknown> = {}) => ({
+    date, kind, amount_eur, category: null, envelope_id: null, is_planned: false, confirmed_at: null, cancelled_at: null, grp: 'Жизнь', week_budget: false, ...x,
+  })
+  const txs = [
+    t('2026-10-13', 'opening', 1000, { grp: null }),
+    t('2026-11-02', 'expense', 120, { week_budget: true, confirmed_at: '2026-11-08T12:00:00Z' }), // «Неделя 4 (факт)»
+    t('2026-11-03', 'expense', 30, { category: 'Продукты' }), // app expense inside that week
+    t('2026-11-10', 'expense', 20, { category: 'Продукты' }), // app expense, week without a fact
+  ]
+  it('balance counts the fact row, not the app expenses of that week', () => {
+    expect(balanceAt(txs, '2026-12-31', 'fact', '2026-11-11')).toBe(100000 - 12000 - 2000)
+  })
+  it('the category stats of that week still see the app expense', () => {
+    expect(moneyWeek([{ category: 'Продукты', limit_eur: 50 }], txs, '2026-11-02').spentCents).toBe(3000)
+  })
 })

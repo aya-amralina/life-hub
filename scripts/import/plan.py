@@ -103,23 +103,40 @@ def per_week_done(items: list[dict]) -> dict[dt.date, int]:
     return out
 
 
-def app_forecast(txs: list[dict], app_expenses: list[dict], today: dt.date, end: str = "2026-12-31") -> float:
-    """«На счетах 31.12» as the app computes it (money.ts balanceAt, plan): week budgets of finished weeks drop
-    out, the current week costs max(budget, spent in the app), later weeks in full; app expenses are facts."""
-    monday = today - dt.timedelta(days=today.weekday())
-    sunday = monday + dt.timedelta(days=6)
-    spent = sum(float(e["amount_eur"]) for e in app_expenses if e.get("grp") == "Жизнь" and monday.isoformat() <= e["date"] <= sunday.isoformat())
-    total = -sum(float(e["amount_eur"]) for e in app_expenses if e["date"] <= end)
-    for t in txs:
+WEEK_CATEGORIES = {"Продукты", "Кофейни и перекусы", "Выходы и еда вне дома", "Мелочи", "Шопинг", "Доставка"}
+
+
+def _is_fact(t: dict) -> bool:
+    return not t.get("cancelled_at") and (not t.get("is_planned") or bool(t.get("confirmed_at")))
+
+
+def app_forecast_all(txs: list[dict], today: dt.date, end: str = "2026-12-31") -> float:
+    """«На счетах 31.12» exactly as money.ts balanceAt(plan) computes it over all rows of the base (rule 26):
+    planned week budgets — finished weeks drop out, the current week costs max(budget, spent), later weeks in
+    full; a confirmed week fact replaces the app's weekly-category expenses of that week in the balance."""
+    def monday(s: str) -> dt.date:
+        d = dt.date.fromisoformat(s[:10])
+        return d - dt.timedelta(days=d.weekday())
+
+    live = [t for t in txs if not t.get("cancelled_at")]
+    fact_weeks = {monday(t["date"]) for t in live if t.get("week_budget") and _is_fact(t)}
+
+    def spent(week: dt.date) -> float:
+        return sum(float(t["amount_eur"]) for t in live if t["kind"] == "expense" and not t.get("week_budget") and _is_fact(t) and t.get("category") in WEEK_CATEGORIES and monday(t["date"]) == week)
+
+    total = 0.0
+    for t in live:
         if t["date"] > end:
             continue
-        if t.get("week_budget"):
-            d = dt.date.fromisoformat(t["date"])
-            w = d - dt.timedelta(days=d.weekday())
+        amount = float(t["amount_eur"])
+        if not t.get("week_budget") and t["kind"] == "expense" and t.get("category") in WEEK_CATEGORIES and monday(t["date"]) in fact_weeks:
+            continue
+        if t.get("week_budget") and not _is_fact(t):
+            w = monday(t["date"])
             if w + dt.timedelta(days=6) < today:
                 continue
             if w <= today:
-                total -= max(0.0, t["amount_eur"] - spent)
+                total -= max(0.0, amount - spent(w))
                 continue
-        total += signed(t)
+        total += {"opening": amount, "income": amount, "expense": -amount}.get(t["kind"], 0.0)
     return round(total, 2)

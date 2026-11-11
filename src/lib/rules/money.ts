@@ -92,26 +92,32 @@ export function signedCents(t: Pick<TxLike, 'kind' | 'amount_eur'>): number {
   return 0
 }
 
-/** Life expenses actually spent (facts, group «Жизнь») in Mon–Sun of `weekStart`. */
+/**
+ * What the week's budget has already covered: expenses with a weekly category (the app's «+» expenses) in
+ * Mon–Sun. One-off rows of the plan (a purchase in group «Жизнь» without a weekly category) are separate.
+ */
 function spentLifeInWeek(txs: readonly TxLike[], monday: ISODate): number {
   const sunday = addDaysISO(monday, 6)
   return txs
-    .filter((t) => t.kind === 'expense' && !t.week_budget && isFact(t) && t.grp === 'Жизнь' && t.date >= monday && t.date <= sunday)
+    .filter((t) => t.kind === 'expense' && !t.week_budget && isFact(t) && isWeekCategory(t.category) && t.date >= monday && t.date <= sunday)
     .reduce((s, t) => s + toCents(t.amount_eur), 0)
 }
 
 /**
  * Rule 1 «Баланс и прогноз»: running sum of signed amounts up to `date` (inclusive). `fact` counts only
  * confirmed operations (the «факт» line); `plan` adds planned ones not yet confirmed (the forecast).
- * Rule 18a, week budgets in the plan: a finished week drops out (its fact is the app's expenses); the
- * current week adds only what is left of the budget, so the week costs max(budget, already spent);
- * later weeks count in full.
+ * Rule 26, week rows («Неделя N»): a planned week budget of a finished week drops out (its fact is the app's
+ * expenses); the current week adds only what is left of the budget, so the week costs max(budget, already
+ * spent with weekly categories); later weeks count in full. A confirmed «Неделя N (факт)» from Excel is the week's total: the app's
+ * weekly-category expenses of that week stay in the category stats (rule 2) but not in the balance.
  */
 export function balanceAt(txs: readonly TxLike[], date: ISODate, mode: 'fact' | 'plan', today: ISODate = date): number {
+  const factWeeks = new Set(txs.filter((t) => t.week_budget && isFact(t) && isInPlan(t)).map((t) => weekStartISO(t.date)))
   let sum = 0
   for (const t of txs) {
     if (t.date > date || !isInPlan(t)) continue
     if (mode === 'fact' && !isFact(t)) continue
+    if (!t.week_budget && t.kind === 'expense' && isWeekCategory(t.category) && factWeeks.has(weekStartISO(t.date))) continue
     if (t.week_budget && !isFact(t)) {
       const monday = weekStartISO(t.date)
       if (addDaysISO(monday, 6) < today) continue

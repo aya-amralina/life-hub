@@ -10,9 +10,9 @@ import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { Switch } from '@/components/ui/Switch'
 import { WeekSwitcher } from '@/components/ui/WeekSwitcher'
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
-import { FACE_EVENING } from '@/lib/constants'
 import { addDaysISO, formatDayMonth, formatRelativeDay, formatWeekdayDate, todayBerlin, weekStart, type ISODate } from '@/lib/dates'
 import { activityPoints, dayPoints, weekPoints, weekPointsTarget } from '@/lib/rules/activities'
+import { careDone, careItems, toggleCare } from '@/lib/rules/care'
 import { activeHabits, minimumSet, stageForDate, weekHabitShare } from '@/lib/rules/habits'
 import { isItemOpen, isUpcoming } from '@/lib/rules/items'
 import { plural } from '@/lib/format'
@@ -181,28 +181,26 @@ function MovementCard({ date }: { date: ISODate }) {
   )
 }
 
+/** «Уход»: the stage's care list (Настройки → Этапы); a past «Вечер: лицо» mark is shown as it was. */
 function CareCard({ date }: { date: ISODate }) {
   const log = useDailyLog(date)
   const save = useSaveDailyLog(date)
+  const { stage } = useStageFor(date)
   if (log.isPending) return <SkeletonCard />
-  const cream = log.data?.body_cream ?? false
+  const items = careItems(stage)
+  const marked = log.data?.care ?? []
   const face = log.data?.face_evening ?? null
   return (
     <Card>
-      <CardHeader title="Уход" dotClass="bg-body" />
+      <CardHeader title="Уход" dotClass="bg-body" context={`${careDone(marked, items)} из ${items.length}`} />
       <div className="flex flex-wrap gap-2">
-        <Chip selected={cream} onClick={() => save.mutate({ body_cream: !cream })}>
-          Крем для тела
-        </Chip>
-      </div>
-      <div className="text-cap text-ink2">Вечер: лицо</div>
-      <div className="flex flex-wrap gap-2">
-        {FACE_EVENING.map((f) => (
-          <Chip key={f} selected={face === f} onClick={() => save.mutate({ face_evening: face === f ? null : f })}>
-            {f}
+        {items.map((item) => (
+          <Chip key={item} selected={marked.includes(item)} onClick={() => save.mutate({ care: toggleCare(marked, item) })}>
+            {item}
           </Chip>
         ))}
       </div>
+      {face && <p className="m-0 text-cap text-ink2">Вечер: лицо — {face} (старая отметка)</p>}
     </Card>
   )
 }

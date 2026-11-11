@@ -93,5 +93,3 @@ export const INTAKE_KINDS = ['витамин', 'лекарство', 'друго
 /** Work item type for a recorded success (Erfolg). */
 export const ERFOLG_TYPE = 'Erfolg'
 
-/** Glow-up tracker dropdown («Трекер»). Workouts are activities now (activity_types). */
-export const FACE_EVENING = ['Ретиноид', 'Азелаинка', 'Пропуск'] as const

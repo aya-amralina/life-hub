@@ -100,6 +100,7 @@ export type Database = {
       daily_logs: {
         Row: {
           body_cream: boolean
+          care: string[]
           created_at: string
           date: string
           energy: number | null
@@ -119,6 +120,7 @@ export type Database = {
         }
         Insert: {
           body_cream?: boolean
+          care?: string[]
           created_at?: string
           date: string
           energy?: number | null
@@ -138,6 +140,7 @@ export type Database = {
         }
         Update: {
           body_cream?: boolean
+          care?: string[]
           created_at?: string
           date?: string
           energy?: number | null
@@ -196,6 +199,42 @@ export type Database = {
           updated_at?: string
           user_id?: string
           when_text?: string | null
+        }
+        Relationships: []
+      }
+      import_baseline: {
+        Row: {
+          created_at: string
+          data: Json
+          id: string
+          imported_at: string
+          removed: boolean
+          source_id: string
+          table_name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          data: Json
+          id?: string
+          imported_at?: string
+          removed?: boolean
+          source_id: string
+          table_name: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          id?: string
+          imported_at?: string
+          removed?: boolean
+          source_id?: string
+          table_name?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -482,6 +521,7 @@ export type Database = {
       }
       plan_stages: {
         Row: {
+          care_items: string[]
           created_at: string
           end_date: string
           habits: string[]
@@ -496,6 +536,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          care_items?: string[]
           created_at?: string
           end_date: string
           habits?: string[]
@@ -510,6 +551,7 @@ export type Database = {
           user_id?: string
         }
         Update: {
+          care_items?: string[]
           created_at?: string
           end_date?: string
           habits?: string[]

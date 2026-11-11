@@ -15,7 +15,8 @@ STATUS = {"не начато": "Не начато", "в процессе": "В �
 
 
 def build(wb, b: Batch) -> None:
-    _weeks_and_stages(wb["Недели"], b)
+    care = [name for _, name in care_columns(wb["Трекер"]) if name not in LEGACY_CARE]
+    _weeks_and_stages(wb["Недели"], b, care)
     types = _activity_types(wb["Трекер"], b)
     _tracker(wb["Трекер"], b, types)
     _strength(wb["Сила"], b)
@@ -26,8 +27,24 @@ def build(wb, b: Batch) -> None:
         _sheet_note(wb[sheet], b)
 
 
-def _weeks_and_stages(ws, b: Batch) -> None:
+TARGET_KEYS = {"Силовые": "strength_per_week", "Группы": "groups_per_week", "Ретиноид": "retinoid_per_week", "Ниацинамид": "niacinamide_per_week"}
+
+
+def target_columns(ws) -> list[tuple[int, str]]:
+    """«… цель» columns of «Недели» (row 5) → targets key: known names keep their keys, others get a slug."""
+    names = next(ws.iter_rows(min_row=5, max_row=5, values_only=True))
+    out = []
+    for j, v in enumerate(names):
+        name = text(v)
+        if name and name.endswith(" цель"):
+            base = name[: -len(" цель")].strip()
+            out.append((j, TARGET_KEYS.get(base, re.sub(r"\W+", "_", base.lower()).strip("_") + "_per_week")))
+    return out
+
+
+def _weeks_and_stages(ws, b: Batch, care: list[str]) -> None:
     stages: dict[str, dict] = {}
+    target_cols = target_columns(ws)
     targets: dict[str, dict[str, Counter]] = defaultdict(lambda: defaultdict(Counter))
     n_weeks = 0
     for _, r in rows(ws, 5):
@@ -41,7 +58,7 @@ def _weeks_and_stages(ws, b: Batch) -> None:
             s = stages.setdefault(stage, {"start": start, "end": end or start})
             s["start"] = min(s["start"], start)
             s["end"] = max(s["end"], end or start)
-            for key, j in (("strength_per_week", 10), ("groups_per_week", 12), ("retinoid_per_week", 14)):
+            for j, key in target_cols:
                 v = number(r[j]) if j < len(r) else None
                 if v is not None:
                     targets[stage][key][v] += 1
@@ -57,10 +74,25 @@ def _weeks_and_stages(ws, b: Batch) -> None:
                 "end_date": s["end"].isoformat(),
                 "habits": ["morning", "outside", "water"],
                 "minimum_habits": ["water", "outside"],
+                "care_items": care,
                 "targets": {k: int(v) if float(v).is_integer() else v for k, v in t.items()},
             },
         )
-    b.report.append(f"Глоу-ап · Недели: {n_weeks} недель, этапов {len(stages)} (все три привычки, минимум — вода и 10 минут на улице)")
+    b.report.append(f"Глоу-ап · Недели: {n_weeks} недель, этапов {len(stages)} (все три привычки, минимум — вода и 10 минут на улице; уход: {', '.join(care) or '—'})")
+
+
+LEGACY_CARE = {"Вечер: лицо"}  # the former select column (Ретиноид / Азелаинка / Пропуск) → daily_logs.face_evening
+
+
+def care_columns(ws) -> list[tuple[int, str]]:
+    """Columns of the «Уход» group in «Трекер» (row 4 groups, row 5 names): everything from «Уход» up to the next group."""
+    groups = next(ws.iter_rows(min_row=4, max_row=4, values_only=True))
+    names = next(ws.iter_rows(min_row=5, max_row=5, values_only=True))
+    start = next((j for j, v in enumerate(groups) if text(v) == "Уход"), None)
+    if start is None:
+        return []
+    end = next((j for j in range(start + 1, len(groups)) if text(groups[j])), len(names))
+    return [(j, text(names[j])) for j in range(start, end) if text(names[j])]
 
 
 def _activity_types(ws, b: Batch) -> list[str]:
@@ -79,6 +111,7 @@ def _activity_types(ws, b: Batch) -> list[str]:
 
 def _tracker(ws, b: Batch, types: list[str]) -> None:
     days, acts, example = 0, 0, []
+    care_cols = care_columns(ws)
     for n, r in rows(ws, 6):
         date = excel_date(r[0])
         if not date:
@@ -93,8 +126,8 @@ def _tracker(ws, b: Batch, types: list[str]) -> None:
             "morning": is_check(r[4]),
             "outside": is_check(r[5]),
             "water": is_check(r[6]),
-            "body_cream": is_check(r[10]),
-            "face_evening": text(r[11]),
+            "care": [name for j, name in care_cols if name not in LEGACY_CARE and is_check(r[j])],
+            "face_evening": next((text(r[j]) for j, name in care_cols if name in LEGACY_CARE), None),
             "energy": int(number(r[12])) if number(r[12]) else None,
             "slump": True if text(r[13]) == "Да" else False if text(r[13]) == "Нет" else None,
             "sleep_h": number(r[14]),

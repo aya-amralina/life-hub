@@ -1,13 +1,17 @@
-"""Import the four Excel trackers from data/ into Supabase for LIFEHUB_EMAIL (SPEC §6). Local only.
+"""Import / update the four Excel trackers from data/ into Supabase for LIFEHUB_EMAIL (SPEC §6). Local only.
 
-    python3 scripts/import/import.py --dry-run   # summary, nothing is written
-    python3 scripts/import/import.py             # write (idempotent by source_id)
+    npm run import:check    # = import.py --dry-run: what will be added, updated, cancelled; conflicts; forecast
+    npm run import:apply    # = import.py: write, then remember this Excel as the new baseline
+    import.py --excel-wins N8,D15   # take Excel for these conflicts (or `all`)
 
-The terminal shows counts, aggregates and Excel row numbers only. Details that need cell texts (candidate
-rows to decide on) go to data/import-dry-run.txt — data/ is never committed.
+Each run compares three versions per row (table + key: budget IDs like N8, otherwise stable sheet keys):
+the Excel of the last run (baseline, kept in import_baseline), the Excel now and the base. Changed only in
+Excel → updated; changed in the app as well → a conflict, left as is; gone from Excel → cancelled / taken off.
+Excel leads for plans and week totals, the app for marks and the current week's expenses. Days marked in the
+app get only empty fields from the tracker; activities are never doubled.
 
-App data wins: rows already in the base (same source_id) are not overwritten; a day already marked in the app
-gets only its empty fields from Excel; an activity already logged that day is not doubled.
+The terminal shows counts, IDs and field names only. Values for conflicts and candidate rows go to
+data/import-dry-run.txt — data/ is never committed.
 """
 from __future__ import annotations
 
@@ -20,6 +24,7 @@ from typing import Any
 import openpyxl
 
 import plan
+import update as upd
 import src_budget
 import src_glow
 import src_study
@@ -49,8 +54,10 @@ EXPECTED = {
         ("Допущения и открытые вопросы", 2): {"B": "Предмет", "C": "Допущение", "D": "Как обновить"},
     },
     "glow": {
-        ("Трекер", 5): {"A": "Дата", "E": "Утренний старт", "F": "10 мин", "G": "Вода", "I": "Тренировка", "J": "Минут", "K": "Крем", "L": "Вечер", "M": "Энергия", "N": "Провал", "O": "Сон", "P": "Настроение", "Q": "Заметки"},
-        ("Недели", 5): {"A": "Нед.", "B": "Начало", "C": "Конец", "D": "Этап", "E": "События", "K": "Силовые цель", "M": "Группы цель", "O": "Ретиноид цель"},
+        # «Уход» columns (K…) are read by their names: the list changes with products
+        ("Трекер", 5): {"A": "Дата", "E": "Утренний старт", "F": "10 мин", "G": "Вода", "I": "Тренировка", "J": "Минут", "M": "Энергия", "N": "Провал", "O": "Сон", "P": "Настроение", "Q": "Заметки"},
+        # targets «… цель» are read by name (care products change)
+        ("Недели", 5): {"A": "Нед.", "B": "Начало", "C": "Конец", "D": "Этап", "E": "События"},
         ("Сила", 4): {"A": "Дата", "B": "Тренировка", "C": "Упражнение", "D": "Подход 1", "G": "Резинка", "I": "Тяжело", "J": "Заметки"},
         ("Замеры", 5): {"A": "Дата", "B": "Талия", "C": "Бёдра", "D": "Бедро", "E": "Плечо", "F": "Вес", "G": "Фото тела", "H": "Фото лица", "I": "Фото пробора"},
         ("Задачи", 4): {"A": "Задача", "B": "Срок", "C": "Когда по плану", "D": "Статус", "E": "Заметки"},
@@ -62,9 +69,11 @@ TABLE_ORDER = [
     "weeks", "week_limits", "envelopes", "transactions", "people", "items", "notes",
     "activity_types", "activities", "daily_logs", "strength_sets", "measurements", "plan_stages",
 ]
+THREE_WAY = ["transactions", "week_limits", "envelopes", "items", "notes", "people", "plan_stages"]
 CONFLICT = {"week_limits": "user_id,week_id,category", "people": "user_id,name", "activity_types": "user_id,name", "measurements": "user_id,date", "weeks": "user_id,start_date"}
 WEEK_COLUMNS = ["start_date", "budget_week_no", "study_week", "glowup_week_no", "place_mode", "events", "capacity_base_h", "capacity_max_h"]
-DAILY_FIELDS = ["morning", "outside", "water", "body_cream", "face_evening", "energy", "slump", "sleep_h", "mood", "note"]
+DAILY_FIELDS = ["morning", "outside", "water", "care", "face_evening", "energy", "slump", "sleep_h", "mood", "note"]
+TABLE_RU = {"transactions": "операции", "week_limits": "лимиты недель", "envelopes": "конверты", "items": "пункты", "notes": "заметки", "people": "люди", "plan_stages": "этапы"}
 
 
 def check_structure(kind: str, wb) -> list[str]:
@@ -82,12 +91,16 @@ def check_structure(kind: str, wb) -> list[str]:
     return problems
 
 
-def load(today: dt.date) -> tuple[Batch, list[str]]:
-    b = Batch(today=today)
+def load(today: dt.date, anchor: dt.date | None, folder=DATA, fallback=DATA) -> tuple[Batch, list[str]]:
+    """Read the four files (from `folder`, missing ones from `fallback`) into a Batch."""
+    b = Batch(today=today, anchor=anchor)
     problems: list[str] = []
     books = {}
     for kind in ("budget", "work", "study", "glow"):
-        path = find_file(kind)
+        try:
+            path = find_file(kind, folder)
+        except FileNotFoundError:
+            path = find_file(kind, fallback)
         # glow-up: not read-only — the activity types are the «Тренировка» dropdown list
         books[kind] = openpyxl.load_workbook(path, data_only=True, read_only=kind != "glow")
         problems += check_structure(kind, books[kind])
@@ -109,108 +122,143 @@ def load(today: dt.date) -> tuple[Batch, list[str]]:
     return b, []
 
 
+COLUMNS = {
+    "transactions": "id,source_id,date,amount_eur,title,note,account,grp,kind,week_budget,is_planned,confirmed_at,cancelled_at,category",
+    "week_limits": "id,source_id,limit_eur,week_id,category",
+    "envelopes": "id,source_id,type,planned_eur,when_text,note,archived",
+    "items": "*",
+    "notes": "id,source_id,title,body_md,pinned",
+    "people": "id,source_id,name,role",
+    "plan_stages": "id,source_id,start_date,end_date,targets,habits,care_items,minimum_habits",
+}
+
+
 class State:
-    """What is already in the base for this user (bookkeeping only, never printed row by row)."""
+    """What is in the base for this user (bookkeeping only, never printed row by row)."""
 
     def __init__(self, rest: SupabaseRest, uid: str):
         f = {"user_id": f"eq.{uid}"}
-        self.source_ids: dict[str, set[str]] = {}
-        self.app_rows: dict[str, int] = {}
-        for t in TABLE_ORDER:
-            if t == "weeks":
-                continue
-            rows = rest.select(t, "source_id", f)
-            self.source_ids[t] = {r["source_id"] for r in rows if r["source_id"]}
-            self.app_rows[t] = sum(1 for r in rows if not r["source_id"])
+        self.rows: dict[str, dict[str, dict]] = {}
+        for t in THREE_WAY:
+            self.rows[t] = {r["source_id"]: r for r in rest.select(t, COLUMNS[t], {**f, "source_id": "not.is.null"})}
+        self.source_ids = {t: set(v) for t, v in self.rows.items()}
+        for t in ("activity_types", "activities", "strength_sets", "measurements", "daily_logs"):
+            self.source_ids[t] = {r["source_id"] for r in rest.select(t, "source_id", {**f, "source_id": "not.is.null"})}
         self.weeks = {r["start_date"]: r for r in rest.select("weeks", "id,start_date", f)}
         self.daily = {r["date"]: r for r in rest.select("daily_logs", ",".join(["id", "date", *DAILY_FIELDS]), f)}
         self.types = {r["name"]: r["id"] for r in rest.select("activity_types", "id,name", f)}
         self.activities = {(r["date"], r["type_id"]) for r in rest.select("activities", "date,type_id", f)}
-        self.limits = {(r["week_id"], r["category"]) for r in rest.select("week_limits", "week_id,category,source_id", f) if not r["source_id"]}
         self.measure_days = {r["date"] for r in rest.select("measurements", "date", f)}
-        self.app_expenses = [r for r in rest.select("transactions", "date,amount_eur,source_id,kind,grp", f) if not r["source_id"] and r["kind"] == "expense"]
+        self.all_tx = rest.select("transactions", "source_id,date,amount_eur,kind,grp,category,week_budget,is_planned,confirmed_at,cancelled_at", f)
+        self.baseline: dict[str, dict[str, dict]] = {}
+        for r in rest.select("import_baseline", "table_name,source_id,data,removed", f):
+            self.baseline.setdefault(r["table_name"], {})[r["source_id"]] = upd.from_json({**r["data"], "removed": r["removed"]})
+        created = [r["created_at"] for r in rest.select("transactions", "created_at", {**f, "source_id": "not.is.null", "order": "created_at.asc", "limit": "1"})]
+        self.first_import = dt.date.fromisoformat(created[0][:10]) if created else None
 
 
-def summary(b: Batch, st: State) -> list[str]:
-    out: list[str] = ["", "=== Что придёт (Excel → база) ==="]
-    for t in TABLE_ORDER:
-        if t == "weeks":
-            new = sum(1 for m in b.weeks if m.isoformat() not in st.weeks)
-            out.append(f"weeks: {len(b.weeks)} недель — новых {new}, дополню существующие {len(b.weeks) - new}")
-            continue
+def ctx_for(st: State, week_ids: dict[str, str] | None = None) -> dict:
+    ids = {k: v["id"] for k, v in st.weeks.items()} | (week_ids or {})
+    return {"week_id": ids, "week_start": {v: k for k, v in ids.items()}}
+
+
+def bootstrap_baseline(st: State, today: dt.date) -> tuple[dict[str, dict[str, dict]], str]:
+    """No baseline stored yet: rebuild the Excel of the first import from data/_old (missing files from data/)."""
+    if not any(st.rows.values()):
+        return {}, "первый импорт"
+    old_dir = DATA / "_old"
+    if not old_dir.exists():
+        return {}, "базовой линии нет и data/_old нет — сравниваю с базой (правки в приложении не отличить)"
+    anchor = st.first_import or today
+    ob, problems = load(anchor, anchor, folder=old_dir, fallback=DATA)
+    if problems:
+        return {}, "data/_old не читается — сравниваю с базой"
+    ctx = ctx_for(st)
+    return {t: upd.baseline_records(t, ob.rows.get(t, []), ctx) for t in THREE_WAY}, f"базовая линия — файлы data/_old (импорт {anchor:%d.%m})"
+
+
+def plan_changes(b: Batch, st: State, baseline: dict, excel_wins: set[str]) -> dict[str, list[upd.Change]]:
+    ctx = ctx_for(st)
+    return {t: upd.diff(t, b.rows.get(t, []), baseline.get(t, {}), st.rows[t], ctx, excel_wins, b.today) for t in THREE_WAY}
+
+
+def simulate_tx(st: State, b: Batch, changes: list[upd.Change]) -> list[dict]:
+    """The base's operations after this run (for the forecast «after»)."""
+    by_key = {t["source_id"]: dict(t) for t in st.all_tx if t["source_id"]}
+    app = [dict(t) for t in st.all_tx if not t["source_id"]]
+    for c in changes:
+        if c.kind == "insert":
+            by_key[c.key] = dict(c.row)
+        elif c.kind in ("update", "always", "remove"):
+            by_key[c.key] = {**by_key.get(c.key, {}), **c.patch}
+    return list(by_key.values()) + app
+
+
+def summary(b: Batch, st: State, changes: dict[str, list[upd.Change]], note: str) -> list[str]:
+    out = ["", f"=== Изменения (Excel ↔ база; {note}) ==="]
+    for t, cs in changes.items():
+        k = {kind: [c for c in cs if c.kind == kind] for kind in ("insert", "update", "always", "conflict", "remove", "keep-removed")}
+        parts = [f"добавится {len(k['insert'])}", f"обновится {len(k['update'])}"]
+        if k["always"]:
+            parts.append(f"уточнится без конфликта {len(k['always'])} ({', '.join(sorted({f for c in k['always'] for f in c.fields}))})")
+        parts.append(f"конфликтов {len(k['conflict'])}")
+        if k["remove"]:
+            parts.append(f"нет в Excel → {'отменится' if t == 'transactions' else 'в архив' if t == 'envelopes' else 'снимется'} {len(k['remove'])}")
+        if k["keep-removed"]:
+            parts.append(f"нет в Excel, оставлено {len(k['keep-removed'])}")
+        out.append(f"{TABLE_RU[t]}: " + ", ".join(parts))
+        for c in k["update"]:
+            out.append(f"  ↻ {upd.display_key(t, c.key)}: {', '.join(c.fields)}")
+            b.private.append(f"Обновится · {TABLE_RU[t]} {upd.display_key(t, c.key)} «{c.title}»: {c.detail}")
+        for c in k["remove"]:
+            out.append(f"  ✕ {upd.display_key(t, c.key)}")
+            b.private.append(f"Нет в Excel · {TABLE_RU[t]} {upd.display_key(t, c.key)} «{c.title}» → {', '.join(f'{a}={v}' for a, v in c.patch.items())}")
+        for c in k["insert"]:
+            b.private.append(f"Добавится · {TABLE_RU[t]} {upd.display_key(t, c.key)} «{c.title}»")
+    conflicts = [(t, c) for t, cs in changes.items() for c in cs if c.kind == "conflict"]
+    if conflicts:
+        out += ["", "=== Конфликты: изменено и в Excel, и в приложении — оставлено как в приложении ==="]
+        for t, c in conflicts:
+            out.append(f"  ! {TABLE_RU[t]} {upd.display_key(t, c.key)}: в Excel — {', '.join(c.fields)}; в приложении — {', '.join(c.app_fields)}")
+            b.private.append(f"Конфликт · {TABLE_RU[t]} {upd.display_key(t, c.key)} «{c.title}»: {c.detail}")
+        out.append("  Взять Excel: npm run import:apply -- --excel-wins " + ",".join(upd.display_key(t, c.key) for t, c in conflicts))
+    simple = []
+    for t in ("activity_types", "activities", "strength_sets", "measurements", "daily_logs"):
         rows = b.rows.get(t, [])
-        if not rows:
-            continue
-        existing = sum(1 for r in rows if r.get("source_id") in st.source_ids.get(t, set()))
-        extra = ""
+        new = [r for r in rows if r.get("source_id") not in st.source_ids.get(t, set())]
         if t == "daily_logs":
             clash = sum(1 for r in rows if r["date"] in st.daily)
-            extra = f"; уже отмечены в приложении {clash} — из Excel только пустые поля" if clash else ""
-        if t == "activities":
-            dup = sum(1 for r in rows if (r["date"], st.types.get(r["type"])) in st.activities)
-            extra = f"; уже есть в приложении (тот же день и тип) {dup} — не дублирую" if dup else ""
-        if t == "activity_types":
-            known = sum(1 for r in rows if r["name"] in st.types)
-            extra = f"; уже есть {known} (интенсивность и очки не трогаю)" if known else ""
-        if t == "week_limits":
-            replaced = sum(1 for r in rows if (st.weeks.get(r["week"].isoformat(), {}).get("id"), r["category"]) in st.limits)
-            extra = f"; заменят заданные вручную {replaced}" if replaced else ""
-        if t == "measurements":
-            clash = sum(1 for r in rows if r["date"] in st.measure_days)
-            extra = f"; в эти дни уже есть замер {clash} — не трогаю" if clash else ""
-        out.append(f"{t}: {len(rows)}" + (f" — уже в базе {existing} (не перезаписываю)" if existing else "") + extra + (f"; своих строк из приложения {st.app_rows.get(t, 0)} остаются" if st.app_rows.get(t) else ""))
+            simple.append(f"дни трекера: {len(rows)} (уже отмечены в приложении {clash} — из Excel только пустые поля)")
+        elif t == "activity_types":
+            simple.append(f"типы активностей: новых {sum(1 for r in rows if r['name'] not in st.types)} из {len(rows)} (по названию; интенсивность не трогаю)")
+        elif rows:
+            simple.append(f"{t}: новых {len(new)} из {len(rows)}")
+    out.append("только добавление: " + "; ".join(simple))
+    new_weeks = sum(1 for m in b.weeks if m.isoformat() not in st.weeks)
+    out.append(f"недели: {len(b.weeks)} (новых {new_weeks}); поля недель (номера, место, события, ёмкость) — всегда по Excel")
     return out
 
 
-def study_table(b: Batch) -> list[str]:
-    stats, s = plan.rollover_preview(b.rows["items"], b.weeks, b.today)
-    out = ["", "=== Учёба по неделям (после импорта и автопереноса при первом открытии) ===", "неделя | пунктов | придут ✓ | гибких открытых | поедут в текущую | «Ждут решения»"]
-    current = s["current"]
-    for w in stats:
-        past = w.monday < current
-        mark = " ← текущая" if w.monday == current else ""
-        out.append(f"{w.label} | {w.total} | {w.done} | {w.flexible_open if past else '—'} | {w.moves if past else '—'} | {w.waiting if past else '—'}{mark}")
-    moves = sum(w.moves for w in stats)
-    waiting = sum(w.waiting for w in stats)
-    out.append(
-        f"Итого из прошлых недель: поедут {moves} ({s['moved_hours']:g} ч), ждут решения {waiting} ({s['waiting_hours']:g} ч). "
-        f"{s['label']}: {s['load_before']:g} ч → {s['load_after']:g} ч при базе {s['base']:g} и максимуме {s['max']:g}."
-    )
-    out.append("Жёсткие (со сроком) не переезжают: после срока — «просрочено» с «сдано позже / снять».")
-    return out
-
-
-def checks(b: Batch, st: State) -> list[str]:
-    tx = b.rows["transactions"]
-    bal = plan.balance_end(tx)
+def checks(b: Batch, st: State, tx_changes: list[upd.Change]) -> list[str]:
+    before = plan.app_forecast_all(st.all_tx, b.today)
+    after = plan.app_forecast_all(simulate_tx(st, b, tx_changes), b.today)
+    excel = plan.balance_end([t for t in b.rows["transactions"]])
+    out = ["", "=== Прогноз «На счетах 31.12» ==="]
+    out.append(f"сейчас в приложении: {before:.2f} € → после записи: {after:.2f} € (конфликты не применены)")
+    out.append(f"по Excel (все строки со знаком, как «Обзор»): {excel:.2f} €")
     h04 = plan.week_hours(b.rows["items"], "Н04", b.weeks)
-    checklist = sum(1 for i in b.rows["items"] if i["source_id"].startswith("study:") and ":dl:" not in i["source_id"] and not i["source_id"].startswith("study:dl:"))
-    work = sum(1 for i in b.rows["items"] if i["sphere"] == "work")
-    out = ["", "=== Проверки раздела 6 (по данным Excel) ==="]
-    out.append(f"остаток на 31.12.2026 по импортированным операциям: {bal:.2f} € (SPEC: 1788.14 €){' ✓' if abs(bal - 1788.14) < 0.005 else ' — отличается'}")
-    out.append(f"часов учёбы в Н04: {h04:g} (SPEC: 27.5){' ✓' if abs(h04 - 27.5) < 0.01 else ' — отличается (файл правился)'}")
-    out.append(f"пунктов чеклиста: {checklist}; задач Работы: {work}")
-    app = plan.app_forecast(tx, st.app_expenses, b.today)
-    out.append(f"прогноз «На счетах 31.12» в приложении (бюджеты недель по правилу 18a, траты из приложения учтены): {app:.2f} €")
-    if st.app_expenses:
-        weeks = {m for m in b.weeks if b.weeks[m].get("budget_week_no")}
-        inside = [e for e in st.app_expenses if any(m.isoformat() <= e["date"] <= (m + dt.timedelta(days=6)).isoformat() for m in weeks)]
-        if inside:
-            out.append(f"трат из приложения в неделях бюджета: {len(inside)} на {sum(float(e['amount_eur']) for e in inside):.2f} € — они останутся и войдут в баланс рядом с импортом (см. вопрос про «Неделя N»)")
+    out.append(f"часов учёбы в Н04 по Excel: {h04:g}; задач Работы: {sum(1 for i in b.rows['items'] if i['sphere'] == 'work')}")
     return out
 
 
-def write(b: Batch, rest: SupabaseRest, uid: str, st: State) -> None:
-    # weeks first: everything else points to them
-    week_rows = []
-    for m, w in sorted(b.weeks.items()):
-        row = {k: w.get(k) for k in WEEK_COLUMNS}
-        week_rows.append({"user_id": uid, **row})
+def write(b: Batch, rest: SupabaseRest, uid: str, st: State, changes: dict[str, list[upd.Change]]) -> None:
+    week_rows = [{"user_id": uid, **{k: w.get(k) for k in WEEK_COLUMNS}} for _, w in sorted(b.weeks.items())]
     saved = rest.insert("weeks", week_rows, CONFLICT["weeks"], ignore_duplicates=False, returning="id,start_date")
-    week_id = {r["start_date"]: r["id"] for r in saved} | {k: v["id"] for k, v in st.weeks.items()}
+    week_id = {k: v["id"] for k, v in st.weeks.items()} | {r["start_date"]: r["id"] for r in saved}
+    ctx = ctx_for(st, week_id)
 
     def prep(t: str, r: dict[str, Any]) -> dict[str, Any] | None:
-        r = {k: v for k, v in r.items()}
+        r = dict(r)
         r["user_id"] = uid
         if "week" in r:
             w = r.pop("week")
@@ -223,26 +271,52 @@ def write(b: Batch, rest: SupabaseRest, uid: str, st: State) -> None:
                 return None
         return r
 
+    def insert_groups(t: str, rows: list[dict]) -> None:
+        groups: dict[frozenset, list] = defaultdict(list)
+        for r in rows:
+            groups[frozenset(r)].append(r)  # a missing key stays a DB default, not null
+        for g in groups.values():
+            rest.insert(t, g, CONFLICT.get(t, "user_id,source_id"), ignore_duplicates=True)
+
     types: dict[str, str] = {}
     for t in TABLE_ORDER:
-        if t in ("weeks",):
+        if t == "weeks":
             continue
         if t == "activities":
             types = {r["name"]: r["id"] for r in rest.select("activity_types", "id,name", {"user_id": f"eq.{uid}"})}
-        rows = b.rows.get(t, [])
         if t == "daily_logs":
-            _write_days(rest, uid, rows, st)
+            _write_days(rest, uid, b.rows.get(t, []), st)
             continue
-        ready = [p for p in (prep(t, r) for r in rows) if p]
-        # rows already imported are the app's now (limits too); only limits set by hand get replaced on the first run
-        ready = [r for r in ready if r.get("source_id") not in st.source_ids.get(t, set())]
-        # rows with different key sets go separately: a missing key must stay a DB default, not null
-        groups: dict[frozenset, list] = defaultdict(list)
-        for r in ready:
-            groups[frozenset(r)].append(r)
-        for group in groups.values():
-            rest.insert(t, group, CONFLICT.get(t, "user_id,source_id"), ignore_duplicates=t != "week_limits")
-        print(f"записано {t}: {len(ready)}")
+        if t in changes:
+            cs = changes[t]
+            insert_groups(t, [p for p in (prep(t, c.row) for c in cs if c.kind == "insert") if p])
+            for c in cs:
+                if c.kind in ("update", "always", "remove") and c.patch:
+                    patch = dict(c.patch)
+                    if "week" in patch:
+                        w = patch.pop("week")
+                        patch["week_id"] = week_id.get(w.isoformat()) if w else None
+                    rest.patch(t, {"id": f"eq.{c.db_id}"}, patch)
+            print(f"{TABLE_RU[t]}: добавлено {sum(c.kind == 'insert' for c in cs)}, обновлено {sum(c.kind in ('update', 'always') for c in cs)}, "
+                  f"отменено/снято {sum(c.kind == 'remove' for c in cs)}, конфликтов оставлено {sum(c.kind == 'conflict' for c in cs)}")
+        else:
+            ready = [p for p in (prep(t, r) for r in b.rows.get(t, [])) if p and p.get("source_id") not in st.source_ids.get(t, set())]
+            insert_groups(t, ready)
+            if ready:
+                print(f"{t}: добавлено {len(ready)}")
+
+    # remember this Excel as the baseline; conflicts keep the old baseline so they show up again next time
+    rows = []
+    for t in THREE_WAY:
+        conflict_keys = {c.key for c in changes[t] if c.kind == "conflict"}
+        recs = upd.baseline_records(t, [r for r in b.rows.get(t, []) if r["source_id"] not in conflict_keys], ctx)
+        for key, rec in recs.items():
+            rows.append({"user_id": uid, "table_name": t, "source_id": key, "data": upd.to_json(rec), "removed": False, "imported_at": dt.datetime.now(dt.timezone.utc).isoformat()})
+        for c in changes[t]:
+            if c.kind in ("remove", "keep-removed"):
+                rows.append({"user_id": uid, "table_name": t, "source_id": c.key, "data": {}, "removed": True, "imported_at": dt.datetime.now(dt.timezone.utc).isoformat()})
+    rest.insert("import_baseline", rows, "user_id,table_name,source_id", ignore_duplicates=False)
+    print(f"базовая линия сохранена: {len(rows)} строк")
 
 
 def _write_days(rest: SupabaseRest, uid: str, rows: list[dict], st: State) -> None:
@@ -252,12 +326,16 @@ def _write_days(rest: SupabaseRest, uid: str, rows: list[dict], st: State) -> No
         if not have:
             new.append({"user_id": uid, **r})
             continue
-        patch = {}
+        patch: dict[str, Any] = {}
         for k in DAILY_FIELDS:
             v = r.get(k)
-            if v in (None, False, ""):
+            if v in (None, False, "", []):
                 continue
-            if have.get(k) in (None, False, ""):
+            if k == "care":
+                merged = list(dict.fromkeys([*(have.get("care") or []), *v]))
+                if merged != (have.get("care") or []):
+                    patch[k] = merged
+            elif have.get(k) in (None, False, ""):
                 patch[k] = v
         if patch:
             rest.patch("daily_logs", {"id": f"eq.{have['id']}"}, patch)
@@ -267,15 +345,17 @@ def _write_days(rest: SupabaseRest, uid: str, rows: list[dict], st: State) -> No
         groups[frozenset(r)].append(r)
     for g in groups.values():
         rest.insert("daily_logs", g, "user_id,date", ignore_duplicates=True)
-    print(f"записано daily_logs: новых {len(new)}, дополнено {filled}")
+    print(f"дни трекера: новых {len(new)}, дополнено {filled}")
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true", help="только сводка, без записи")
-    ap.add_argument("--today", help="дата импорта YYYY-MM-DD (по умолчанию сегодня, Берлин)")
+    ap.add_argument("--today", help="дата запуска YYYY-MM-DD (по умолчанию сегодня, Берлин)")
+    ap.add_argument("--excel-wins", default="", help="ключи конфликтов, где взять Excel (N8,D15) или all")
     args = ap.parse_args()
     today = dt.date.fromisoformat(args.today) if args.today else dt.datetime.now(dt.timezone(dt.timedelta(hours=1))).date()
+    excel_wins = {k.strip() for k in args.excel_wins.split(",") if k.strip()}
 
     try:
         cfg = config_from_env(load_env())
@@ -283,12 +363,13 @@ def main() -> int:
             raise ConfigError("LIFEHUB_EMAIL не задан в .env.local")
         rest = SupabaseRest(cfg.url, cfg.secret_key)
         uid = rest.find_user_id(cfg.email)
+        st = State(rest, uid)
     except (ConfigError, SupabaseError) as err:
         print(f"✗ {err}")
         return 1
 
     try:
-        b, problems = load(today)
+        b, problems = load(today, st.first_import or today)
     except FileNotFoundError as err:
         print(f"✗ {err}")
         return 1
@@ -298,29 +379,30 @@ def main() -> int:
             print("  - " + p)
         return 1
 
-    st = State(rest, uid)
-    print(f"Импорт {'(dry-run, ничего не пишу)' if args.dry_run else ''} · дата импорта {today:%d.%m.%Y}")
+    if any(st.baseline.values()):
+        baseline, note = st.baseline, "базовая линия — прошлый запуск"
+    else:
+        baseline, note = bootstrap_baseline(st, today)
+    changes = plan_changes(b, st, baseline, excel_wins)
+
+    print(f"Импорт {'(dry-run, ничего не пишу)' if args.dry_run else ''} · {today:%d.%m.%Y}" + (f" · первый импорт {st.first_import:%d.%m}" if st.first_import else ""))
     print("\n=== Листы ===")
     for line in b.report:
         print(line)
-    for line in summary(b, st) + study_table(b) + checks(b, st):
+    for line in summary(b, st, changes, note) + checks(b, st, changes["transactions"]):
         print(line)
     if b.issues:
         print("\n=== Проблемы (номера строк Excel) ===")
         for line in b.issues:
             print("- " + line)
-    if b.questions:
-        print("\n=== Вопросы до записи ===")
-        for k, q in enumerate(b.questions, 1):
-            print(f"{k}. {q}")
     private = DATA / "import-dry-run.txt"
-    private.write_text("\n".join(["Детали dry-run (тексты строк) — только локально, data/ не в git.", ""] + b.private) + "\n", encoding="utf-8")
-    print(f"\nДетали с текстами строк: {private.relative_to(DATA.parent)} ({len(b.private)} строк)")
+    private.write_text("\n".join(["Детали импорта (тексты и значения) — только локально, data/ не в git.", ""] + b.private) + "\n", encoding="utf-8")
+    print(f"\nДетали со значениями: {private.relative_to(DATA.parent)} ({len(b.private)} строк)")
 
     if args.dry_run:
         return 0
     try:
-        write(b, rest, uid, st)
+        write(b, rest, uid, st, changes)
     except SupabaseError as err:
         print(f"✗ запись остановлена: {err}")
         return 1

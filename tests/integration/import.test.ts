@@ -11,8 +11,8 @@ const secret = process.env.SUPABASE_SECRET_KEY
 const email = process.env.LIFEHUB_EMAIL
 const ready = supabaseConfigured() && Boolean(secret && email)
 
-// Control numbers from the Excel files (dry-run 11.11.2026; SPEC §6).
-const BALANCE_END_CENTS = 178814
+// Control numbers from the Excel files (SPEC §6). The balance comes from the stored baseline — the Excel of the
+// last import run — so the check follows Excel updates (1788,14 € at the first import).
 const WORK_TASKS = 31 // non-empty rows of «Dev Aufgaben»
 const CHECKLIST_ITEMS = 254 // rows of «Чеклист» (without the 2 instruction rows)
 const H04_HOURS = 27.5
@@ -27,8 +27,14 @@ async function setup() {
 }
 
 describe.skipIf(!ready)('import checks (SPEC §6)', () => {
-  it('balance on 31.12.2026 of the imported operations = 1788,14 € (Excel and the app forecast)', async () => {
+  it('balance on 31.12.2026 of the imported operations = the last imported Excel (and the app forecast)', async () => {
     const { admin, uid } = await setup()
+    const base = await admin.from('import_baseline').select('data, removed').eq('user_id', uid).eq('table_name', 'transactions')
+    expect(base.error).toBeNull()
+    type Rec = { fields: { date: string; amount_eur: number; kind: string } }
+    const BALANCE_END_CENTS = (base.data ?? [])
+      .filter((r) => !r.removed && (r.data as Rec).fields.date <= '2026-12-31')
+      .reduce((s, r) => s + signedCents((r.data as Rec).fields as unknown as TxLike), 0)
     const { data, error } = await admin
       .from('transactions')
       .select('date, amount_eur, kind, category, envelope_id, is_planned, confirmed_at, cancelled_at, week_budget, grp, source_id')
@@ -42,6 +48,7 @@ describe.skipIf(!ready)('import checks (SPEC §6)', () => {
     expect(excel).toBe(BALANCE_END_CENTS)
     // as the app shows it in the import week (rule 26: the current week costs its budget when nothing is spent yet)
     if (todayBerlin() <= '2026-11-15') expect(balanceAt(txs, '2026-12-31', 'plan', todayBerlin())).toBe(BALANCE_END_CENTS)
+    expect(BALANCE_END_CENTS).not.toBe(0)
   })
 
   it('work tasks = non-empty rows of «Dev Aufgaben»', async () => {

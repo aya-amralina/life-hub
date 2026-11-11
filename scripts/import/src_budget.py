@@ -24,6 +24,7 @@ def _articles(ws, b: Batch) -> list[tuple[int, dict]]:
     ops: list[tuple[int, dict]] = []
     skipped: list[int] = []
     ended_weeks: list[int] = []
+    anchor = b.anchor or b.today
     for n, r in rows(ws, 1):
         sid, date, group, title, amount, sign, note = text(r[0]), excel_date(r[2]), text(r[3]), text(r[4]), number(r[5]), number(r[6]), text(r[9])
         if not sid or not date or amount is None or not title:
@@ -38,16 +39,19 @@ def _articles(ws, b: Batch) -> list[tuple[int, dict]]:
         else:
             b.issues.append(f"Бюджет · Статьи, строка {n}: нет знака ±1")
             continue
-        # «Неделя N: …» without «(факт)» is a week budget (rule 18a): planned, never auto-confirmed, no question.
-        week_budget = kind == "expense" and group == "Жизнь" and title.startswith("Неделя") and "(факт)" not in title
-        if week_budget and date + dt.timedelta(days=6 - date.weekday()) < b.today:
-            # a week that ended before the import: its budget becomes the week's fact (correctable in the app)
-            week_budget = False
+        # «Неделя N…» rows (group «Жизнь») are week rows (rule 26): «(факт)» — the week's confirmed total;
+        # otherwise a budget: planned, never auto-confirmed, no question.
+        week_budget = kind == "expense" and group == "Жизнь" and title.startswith("Неделя")
+        # only «Неделя N (факт)…» is the week's total; «Неделя 5: продукты (факт) и остаток недели» is still a budget
+        week_fact = week_budget and bool(re.match(r"^Неделя\s+\d+\s*\(факт\)", title))
+        if week_budget and not week_fact and date + dt.timedelta(days=6 - date.weekday()) < anchor:
+            # a week that ended before the first import: its budget became the week's fact (correctable in the app)
+            week_fact = True
             title = re.sub(r"^(Неделя\s+\d+)\s*:", r"\1 (факт):", title, count=1)
             if "(факт)" not in title:
                 title = re.sub(r"^(Неделя\s+\d+)", r"\1 (факт)", title, count=1)
             ended_weeks.append(n)
-        planned = week_budget or date > b.today
+        planned = (week_budget and not week_fact) or (not week_budget and date > b.today)
         row = {
             "source_id": f"budget:{sid}",
             "date": date.isoformat(),
@@ -71,6 +75,7 @@ def _articles(ws, b: Batch) -> list[tuple[int, dict]]:
     confirmed = [o for _, o in ops if not o["is_planned"]]
     planned = [o for _, o in ops if o["is_planned"]]
     weekly = [o for o in planned if o["week_budget"]]
+    facts = [o for o in confirmed if o["week_budget"]]
     monday = b.today - dt.timedelta(days=b.today.weekday())
     current = [o for o in weekly if monday <= dt.date.fromisoformat(o["date"]) <= monday + dt.timedelta(days=6)]
     b.report.append(
@@ -82,8 +87,9 @@ def _articles(ws, b: Batch) -> list[tuple[int, dict]]:
         f"расходы {sum(o['kind'] == 'expense' and not o['week_budget'] for o in planned)}) — спросят «Пришло? / Списалось?» в свой день; "
         f"бюджеты недель «Неделя N» {len(weekly)} — без вопроса (текущая неделя {len(current)})"
     )
+    b.report.append(f"  итоги недель «Неделя N (факт)»: {len(facts)} — траты из приложения за эти недели в баланс не идут (правило 26)")
     if ended_weeks:
-        b.report.append(f"  недели, закончившиеся до импорта, → подтверждённые «Неделя N (факт)» на сумму бюджета: строки {rows_list(ended_weeks)}")
+        b.report.append(f"  недели, закончившиеся до первого импорта ({anchor:%d.%m}), → «Неделя N (факт)» на сумму бюджета: строки {rows_list(ended_weeks)}")
     if skipped:
         b.report.append(f"  пропущены строки без ID/даты/суммы (сноски): {rows_list(skipped)}")
     return ops
