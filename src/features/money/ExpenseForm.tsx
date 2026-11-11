@@ -42,7 +42,7 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
       // ignore
     }
     add.mutate(
-      { date: today, amount_eur: cents / 100, category, account, title: category },
+      { id: crypto.randomUUID(), date: today, amount_eur: cents / 100, category, account, title: category },
       {
         onSuccess: (tx) => {
           toast({ text: `${formatEur(cents)} · ${category}`, actionLabel: 'Отменить', onAction: () => del.mutate(tx.id) })

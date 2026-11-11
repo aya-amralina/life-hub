@@ -10,6 +10,7 @@ import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
 import { supabase } from '@/lib/supabase'
 import { ActivitiesSettings } from './ActivitiesSettings'
+import { BackupCard } from './BackupCard'
 import { InstallHint } from './InstallHint'
 import { StagesSettings } from './StagesSettings'
 
@@ -52,6 +53,7 @@ export function SettingsScreen() {
       </Card>
       <ActivitiesSettings />
       <StagesSettings />
+      <BackupCard />
       <Card>
         <CardHeader title="Установка" />
         <InstallHint />
@@ -70,7 +72,6 @@ export function SettingsScreen() {
           Выйти
         </Button>
       </Card>
-      <p className="m-0 text-cap text-ink3">Экспорт и восстановление данных появятся на этапе 5.</p>
     </>
   )
 }

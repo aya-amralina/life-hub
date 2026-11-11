@@ -1,13 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
-import { CalendarClock, Check, Hourglass, Pause, Plus, Trophy } from 'lucide-react'
+import { CalendarClock, Check, Hourglass, Pause, Plus } from 'lucide-react'
 import { useToast } from '@/app/toastContext'
 import { useOpenAdd } from '@/app/addSheetContext'
 import { BottomSheet } from '@/components/ui/BottomSheet'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
-import { Chip } from '@/components/ui/Chip'
-import { DateChoice } from '@/components/ui/DateChoice'
 import { EmptyState, SkeletonCard } from '@/components/ui/Feedback'
 import { FilterChips } from '@/components/ui/FilterChips'
 import { GroupHeader } from '@/components/ui/GroupHeader'
@@ -16,18 +14,19 @@ import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { CalendarLink } from '@/components/layout/CalendarLink'
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
-import { ERFOLG_TYPE, WORK_AREAS, WORK_STALLED, WORK_STATUSES } from '@/lib/constants'
+import { ERFOLG_TYPE, WORK_STALLED, WORK_STATUSES } from '@/lib/constants'
 import { enoughForMonths, erfolgeByMonth, statusCounts } from '@/lib/rules/charts'
 import { ChartCard } from '@/components/charts/ChartCard'
 import { XYChart } from '@/components/charts/Chart'
-import { addDaysISO, daysBetween, formatWeekdayDate, todayBerlin, type ISODate } from '@/lib/dates'
+import { daysBetween, formatWeekdayDate, todayBerlin, type ISODate } from '@/lib/dates'
 import { plural } from '@/lib/format'
 import { deadlineChip } from '@/lib/rules/items'
 import { boardGroups, fridayQueue, isErfolg, nachhaken, statusAltDays, type BoardGroupKey } from '@/lib/rules/work'
 import { NotesCard } from '@/features/notes/NotesCard'
-import { useCreateItem, useItems, useUpdateItem, type Item } from '@/features/items/api'
+import { useItems, useUpdateItem, type Item } from '@/features/items/api'
 import { ItemQuestions } from '@/features/items/ItemQuestions'
 import { useAddPerson, usePeople } from './api'
+import { ErfolgSheet } from './ErfolgSheet'
 import { StatusSheet } from './StatusSheet'
 import { WorkRow } from './WorkRow'
 import { statusPatch } from './statusPatch'
@@ -468,52 +467,3 @@ function ArchiveTab() {
 function monthsLabel(months: { label: string }[]): string {
   return months.length > 1 ? `${months[0]!.label} — ${months[months.length - 1]!.label}` : months[0]!.label
 }
-
-function ErfolgSheet({ open, onClose, today }: { open: boolean; onClose: () => void; today: ISODate }) {
-  const [title, setTitle] = useState('')
-  const [area, setArea] = useState<string | null>(null)
-  const [day, setDay] = useState<ISODate>(today)
-  const create = useCreateItem()
-  const toast = useToast()
-  return (
-    <BottomSheet open={open} onClose={onClose} label="Записать Erfolg">
-      <form
-        className="flex flex-col gap-6"
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (!title.trim()) return
-          create.mutate(
-            { sphere: 'work', type: ERFOLG_TYPE, status: 'Erledigt', title: title.trim(), area, done_at: new Date(`${day}T12:00:00Z`).toISOString() },
-            {
-              onSuccess: () => {
-                toast({ text: 'Записано в Erfolge' })
-                setTitle('')
-                onClose()
-              },
-            },
-          )
-        }}
-      >
-        <label className="flex flex-col gap-2">
-          <span className="text-cap text-ink2">Что получилось</span>
-          <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} lang="de" className={field} placeholder="Kundenportal 2.4 ist live" />
-        </label>
-        <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-          <legend className="mb-2 text-cap text-ink2">Bereich</legend>
-          <div className="flex flex-wrap gap-2">
-            {WORK_AREAS.map((a) => (
-              <Chip key={a} selected={area === a} onClick={() => setArea(area === a ? null : a)} lang="de">
-                {a}
-              </Chip>
-            ))}
-          </div>
-        </fieldset>
-        <DateChoice label="Когда" value={day} onChange={setDay} options={[today, addDaysISO(today, -1)]} today={today} />
-        <Button type="submit" disabled={!title.trim() || create.isPending} icon={<Trophy size={20} strokeWidth={1.75} aria-hidden="true" />}>
-          Записать
-        </Button>
-      </form>
-    </BottomSheet>
-  )
-}
-

@@ -21,7 +21,8 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "check:keys": "python3 scripts/import/check_keys.py",
     "import:check": "python3 scripts/import/import.py --dry-run",
-    "import:apply": "python3 scripts/import/import.py"
+    "import:apply": "python3 scripts/import/import.py",
+    "backup": "python3 scripts/import/backup.py"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",

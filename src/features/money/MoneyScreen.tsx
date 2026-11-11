@@ -19,12 +19,14 @@ import { LimitsSheet } from './LimitsSheet'
 import { MoneyQuestions } from './MoneyQuestions'
 import { MoneyTotal } from './MoneyTotal'
 import { MonthTab } from './MonthTab'
+import { WishlistTab } from './WishlistTab'
 import { useMoneyWeek } from './useMoneyWeek'
 
 const TABS = [
   { value: 'week', label: 'Неделя' },
   { value: 'month', label: 'Месяц' },
   { value: 'envelopes', label: 'Конверты' },
+  { value: 'wishes', label: 'Хотелки' },
 ] as const
 type Tab = (typeof TABS)[number]['value']
 
@@ -38,6 +40,7 @@ export function MoneyScreen() {
       {tab === 'week' && <WeekTab />}
       {tab === 'month' && <MonthTab />}
       {tab === 'envelopes' && <EnvelopesTab />}
+      {tab === 'wishes' && <WishlistTab />}
       {/* Pinned «Правила» and other money notes. */}
       <NotesCard sphere="money" />
     </>

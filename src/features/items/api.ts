@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { write } from '@/app/offlineQueue'
 import { supabase } from '@/lib/supabase'
 import type { Tables, TablesInsert, TablesUpdate } from '@/lib/db/types'
 
@@ -59,13 +60,24 @@ export function useItems() {
   })
 }
 
+/** A list row for an item created on the client (offline too): the id is made here, the rest are defaults. */
+function listRow(values: TablesInsert<'items'> & { id: string }): Item {
+  return {
+    type: null, status: null, priority: null, area: null, due_date: null, due_time: null, ready_by: null, starts_on: null,
+    happens_on: null, happens_time: null, is_fixed: null, rollover_count: 0, week_id: null, hours_est: null, waiting_on: null,
+    people: [], synergy: null, trap: null, data_status: null, next_step: null, outcome: null, source_id: null, done_at: null,
+    sort_order: 0, updated_at: new Date().toISOString(),
+    ...values,
+  } as Item
+}
+
 export function useCreateItem() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (item: TablesInsert<'items'>) => {
-      const { data, error } = await supabase.from('items').insert(item).select(LIST_FIELDS).single()
-      if (error) throw error
-      return data
+      const values = { id: crypto.randomUUID(), ...item }
+      await write({ table: 'items', action: 'insert', values })
+      return listRow(values)
     },
     onSuccess: (row) => qc.setQueryData<Item[]>(itemKeys.all, (old) => (old ? [...old, row] : [row])),
     onSettled: () => qc.invalidateQueries({ queryKey: itemKeys.all }),
@@ -77,8 +89,7 @@ export function useUpdateItem() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ id, patch }: { id: string; patch: TablesUpdate<'items'> }) => {
-      const { error } = await supabase.from('items').update(patch).eq('id', id)
-      if (error) throw error
+      await write({ table: 'items', action: 'update', id, values: patch })
     },
     onMutate: async ({ id, patch }) => {
       await qc.cancelQueries({ queryKey: itemKeys.all })
@@ -123,6 +134,10 @@ export function useDeleteItem() {
     mutationFn: async (id: string) => {
       const { error } = await supabase.from('items').delete().eq('id', id).is('source_id', null)
       if (error) throw error
+    },
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: itemKeys.all })
+      qc.setQueryData<Item[]>(itemKeys.all, (old) => old?.filter((i) => i.id !== id))
     },
     onSettled: () => qc.invalidateQueries({ queryKey: itemKeys.all }),
   })

@@ -33,6 +33,7 @@ const TABLES = [
   'people',
   'wishlist',
   'reviews',
+  'import_baseline',
   'notes',
   'plan_stages',
   'envelopes',

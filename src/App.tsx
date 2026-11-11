@@ -2,6 +2,7 @@ import { lazy, Suspense, type ComponentType, type LazyExoticComponent } from 're
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createBrowserRouter, Navigate, RouterProvider } from 'react-router'
 import { AuthProvider } from '@/app/auth'
+import { persistQueryCache } from '@/app/queryCache'
 import { ToastProvider } from '@/app/toast'
 import { AppShell } from '@/components/layout/AppShell'
 import { LoginScreen } from '@/features/auth/LoginScreen'
@@ -15,6 +16,7 @@ const MoneyScreen = lazy(() => import('@/features/money/MoneyScreen').then((m) =
 const StudyScreen = lazy(() => import('@/features/study/StudyScreen').then((m) => ({ default: m.StudyScreen })))
 const WorkScreen = lazy(() => import('@/features/work/WorkScreen').then((m) => ({ default: m.WorkScreen })))
 const ItemScreen = lazy(() => import('@/features/items/ItemScreen').then((m) => ({ default: m.ItemScreen })))
+const ReviewScreen = lazy(() => import('@/features/review/ReviewScreen').then((m) => ({ default: m.ReviewScreen })))
 const CalendarScreen = lazy(() => import('@/features/calendar/CalendarScreen').then((m) => ({ default: m.CalendarScreen })))
 
 function Lazy({ page: Page }: { page: LazyExoticComponent<ComponentType> }) {
@@ -27,9 +29,13 @@ function Lazy({ page: Page }: { page: LazyExoticComponent<ComponentType> }) {
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { staleTime: 30_000, refetchOnWindowFocus: true, refetchOnReconnect: true, retry: 1 },
+    // gcTime: keep data for the offline cache (persisted to IndexedDB, restored at start)
+    queries: { staleTime: 30_000, gcTime: 24 * 3_600_000, refetchOnWindowFocus: true, refetchOnReconnect: true, retry: 1 },
+    // mutations run offline too: writes go to the offline queue instead of waiting paused in memory
+    mutations: { networkMode: 'always' },
   },
 })
+persistQueryCache(queryClient)
 
 const router = createBrowserRouter([
   { path: '/login', element: <LoginScreen /> },
@@ -43,6 +49,7 @@ const router = createBrowserRouter([
       { path: 'body/*', element: <Lazy page={BodyScreen} /> },
       { path: 'item/:id', element: <Lazy page={ItemScreen} /> },
       { path: 'calendar', element: <Lazy page={CalendarScreen} /> },
+      { path: 'review', element: <Lazy page={ReviewScreen} /> },
       { path: 'settings', element: <Lazy page={SettingsScreen} /> },
       { path: '*', element: <Navigate to="/" replace /> },
     ],

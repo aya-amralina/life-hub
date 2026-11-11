@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { write } from '@/app/offlineQueue'
 import { supabase } from '@/lib/supabase'
 import type { Tables, TablesInsert, TablesUpdate } from '@/lib/db/types'
-import { addDaysISO, type ISODate } from '@/lib/dates'
+import { addDaysISO, weekStart, type ISODate } from '@/lib/dates'
 import type { WeekCategory } from '@/lib/constants'
 import { ensureWeek, weekKeys } from '@/features/weeks/api'
 
@@ -48,14 +49,18 @@ export function useWeekTransactions(monday: ISODate) {
 export function useAddExpense() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (tx: Pick<TablesInsert<'transactions'>, 'date' | 'amount_eur' | 'category' | 'account' | 'title'>) => {
-      const { data, error } = await supabase
-        .from('transactions')
-        .insert({ ...tx, kind: 'expense', grp: 'Жизнь', is_planned: false, confirmed_at: new Date().toISOString() })
-        .select('*')
-        .single()
-      if (error) throw error
-      return data
+    // the id is made here, so «Отменить» works even before the expense reaches the server (offline queue)
+    mutationFn: async (tx: Pick<TablesInsert<'transactions'>, 'date' | 'amount_eur' | 'category' | 'account' | 'title'> & { id: string }) => {
+      const values = { ...tx, kind: 'expense', grp: 'Жизнь', is_planned: false, confirmed_at: new Date().toISOString() }
+      await write({ table: 'transactions', action: 'insert', values })
+      return values
+    },
+    onMutate: async (tx) => {
+      // show it in the week at once (offline the refetch waits for the network)
+      await qc.cancelQueries({ queryKey: moneyKeys.all })
+      const monday = weekStart(tx.date)
+      const row = { envelope_id: null, note: null, source_id: null, cancelled_at: null, week_budget: false, user_id: '', created_at: '', updated_at: '', ...tx, kind: 'expense', grp: 'Жизнь', is_planned: false, confirmed_at: new Date().toISOString() } as Transaction
+      qc.setQueryData<Transaction[]>(moneyKeys.week(monday), (old) => (old ? [row, ...old] : [row]))
     },
     onSettled: () => qc.invalidateQueries({ queryKey: moneyKeys.all }),
   })
@@ -65,8 +70,13 @@ export function useDeleteTransaction() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('transactions').delete().eq('id', id)
-      if (error) throw error
+      await write({ table: 'transactions', action: 'delete', id })
+    },
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: moneyKeys.all })
+      for (const [key, data] of qc.getQueriesData<Transaction[]>({ queryKey: moneyKeys.all })) {
+        if (Array.isArray(data) && data.some((t) => t && typeof t === 'object' && 'amount_eur' in t)) qc.setQueryData(key, data.filter((t) => t.id !== id))
+      }
     },
     onSettled: () => qc.invalidateQueries({ queryKey: moneyKeys.all }),
   })
@@ -116,8 +126,7 @@ export function useUpdateTransaction() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ id, patch }: { id: string; patch: TablesUpdate<'transactions'> }) => {
-      const { error } = await supabase.from('transactions').update(patch).eq('id', id)
-      if (error) throw error
+      await write({ table: 'transactions', action: 'update', id, values: patch })
     },
     onMutate: async ({ id, patch }) => {
       await qc.cancelQueries({ queryKey: moneyKeys.all })

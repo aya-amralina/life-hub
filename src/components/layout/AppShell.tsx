@@ -1,5 +1,8 @@
-import { useCallback, useState, type Dispatch, type SetStateAction } from 'react'
-import { Navigate, Outlet } from 'react-router'
+import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { flush, usePendingChanges } from '@/app/offlineQueue'
+import { useToast } from '@/app/toastContext'
+import { Navigate, Outlet, useLocation } from 'react-router'
 import { AddSheetContext, type AddMode, type OpenAdd } from '@/app/addSheetContext'
 import { useAuth } from '@/app/authContext'
 import { useOnline } from '@/app/online'
@@ -7,6 +10,7 @@ import { Fab } from '@/components/ui/Fab'
 import { OfflinePill, SkeletonCard } from '@/components/ui/Feedback'
 import { TabBar } from '@/components/ui/TabBar'
 import type { Sphere } from '@/lib/constants'
+import { plural } from '@/lib/format'
 import { AddSheet } from '@/features/add/AddSheet'
 import { useRollover } from '@/features/study/useRollover'
 
@@ -54,22 +58,49 @@ function Shell({
   online: boolean
 }) {
   useRollover()
+  const pending = usePendingChanges()
+  const qc = useQueryClient()
+  const toast = useToast()
+  // send the offline queue: at start, when the network is back, when the app comes to the front
+  useEffect(() => {
+    const send = () =>
+      void flush(qc).then(({ sent, dropped }) => {
+        if (dropped) toast({ text: `${dropped} ${plural(dropped, ['изменение не принято', 'изменения не приняты', 'изменений не принято'])} сервером — проверь последние отметки` })
+        else if (sent) toast({ text: `Отправлено изменений: ${sent}` })
+      })
+    send()
+    const onVisible = () => document.visibilityState === 'visible' && send()
+    window.addEventListener('online', send)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.removeEventListener('online', send)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [qc, toast])
+  // the Sunday review is full-screen: no tab bar, no «+» (design 7)
+  const focus = useLocation().pathname.startsWith('/review')
 
   return (
     <AddSheetContext.Provider value={openAdd}>
       <main
         className="pt-safe mx-auto flex max-w-[560px] flex-col gap-4 px-4"
-        style={{ paddingBottom: 'calc(max(8px, env(safe-area-inset-bottom)) + 62px + 104px)' }}
+        style={{ paddingBottom: focus ? 'max(8px, env(safe-area-inset-bottom))' : 'calc(max(8px, env(safe-area-inset-bottom)) + 62px + 104px)' }}
       >
-        {!online && (
+        {(!online || pending > 0) && (
           <div className="pt-4">
-            <OfflinePill>Офлайн · изменения отправятся, когда появится сеть</OfflinePill>
+            <OfflinePill>
+              {online
+                ? `Отправляю ${pending} ${plural(pending, ['изменение', 'изменения', 'изменений'])}…`
+                : pending > 0
+                  ? `Офлайн · ${pending} ${plural(pending, ['изменение ждёт', 'изменения ждут', 'изменений ждут'])} сети`
+                  : 'Офлайн · изменения отправятся, когда появится сеть'}
+            </OfflinePill>
           </div>
         )}
         <Outlet />
       </main>
-      <Fab onClick={() => openAdd()} />
-      <TabBar />
+      {!focus && <Fab onClick={() => openAdd()} />}
+      {!focus && <TabBar />}
       <AddSheet
         open={adding !== null}
         onClose={close}

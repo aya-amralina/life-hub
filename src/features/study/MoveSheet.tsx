@@ -21,6 +21,7 @@ export function MoveSheet({
   all,
   weeks,
   monday,
+  subtitle,
 }: {
   open: boolean
   onClose: () => void
@@ -28,6 +29,8 @@ export function MoveSheet({
   all: readonly Item[]
   weeks: readonly Week[]
   monday: ISODate
+  /** instead of «N гибких пунктов · M ч — не влезли в Н04» (e.g. a stuck item from the review) */
+  subtitle?: string
 }) {
   const options = [1, 2, 3, 4].map((n) => addDaysISO(monday, 7 * n))
   const hours = waiting.reduce((s, i) => s + (Number(i.hours_est) || 0), 0)
@@ -74,7 +77,11 @@ export function MoveSheet({
         <div className="flex flex-col gap-1">
           <h2 className="m-0 text-title font-semibold">Куда перенести?</h2>
           <span className="text-cap text-ink2 tabular-nums">
-            {waiting.length} {plural(waiting.length, ['гибкий пункт', 'гибких пункта', 'гибких пунктов'])} · {formatHours(hours)} — не влезли в {weekLabel(monday, weeks)}
+            {subtitle ?? (
+              <>
+                {waiting.length} {plural(waiting.length, ['гибкий пункт', 'гибких пункта', 'гибких пунктов'])} · {formatHours(hours)} — не влезли в {weekLabel(monday, weeks)}
+              </>
+            )}
           </span>
         </div>
       }

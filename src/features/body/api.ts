@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { write } from '@/app/offlineQueue'
 import { supabase } from '@/lib/supabase'
 import type { Tables, TablesInsert } from '@/lib/db/types'
 import { addDaysISO, type ISODate } from '@/lib/dates'
@@ -58,9 +59,9 @@ export function useStages() {
 export function useSaveDailyLog(date: ISODate) {
   const qc = useQueryClient()
   return useMutation({
+    // offline: queued and sent when the network is back
     mutationFn: async (patch: DailyPatch) => {
-      const { error } = await supabase.from('daily_logs').upsert({ date, ...patch }, { onConflict: 'user_id,date' })
-      if (error) throw error
+      await write({ table: 'daily_logs', action: 'upsert', values: { date, ...patch }, onConflict: 'user_id,date' })
     },
     onMutate: async (patch) => {
       await qc.cancelQueries({ queryKey: bodyKeys.day(date) })

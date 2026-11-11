@@ -28,6 +28,8 @@ import { donePatch, reopenPatch } from '@/features/items/donePatch'
 import { ItemQuestions } from '@/features/items/ItemQuestions'
 import { ItemRow } from '@/features/items/ItemRow'
 import { MoneyQuestions } from '@/features/money/MoneyQuestions'
+import { ReviewCard } from '@/features/review/ReviewCard'
+import { WishQuestions } from '@/features/money/WishQuestions'
 import { MoneyTotal } from '@/features/money/MoneyTotal'
 import { useMoneyWeek } from '@/features/money/useMoneyWeek'
 import { InstallHint } from '@/features/settings/InstallHint'
@@ -60,9 +62,11 @@ export function TodayScreen() {
       />
       <WeekLine week={week.data ?? null} />
       <InstallHint compact />
+      <ReviewCard today={today} />
       {/* Questions stand first until answered (design 3m). */}
       <MoneyQuestions />
       <ItemQuestions />
+      <WishQuestions />
       <HabitsCard date={today} to="/body" />
       <BurningCard today={today} />
       <MoneyCard today={today} />

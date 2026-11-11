@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { write } from '@/app/offlineQueue'
 import { supabase } from '@/lib/supabase'
 import type { Tables, TablesInsert, TablesUpdate } from '@/lib/db/types'
 
@@ -35,32 +36,28 @@ export const useIntake = () => useList<Intake>(bodyDataKeys.intake, 'intake', 's
 export const useStrengthSets = () => useList<StrengthSet>(bodyDataKeys.strength, 'strength_sets', 'date', false)
 export const useMeasurements = () => useList<Measurement>(bodyDataKeys.measurements, 'measurements', 'date', false)
 
-// One generic writer for the small body tables; the cast only narrows the client's table typing.
 type Writable = 'activity_types' | 'activities' | 'intake' | 'strength_sets' | 'measurements' | 'plan_stages'
 
-/** Insert, update (with id) or delete a row; refetches the table's cache. */
+/** Insert, update (with id) or delete a row through the offline queue; refetches the table's cache. */
 export function useWrite<T extends Writable>(table: T, key: readonly string[]) {
   const qc = useQueryClient()
   const done = () => qc.invalidateQueries({ queryKey: key })
   return {
     insert: useMutation({
       mutationFn: async (row: TablesInsert<T>) => {
-        const { error } = await supabase.from(table as 'activities').insert(row as never)
-        if (error) throw error
+        await write({ table, action: 'insert', values: { id: crypto.randomUUID(), ...(row as Record<string, unknown>) } })
       },
       onSettled: done,
     }),
     update: useMutation({
       mutationFn: async ({ id, patch }: { id: string; patch: TablesUpdate<T> }) => {
-        const { error } = await supabase.from(table as 'activities').update(patch as never).eq('id', id)
-        if (error) throw error
+        await write({ table, action: 'update', id, values: patch as Record<string, unknown> })
       },
       onSettled: done,
     }),
     remove: useMutation({
       mutationFn: async (id: string) => {
-        const { error } = await supabase.from(table as 'activities').delete().eq('id', id)
-        if (error) throw error
+        await write({ table, action: 'delete', id })
       },
       onSettled: done,
     }),
