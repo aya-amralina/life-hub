@@ -54,3 +54,13 @@ describe('formatAmount', () => {
     expect(formatAmount(178814)).toBe(`1${NB}788,14`)
   })
 })
+
+describe('formatChartNumber', async () => {
+  const { formatChartNumber } = await import('./format')
+  it('one decimal with a comma, thin space groups, real minus, dash for null', () => {
+    expect(formatChartNumber(7.46)).toBe('7,5')
+    expect(formatChartNumber(1277)).toBe('1 277')
+    expect(formatChartNumber(-3)).toBe('−3')
+    expect(formatChartNumber(null)).toBe('—')
+  })
+})

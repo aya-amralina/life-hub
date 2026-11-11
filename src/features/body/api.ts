@@ -90,3 +90,15 @@ function emptyLog(date: ISODate): Partial<DailyLog> {
     note: null,
   }
 }
+
+/** Daily logs from a date on (charts: up to 6 months, a few hundred rows). */
+export function useLogsSince(from: ISODate) {
+  return useQuery({
+    queryKey: ['daily_logs', 'since', from] as const,
+    queryFn: async (): Promise<DailyLog[]> => {
+      const { data, error } = await supabase.from('daily_logs').select('*').gte('date', from).order('date')
+      if (error) throw error
+      return data
+    },
+  })
+}

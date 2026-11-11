@@ -8,6 +8,9 @@ import { WeekSwitcher } from '@/components/ui/WeekSwitcher'
 import { cn } from '@/components/ui/cn'
 import { formatDayMonth, parseISODate, todayBerlin, type ISODate } from '@/lib/dates'
 import { formatEur, toCents } from '@/lib/format'
+import { balanceLine } from '@/lib/rules/charts'
+import { XYChart } from '@/components/charts/Chart'
+import { ChartLegend } from '@/components/charts/chartParts'
 import { BUDGET_END, balanceAt, isFact, monthsTable, plannedQuestions, signedCents, upcomingPlanned } from '@/lib/rules/money'
 import { joinRu } from '@/lib/format'
 import { useAllTransactions, useUpdateTransaction, type Transaction } from './api'
@@ -50,6 +53,9 @@ export function MonthTab() {
     .filter((t) => (filter[0] === 'plan' ? !isFact(t) && !t.cancelled_at : filter[0] === 'fact' ? isFact(t) : true))
     .sort((a, b) => b.date.localeCompare(a.date))
   const next = upcomingPlanned(all, today).slice(0, 5)
+  // two months on the chart: from the start of this month (from 1.11 once December has come)
+  const lineFrom = today.slice(0, 7) >= '2026-12' ? '2026-11-01' : `${today.slice(0, 7)}-01`
+  const line = balanceLine(all, lineFrom, BUDGET_END, today)
   const months = monthsTable(all, today)
 
   return (
@@ -61,6 +67,25 @@ export function MonthTab() {
           <span className="text-base text-ink2">сейчас</span>
         </div>
         <div className="text-base text-ink2 tabular-nums">план на 31.12 — {formatEur(planEnd, { whole: true })}</div>
+        <XYChart
+          label="Баланс до 31.12: план и факт"
+          data={line}
+          height={184}
+          empty={all.filter((t) => isFact(t)).length < 2}
+          emptyText="Мало данных — график появится через неделю отметок"
+          lines={[
+            { key: 'plan', name: 'План', color: 'money', dash: true, unit: ' €' },
+            { key: 'fact', name: 'Факт', color: 'money', unit: ' €' },
+          ]}
+          yLeft={{ domain: ['auto', 'auto'], ticks: niceTicks(line.map((p) => p.plan).concat(line.map((p) => p.fact ?? p.plan))) }}
+          todayKey={today}
+        />
+        <ChartLegend
+          items={[
+            { name: 'план', color: 'money', kind: 'dash' },
+            { name: 'факт', color: 'money', kind: 'line' },
+          ]}
+        />
         <p className="m-0 text-cap text-ink2 tabular-nums">
           {gap === 0
             ? 'Факт совпадает с планом.'
@@ -144,6 +169,20 @@ export function MonthTab() {
       )}
     </>
   )
+}
+
+/** 3 round ticks over the values (1000 / 2000 / 3000 style). */
+function niceTicks(values: number[]): number[] | undefined {
+  if (!values.length) return undefined
+  const lo = Math.min(...values)
+  const hi = Math.max(...values)
+  const step = Math.max(100, Math.pow(10, Math.floor(Math.log10(Math.max(1, hi - lo)))))
+  const start = Math.floor(lo / step) * step
+  const end = Math.ceil(hi / step) * step
+  const n = Math.max(1, Math.round((end - start) / step / 2))
+  const ticks: number[] = []
+  for (let v = start; v <= end; v += step * n) ticks.push(v)
+  return ticks
 }
 
 function OperationRow({ t, today, onConfirm }: { t: Transaction; today: ISODate; onConfirm: () => void }) {

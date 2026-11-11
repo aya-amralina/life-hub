@@ -6,6 +6,7 @@ import { useOpenAdd } from '@/app/addSheetContext'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { EmptyState, SkeletonCard } from '@/components/ui/Feedback'
+import { CalendarLink } from '@/components/layout/CalendarLink'
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
 import {
   formatDayMonth,
@@ -45,13 +46,16 @@ export function TodayScreen() {
         eyebrow={weekday.charAt(0).toUpperCase() + weekday.slice(1)}
         title={formatLongDate(today)}
         right={
-          <Link
-            to="/settings"
-            aria-label="Настройки"
-            className="flex size-11 flex-none items-center justify-center rounded-full bg-sub text-ink active:bg-line2"
-          >
-            <Settings size={20} strokeWidth={1.75} aria-hidden="true" />
-          </Link>
+          <div className="flex gap-2">
+            <CalendarLink />
+            <Link
+              to="/settings"
+              aria-label="Настройки"
+              className="flex size-11 flex-none items-center justify-center rounded-full bg-sub text-ink active:bg-line2"
+            >
+              <Settings size={20} strokeWidth={1.75} aria-hidden="true" />
+            </Link>
+          </div>
         }
       />
       <WeekLine week={week.data ?? null} />

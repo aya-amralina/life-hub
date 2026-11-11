@@ -13,11 +13,15 @@ import { ProgressBar } from '@/components/ui/ProgressBar'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { Swipeable } from '@/components/ui/Swipeable'
 import { WeekSwitcher } from '@/components/ui/WeekSwitcher'
+import { CalendarLink } from '@/components/layout/CalendarLink'
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
 import { addDaysISO, formatWeekdayDate, todayBerlin, weekStart, type ISODate } from '@/lib/dates'
 import { formatHours, plural } from '@/lib/format'
 import { countdown, deadlineChip, historyChips, isItemDone, isItemOpen, isUpcoming } from '@/lib/rules/items'
+import { studyHeatmap } from '@/lib/rules/charts'
 import { isFixed, plannedItems, rolloverCandidates } from '@/lib/rules/study'
+import { ChartCard } from '@/components/charts/ChartCard'
+import { HeatGrid } from '@/components/charts/HeatGrid'
 import { NotesCard } from '@/features/notes/NotesCard'
 import { useItems, useUpdateItem, type Item } from '@/features/items/api'
 import { ItemQuestions } from '@/features/items/ItemQuestions'
@@ -38,7 +42,7 @@ export function StudyScreen() {
   const [tab, setTab] = useState<Tab>('week')
   return (
     <>
-      <ScreenHeader title="Учёба" />
+      <ScreenHeader title="Учёба" right={<CalendarLink sphere="study" />} />
       <SegmentedTabs label="Раздел" segments={TABS} value={tab} onChange={setTab} />
       <ItemQuestions sphere="study" />
       {tab === 'week' && <WeekTab />}
@@ -223,17 +227,43 @@ function StudyRow({ item, today, monday, weeks }: { item: Item; today: ISODate; 
 /** Предметы: hours for the semester per subject, all ↔ and ⚠ (SPEC §5). */
 function SubjectsTab() {
   const items = useItems()
+  const weeks = useAllWeeks()
   const [openSubject, setOpenSubject] = useState<string | null>(null)
-  if (items.isPending) return <SkeletonCard />
+  if (items.isPending || weeks.isPending) return <SkeletonCard />
   const study = plannedItems((items.data ?? []).filter((i) => i.sphere === 'study'))
+  const heat = studyHeatmap(items.data ?? [], weeks.data ?? [], todayBerlin())
+  const heatCard = heat.length > 0 && (
+    <ChartCard title="Загрузка семестра" dotClass="bg-study" context={`Н${heat[0]!.label}–Н${heat[heat.length - 1]!.label}`}>
+      <HeatGrid
+        label="Загрузка по неделям"
+        cells={heat}
+        cols={13}
+        rows={Math.ceil(heat.length / 13)}
+        color="study"
+        hint={heat.some((c) => c.level !== null) ? 'Нажми на неделю — покажу загрузку' : 'Недели заполнятся, когда в них появятся пункты'}
+        legend={[
+          { level: 1, text: 'ок' },
+          { level: 2, text: 'нужен Do/Sa ½' },
+          { level: 3, text: 'перегруз' },
+          { level: null, text: 'не спланирована' },
+        ]}
+      />
+    </ChartCard>
+  )
   if (!study.length) {
-    return <EmptyState title="Часов пока нет">Прогресс по предметам появится после первых пунктов и отметок в неделе.</EmptyState>
+    return (
+      <>
+        {heatCard}
+        <EmptyState title="Часов пока нет">Прогресс по предметам появится после первых пунктов и отметок в неделе.</EmptyState>
+      </>
+    )
   }
   const subjects = [...new Set(study.map((i) => i.area ?? 'Без предмета'))].sort((a, b) => a.localeCompare(b, 'de'))
   const total = study.reduce((s, i) => s + (Number(i.hours_est) || 0), 0)
   const closed = study.filter((i) => isItemDone(i)).reduce((s, i) => s + (Number(i.hours_est) || 0), 0)
   return (
     <>
+      {heatCard}
       <Card>
         <CardHeader title="Часы по предметам" dotClass="bg-study" context={`${formatHours(closed)} из ${formatHours(total)}`} />
         <div className="flex flex-col gap-4">
@@ -286,7 +316,6 @@ function SubjectsTab() {
           })}
         </div>
       </Card>
-      <p className="m-0 text-cap text-ink3">Тепловая карта загрузки по неделям появится вместе с графиками.</p>
     </>
   )
 }

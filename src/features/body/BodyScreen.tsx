@@ -9,6 +9,7 @@ import { ProgressBar } from '@/components/ui/ProgressBar'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { Switch } from '@/components/ui/Switch'
 import { WeekSwitcher } from '@/components/ui/WeekSwitcher'
+import { CalendarLink } from '@/components/layout/CalendarLink'
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
 import { addDaysISO, formatDayMonth, formatRelativeDay, formatWeekdayDate, todayBerlin, weekStart, type ISODate } from '@/lib/dates'
 import { activityPoints, dayPoints, weekPoints, weekPointsTarget } from '@/lib/rules/activities'
@@ -22,6 +23,7 @@ import { donePatch, reopenPatch } from '@/features/items/donePatch'
 import { ItemQuestions } from '@/features/items/ItemQuestions'
 import { ItemRow } from '@/features/items/ItemRow'
 import { ActivitySheet } from './ActivitySheet'
+import { BodyCharts } from './BodyCharts'
 import { bodyDataKeys, useActivities, useActivityTypes, useWrite } from './activityApi'
 import { useDailyLog, useSaveDailyLog, useStages, useWeekLogs } from './api'
 import { EveningCard } from './EveningCard'
@@ -33,7 +35,8 @@ import { StrengthTab } from './StrengthTab'
 
 const TABS = [
   { value: 'day', label: 'День' },
-  { value: 'strength', label: 'Силовые' },
+  { value: 'charts', label: 'Графики' },
+  { value: 'strength', label: 'Сила' },
   { value: 'measure', label: 'Замеры' },
   { value: 'intake', label: 'Приём' },
 ] as const
@@ -43,9 +46,10 @@ export function BodyScreen() {
   const [tab, setTab] = useState<Tab>('day')
   return (
     <>
-      <ScreenHeader title="Тело" />
+      <ScreenHeader title="Тело" right={<CalendarLink sphere="body" />} />
       <SegmentedTabs label="Раздел" segments={TABS} value={tab} onChange={setTab} />
       {tab === 'day' && <DayTab />}
+      {tab === 'charts' && <BodyCharts />}
       {tab === 'strength' && <StrengthTab />}
       {tab === 'measure' && <MeasurementsTab />}
       {tab === 'intake' && <IntakeTab />}

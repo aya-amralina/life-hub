@@ -6,6 +6,7 @@ import { Card, CardHeader } from '@/components/ui/Card'
 import { EmptyState, SkeletonCard } from '@/components/ui/Feedback'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { WeekSwitcher } from '@/components/ui/WeekSwitcher'
+import { CalendarLink } from '@/components/layout/CalendarLink'
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
 import { addDaysISO, formatDayMonth, formatRelativeDay, todayBerlin, weekStart } from '@/lib/dates'
 import { formatAmount, formatEur, toCents } from '@/lib/format'
@@ -31,7 +32,7 @@ export function MoneyScreen() {
   const [tab, setTab] = useState<Tab>('week')
   return (
     <>
-      <ScreenHeader title="Деньги" />
+      <ScreenHeader title="Деньги" right={<CalendarLink sphere="money" />} />
       <SegmentedTabs label="Раздел" segments={TABS} value={tab} onChange={setTab} />
       <MoneyQuestions />
       {tab === 'week' && <WeekTab />}

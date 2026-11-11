@@ -14,8 +14,12 @@ import { GroupHeader } from '@/components/ui/GroupHeader'
 import { MetaChip } from '@/components/ui/MetaChip'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { StatusBadge } from '@/components/ui/StatusBadge'
+import { CalendarLink } from '@/components/layout/CalendarLink'
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
-import { ERFOLG_TYPE, WORK_AREAS, WORK_STALLED } from '@/lib/constants'
+import { ERFOLG_TYPE, WORK_AREAS, WORK_STALLED, WORK_STATUSES } from '@/lib/constants'
+import { enoughForMonths, erfolgeByMonth, statusCounts } from '@/lib/rules/charts'
+import { ChartCard } from '@/components/charts/ChartCard'
+import { XYChart } from '@/components/charts/Chart'
 import { addDaysISO, daysBetween, formatWeekdayDate, todayBerlin, type ISODate } from '@/lib/dates'
 import { plural } from '@/lib/format'
 import { deadlineChip } from '@/lib/rules/items'
@@ -41,7 +45,7 @@ export function WorkScreen() {
   const [tab, setTab] = useState<Tab>('board')
   return (
     <>
-      <ScreenHeader title="Работа" />
+      <ScreenHeader title="Работа" right={<CalendarLink sphere="work" />} />
       <SegmentedTabs label="Раздел" segments={TABS} value={tab} onChange={setTab} />
       {tab === 'board' && <BoardTab />}
       {tab === 'people' && <PeopleTab />}
@@ -364,8 +368,39 @@ function ArchiveTab() {
     .filter((i) => i.type !== ERFOLG_TYPE && (i.status === 'Erledigt' || i.status === 'Verworfen'))
     .sort((a, b) => (b.done_at ?? b.updated_at).localeCompare(a.done_at ?? a.updated_at))
 
+  const erfolgDates = erfolge.map((i) => todayBerlin(new Date(i.done_at ?? i.updated_at)))
+  const months = erfolgeByMonth(erfolgDates, today)
+  const statuses = statusCounts(work.filter((i) => i.status !== 'Erledigt' && i.status !== 'Verworfen'), WORK_STATUSES)
+  const maxCount = Math.max(1, ...statuses.map((s) => s.count))
   return (
     <>
+      <ChartCard title="Erfolge" dotClass="bg-work" context={months.length ? `${monthsLabel(months)}` : 'по месяцам'}>
+        <XYChart
+          label="Erfolge по месяцам"
+          data={months}
+          empty={!enoughForMonths(erfolgDates, today)}
+          emptyText="Мало данных — график появится, когда наберётся месяц записей"
+          bars={[{ key: 'count', name: 'Erfolge', color: 'work' }]}
+          yLeft={{ domain: [0, 'auto'], ticks: undefined }}
+        />
+      </ChartCard>
+      {statuses.length > 0 && (
+        <ChartCard title="Доска по статусам" dotClass="bg-work" context={`${statuses.reduce((s, x) => s + x.count, 0)} открыто`}>
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+            {statuses.map((s) => (
+              <li key={s.key} className="grid grid-cols-[minmax(0,9rem)_1fr_auto] items-center gap-3 text-cap">
+                <span lang="de" className="truncate text-ink2">
+                  {s.label}
+                </span>
+                <span className="h-2 rounded-[4px] bg-sub">
+                  <span className="block h-2 rounded-[4px] bg-work" style={{ width: `${(s.count / maxCount) * 100}%` }} />
+                </span>
+                <span className="text-right font-semibold text-ink tabular-nums">{s.count}</span>
+              </li>
+            ))}
+          </ul>
+        </ChartCard>
+      )}
       {erfolge.length === 0 ? (
         <section className="flex flex-col gap-3 rounded-2xl border border-dashed border-line2 p-4">
           <div className="text-base font-semibold">Записей пока нет</div>
@@ -427,6 +462,11 @@ function ArchiveTab() {
       <ErfolgSheet open={adding} onClose={() => setAdding(false)} today={today} />
     </>
   )
+}
+
+/** «июн — ноя» */
+function monthsLabel(months: { label: string }[]): string {
+  return months.length > 1 ? `${months[0]!.label} — ${months[months.length - 1]!.label}` : months[0]!.label
 }
 
 function ErfolgSheet({ open, onClose, today }: { open: boolean; onClose: () => void; today: ISODate }) {

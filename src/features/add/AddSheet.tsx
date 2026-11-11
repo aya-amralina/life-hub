@@ -29,12 +29,15 @@ export function AddSheet({
   mode,
   onMode,
   sphere,
+  date,
 }: {
   open: boolean
   onClose: () => void
   mode: AddMode
   onMode: (m: AddMode) => void
   sphere: Sphere
+  /** preset day (from the calendar) */
+  date?: string
 }) {
   const close = useCallback(() => onClose(), [onClose])
   return (
@@ -45,7 +48,7 @@ export function AddSheet({
       header={<SegmentedTabs segments={MODES} value={mode} onChange={onMode} compact label="Что добавить" />}
     >
       {mode === 'expense' && <ExpenseForm onDone={close} />}
-      {mode === 'item' && <ItemForm onDone={close} initialSphere={sphere} />}
+      {mode === 'item' && <ItemForm key={date ?? 'today'} onDone={close} initialSphere={sphere} initialDate={date} />}
       {mode === 'note' && <NoteForm onDone={close} initialSphere={sphere} />}
     </BottomSheet>
   )
@@ -66,12 +69,12 @@ function SpherePicker({ value, onChange }: { value: Sphere; onChange: (s: Sphere
   )
 }
 
-function ItemForm({ onDone, initialSphere }: { onDone: () => void; initialSphere: Sphere }) {
+function ItemForm({ onDone, initialSphere, initialDate }: { onDone: () => void; initialSphere: Sphere; initialDate?: string }) {
   const today = todayBerlin()
   const tomorrow = addDaysISO(today, 1)
   const [title, setTitle] = useState('')
   const [sphere, setSphere] = useState<Sphere>(initialSphere === 'money' ? 'money' : initialSphere)
-  const [date, setDate] = useState<string>(today)
+  const [date, setDate] = useState<string>(initialDate ?? today)
   const create = useCreateItem()
   const toast = useToast()
   const custom = date !== '' && date !== today && date !== tomorrow

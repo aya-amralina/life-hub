@@ -75,3 +75,13 @@ export function joinRu(parts: readonly string[]): string {
 export function formatTime(time: string): string {
   return time.slice(0, 5)
 }
+
+/** Chart numbers as the design writes them: «7,5», «1\u202f277», «−3»; null → «—». */
+export function formatChartNumber(v: number | null | undefined): string {
+  if (v === null || v === undefined || Number.isNaN(v)) return '—'
+  const rounded = Math.round(v * 10) / 10
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 })
+    .format(rounded)
+    .replace('-', '\u2212')
+    .replace(/[\u00a0\u202f]/g, '\u202f')
+}

@@ -17,13 +17,13 @@ const sphereForPath = (path: string): Sphere => SPHERE_BY_PATH[path.split('/')[1
 export function AppShell() {
   const { session, loading } = useAuth()
   const online = useOnline()
-  const [adding, setAdding] = useState<{ mode: AddMode; sphere: Sphere } | null>(null)
+  const [adding, setAdding] = useState<{ mode: AddMode; sphere: Sphere; date?: string } | null>(null)
 
   // Read the path at tap time: router navigations are transitions, so render-time location can still
   // be the previous screen when «+» is tapped right after switching tabs.
   const openAdd = useCallback<OpenAdd>((mode, opts) => {
     const routeSphere = sphereForPath(window.location.pathname)
-    setAdding({ mode: mode ?? (routeSphere === 'money' ? 'expense' : 'item'), sphere: opts?.sphere ?? routeSphere })
+    setAdding({ mode: mode ?? (routeSphere === 'money' ? 'expense' : 'item'), sphere: opts?.sphere ?? routeSphere, date: opts?.date })
   }, [])
   const close = useCallback(() => setAdding(null), [])
 
@@ -47,8 +47,8 @@ function Shell({
   close,
   online,
 }: {
-  adding: { mode: AddMode; sphere: Sphere } | null
-  setAdding: Dispatch<SetStateAction<{ mode: AddMode; sphere: Sphere } | null>>
+  adding: { mode: AddMode; sphere: Sphere; date?: string } | null
+  setAdding: Dispatch<SetStateAction<{ mode: AddMode; sphere: Sphere; date?: string } | null>>
   openAdd: OpenAdd
   close: () => void
   online: boolean
@@ -76,6 +76,7 @@ function Shell({
         mode={adding?.mode ?? 'item'}
         onMode={(mode) => setAdding((a) => (a ? { ...a, mode } : a))}
         sphere={adding?.sphere ?? 'personal'}
+        date={adding?.date}
       />
     </AddSheetContext.Provider>
   )
