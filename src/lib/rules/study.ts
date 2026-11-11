@@ -1,5 +1,5 @@
-import { addDaysISO, daysBetween, parseISODate, type ISODate } from '../dates'
-import { isItemOpen, type ItemLike } from './items'
+import { addDaysISO, daysBetween, parseISODate, weekStart, type ISODate } from '../dates'
+import { isItemDone, isItemOpen, type ItemLike } from './items'
 
 export const CAPACITY_DEFAULT = { base: 27, max: 36 } as const
 export const CAPACITY_HALF = { base: 13.5, max: 18 } as const
@@ -34,6 +34,11 @@ export function studyItemsOfWeek<T extends StudyItemLike>(items: readonly T[], w
 export type LoadStatus = 'ok' | 'tight' | 'over'
 export const LOAD_LABEL: Record<LoadStatus, string> = { ok: 'ок', tight: 'нужен Do/Sa ½', over: 'перегруз' }
 
+/** Items taken off («снято») leave the week's plan and its load. */
+export function plannedItems<T extends StudyItemLike>(items: readonly T[]): T[] {
+  return items.filter((i) => isItemOpen(i) || isItemDone(i))
+}
+
 /** Rule 7: Σ hours_est of the week's study items vs capacity: ≤ base «ок», ≤ max «нужен Do/Sa ½», > max «перегруз». */
 export function weekLoad(items: readonly Pick<StudyItemLike, 'hours_est'>[], capacity: { base: number; max: number }) {
   const hours = Math.round(items.reduce((s, i) => s + (Number(i.hours_est) || 0), 0) * 100) / 100
@@ -41,9 +46,9 @@ export function weekLoad(items: readonly Pick<StudyItemLike, 'hours_est'>[], cap
   return { hours, ...capacity, status }
 }
 
-/** Hours already closed this week (done items). */
+/** Hours already closed this week (done items; «снято» does not count as done). */
 export function hoursDone(items: readonly StudyItemLike[]): number {
-  return Math.round(items.filter((i) => !isItemOpen(i)).reduce((s, i) => s + (Number(i.hours_est) || 0), 0) * 100) / 100
+  return Math.round(items.filter((i) => isItemDone(i)).reduce((s, i) => s + (Number(i.hours_est) || 0), 0) * 100) / 100
 }
 
 /**
@@ -66,4 +71,63 @@ export function nextTest<T extends StudyItemLike & { type: string | null }>(item
     if (best === null || i.due_date < best.due_date!) best = i
   }
   return best ? { item: best, days: daysBetween(today, best.due_date!) } : null
+}
+
+/** Rule 19: fixed = has an official deadline, unless set on the card (`is_fixed`). */
+export function isFixed(item: { is_fixed?: boolean | null; due_date: string | null }): boolean {
+  return item.is_fixed ?? item.due_date !== null
+}
+
+export type RolloverItem = StudyItemLike & { is_fixed?: boolean | null; rollover_count?: number; sort_order?: number }
+export type WeekRef = { id: string; start_date: ISODate }
+
+/** Monday of the item's week: from week_id, else from the deadline; null for items without a week. */
+export function itemWeekStart(item: Pick<StudyItemLike, 'week_id' | 'due_date'>, weeks: readonly WeekRef[]): ISODate | null {
+  if (item.week_id !== null) return weeks.find((w) => w.id === item.week_id)?.start_date ?? null
+  return item.due_date ? weekStart(item.due_date) : null
+}
+
+/** Open flexible study items of weeks before `monday`, in rollover order (week, «готово к», sort_order). */
+export function rolloverCandidates<T extends RolloverItem>(items: readonly T[], weeks: readonly WeekRef[], monday: ISODate): T[] {
+  const withWeek = items.flatMap((i) => {
+    if (i.sphere !== 'study' || !isItemOpen(i) || isFixed(i)) return []
+    const start = itemWeekStart(i, weeks)
+    return start !== null && start < monday ? [{ i, start }] : []
+  })
+  return withWeek
+    .sort(
+      (a, b) =>
+        a.start.localeCompare(b.start) ||
+        (a.i.ready_by ?? '9999').localeCompare(b.i.ready_by ?? '9999') ||
+        (a.i.sort_order ?? 0) - (b.i.sort_order ?? 0) ||
+        a.i.id.localeCompare(b.i.id),
+    )
+    .map((x) => x.i)
+}
+
+export type RolloverPlan<T> = { moves: { item: T; rollover_count: number }[]; waiting: T[] }
+
+/**
+ * Rule 20 «автоперенос гибких»: open flexible items of past weeks move into the current week
+ * (rollover_count + 1), one by one in rollover order, as long as the week stays within its maximum.
+ * The rest stay where they are — rule 21 «Ждут решения». Idempotent: moved items are in the current
+ * week and are no longer candidates; a second run with the same data plans nothing new.
+ */
+export function planRollover<T extends RolloverItem>(
+  items: readonly T[],
+  weeks: readonly WeekRef[],
+  current: { monday: ISODate; weekId: string | null; capacity: { base: number; max: number } },
+): RolloverPlan<T> {
+  let load = weekLoad(plannedItems(studyItemsOfWeek(items, current.monday, current.weekId)), current.capacity).hours
+  const plan: RolloverPlan<T> = { moves: [], waiting: [] }
+  for (const item of rolloverCandidates(items, weeks, current.monday)) {
+    const h = Number(item.hours_est) || 0
+    if (load + h <= current.capacity.max + 1e-9) {
+      load = Math.round((load + h) * 100) / 100
+      plan.moves.push({ item, rollover_count: (item.rollover_count ?? 0) + 1 })
+    } else {
+      plan.waiting.push(item)
+    }
+  }
+  return plan
 }

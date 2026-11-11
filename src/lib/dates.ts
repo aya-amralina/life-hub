@@ -89,3 +89,8 @@ const berlinTimeFormat = new Intl.DateTimeFormat('ru-RU', { timeZone: TIME_ZONE,
 export function formatTimeBerlin(timestamp: string | Date): string {
   return berlinTimeFormat.format(new Date(timestamp))
 }
+
+/** 'Чт 12.11' — capitalised weekday + day.month, as in deadline chips. */
+export function formatWeekdayDate(iso: ISODate): string {
+  return `${weekdayShort(iso)} ${formatDayMonth(iso)}`
+}

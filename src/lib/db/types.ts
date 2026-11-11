@@ -14,6 +14,89 @@ export type Database = {
   }
   public: {
     Tables: {
+      activities: {
+        Row: {
+          created_at: string
+          date: string
+          id: string
+          minutes: number | null
+          note: string | null
+          source_id: string | null
+          type_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          id?: string
+          minutes?: number | null
+          note?: string | null
+          source_id?: string | null
+          type_id: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          id?: string
+          minutes?: number | null
+          note?: string | null
+          source_id?: string | null
+          type_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activities_type_id_fkey"
+            columns: ["type_id"]
+            isOneToOne: false
+            referencedRelation: "activity_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      activity_types: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          intensity: string
+          name: string
+          points_per_10min: number
+          sort_order: number
+          source_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          intensity?: string
+          name: string
+          points_per_10min?: number
+          sort_order?: number
+          source_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          intensity?: string
+          name?: string
+          points_per_10min?: number
+          sort_order?: number
+          source_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       daily_logs: {
         Row: {
           body_cream: boolean
@@ -122,6 +205,51 @@ export type Database = {
         }
         Relationships: []
       }
+      intake: {
+        Row: {
+          created_at: string
+          dose: string | null
+          end_date: string | null
+          id: string
+          kind: string
+          name: string
+          note: string | null
+          schedule: string | null
+          source_id: string | null
+          start_date: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          dose?: string | null
+          end_date?: string | null
+          id?: string
+          kind?: string
+          name: string
+          note?: string | null
+          schedule?: string | null
+          source_id?: string | null
+          start_date: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          dose?: string | null
+          end_date?: string | null
+          id?: string
+          kind?: string
+          name?: string
+          note?: string | null
+          schedule?: string | null
+          source_id?: string | null
+          start_date?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       items: {
         Row: {
           area: string | null
@@ -131,8 +259,11 @@ export type Database = {
           done_at: string | null
           due_date: string | null
           due_time: string | null
+          happens_on: string | null
+          happens_time: string | null
           hours_est: number | null
           id: string
+          is_fixed: boolean | null
           links: string[]
           next_step: string | null
           notes: string | null
@@ -140,9 +271,11 @@ export type Database = {
           people: string[]
           priority: string | null
           ready_by: string | null
+          rollover_count: number
           sort_order: number
           source_id: string | null
           sphere: string
+          starts_on: string | null
           status: string | null
           synergy: string | null
           title: string
@@ -161,8 +294,11 @@ export type Database = {
           done_at?: string | null
           due_date?: string | null
           due_time?: string | null
+          happens_on?: string | null
+          happens_time?: string | null
           hours_est?: number | null
           id?: string
+          is_fixed?: boolean | null
           links?: string[]
           next_step?: string | null
           notes?: string | null
@@ -170,9 +306,11 @@ export type Database = {
           people?: string[]
           priority?: string | null
           ready_by?: string | null
+          rollover_count?: number
           sort_order?: number
           source_id?: string | null
           sphere: string
+          starts_on?: string | null
           status?: string | null
           synergy?: string | null
           title: string
@@ -191,8 +329,11 @@ export type Database = {
           done_at?: string | null
           due_date?: string | null
           due_time?: string | null
+          happens_on?: string | null
+          happens_time?: string | null
           hours_est?: number | null
           id?: string
+          is_fixed?: boolean | null
           links?: string[]
           next_step?: string | null
           notes?: string | null
@@ -200,9 +341,11 @@ export type Database = {
           people?: string[]
           priority?: string | null
           ready_by?: string | null
+          rollover_count?: number
           sort_order?: number
           source_id?: string | null
           sphere?: string
+          starts_on?: string | null
           status?: string | null
           synergy?: string | null
           title?: string
@@ -222,6 +365,60 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      measurements: {
+        Row: {
+          arm_cm: number | null
+          created_at: string
+          date: string
+          hips_cm: number | null
+          id: string
+          note: string | null
+          photo_body: boolean
+          photo_face: boolean
+          photo_part: boolean
+          source_id: string | null
+          thigh_cm: number | null
+          updated_at: string
+          user_id: string
+          waist_cm: number | null
+          weight_kg: number | null
+        }
+        Insert: {
+          arm_cm?: number | null
+          created_at?: string
+          date: string
+          hips_cm?: number | null
+          id?: string
+          note?: string | null
+          photo_body?: boolean
+          photo_face?: boolean
+          photo_part?: boolean
+          source_id?: string | null
+          thigh_cm?: number | null
+          updated_at?: string
+          user_id?: string
+          waist_cm?: number | null
+          weight_kg?: number | null
+        }
+        Update: {
+          arm_cm?: number | null
+          created_at?: string
+          date?: string
+          hips_cm?: number | null
+          id?: string
+          note?: string | null
+          photo_body?: boolean
+          photo_face?: boolean
+          photo_part?: boolean
+          source_id?: string | null
+          thigh_cm?: number | null
+          updated_at?: string
+          user_id?: string
+          waist_cm?: number | null
+          weight_kg?: number | null
+        }
+        Relationships: []
       }
       notes: {
         Row: {
@@ -259,12 +456,43 @@ export type Database = {
         }
         Relationships: []
       }
+      people: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          role: string | null
+          source_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          role?: string | null
+          source_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          role?: string | null
+          source_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       plan_stages: {
         Row: {
           created_at: string
           end_date: string
           habits: string[]
           id: string
+          minimum_habits: string[]
           name: string
           source_id: string | null
           sphere: string
@@ -278,6 +506,7 @@ export type Database = {
           end_date: string
           habits?: string[]
           id?: string
+          minimum_habits?: string[]
           name: string
           source_id?: string | null
           sphere?: string
@@ -291,6 +520,7 @@ export type Database = {
           end_date?: string
           habits?: string[]
           id?: string
+          minimum_habits?: string[]
           name?: string
           source_id?: string | null
           sphere?: string
@@ -301,10 +531,106 @@ export type Database = {
         }
         Relationships: []
       }
+      reviews: {
+        Row: {
+          answers: Json
+          balances: Json
+          completed_at: string | null
+          created_at: string
+          id: string
+          impulse_note: string | null
+          source_id: string | null
+          updated_at: string
+          user_id: string
+          week_id: string
+          week_thought: string | null
+        }
+        Insert: {
+          answers?: Json
+          balances?: Json
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          impulse_note?: string | null
+          source_id?: string | null
+          updated_at?: string
+          user_id?: string
+          week_id: string
+          week_thought?: string | null
+        }
+        Update: {
+          answers?: Json
+          balances?: Json
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          impulse_note?: string | null
+          source_id?: string | null
+          updated_at?: string
+          user_id?: string
+          week_id?: string
+          week_thought?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reviews_week_id_fkey"
+            columns: ["week_id"]
+            isOneToOne: false
+            referencedRelation: "weeks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      strength_sets: {
+        Row: {
+          created_at: string
+          date: string
+          exercise: string
+          hard_at_end: boolean | null
+          id: string
+          load: string | null
+          note: string | null
+          reps: number[]
+          source_id: string | null
+          updated_at: string
+          user_id: string
+          workout: string | null
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          exercise: string
+          hard_at_end?: boolean | null
+          id?: string
+          load?: string | null
+          note?: string | null
+          reps?: number[]
+          source_id?: string | null
+          updated_at?: string
+          user_id?: string
+          workout?: string | null
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          exercise?: string
+          hard_at_end?: boolean | null
+          id?: string
+          load?: string | null
+          note?: string | null
+          reps?: number[]
+          source_id?: string | null
+          updated_at?: string
+          user_id?: string
+          workout?: string | null
+        }
+        Relationships: []
+      }
       transactions: {
         Row: {
           account: string | null
           amount_eur: number
+          cancelled_at: string | null
           category: string | null
           confirmed_at: string | null
           created_at: string
@@ -323,6 +649,7 @@ export type Database = {
         Insert: {
           account?: string | null
           amount_eur: number
+          cancelled_at?: string | null
           category?: string | null
           confirmed_at?: string | null
           created_at?: string
@@ -341,6 +668,7 @@ export type Database = {
         Update: {
           account?: string | null
           amount_eur?: number
+          cancelled_at?: string | null
           category?: string | null
           confirmed_at?: string | null
           created_at?: string
@@ -453,6 +781,45 @@ export type Database = {
           source_id?: string | null
           start_date?: string
           study_week?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      wishlist: {
+        Row: {
+          added_at: string
+          created_at: string
+          decided_at: string | null
+          decision: string | null
+          id: string
+          price_eur: number | null
+          source_id: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          added_at?: string
+          created_at?: string
+          decided_at?: string | null
+          decision?: string | null
+          id?: string
+          price_eur?: number | null
+          source_id?: string | null
+          title: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          added_at?: string
+          created_at?: string
+          decided_at?: string | null
+          decision?: string | null
+          id?: string
+          price_eur?: number | null
+          source_id?: string | null
+          title?: string
           updated_at?: string
           user_id?: string
         }

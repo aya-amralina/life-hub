@@ -48,9 +48,12 @@ export const WORK_AREAS = [
 ] as const
 
 export const STUDY_TYPES = ['Лекция', 'HA', 'Сверка', 'Задача', 'Тест', 'Подготовка', 'Орга', 'Hausarbeit', 'Туториум'] as const
-export const STUDY_STATUSES = ['открыто', 'готово'] as const
+export const STUDY_STATUSES = ['открыто', 'готово', 'снято'] as const
 
-export const BODY_STATUSES = ['Не начато', 'В процессе', 'Готово'] as const
+export const BODY_STATUSES = ['Не начато', 'В процессе', 'Готово', 'Отменено'] as const
+
+/** Money and personal items. */
+export const PLAIN_STATUSES = ['открыто', 'готово', 'снято'] as const
 
 export const WEEK_CATEGORIES = [
   'Продукты',
@@ -64,8 +67,31 @@ export type WeekCategory = (typeof WEEK_CATEGORIES)[number]
 
 export const ACCOUNTS = ['Revolut', 'Sparkasse', 'Наличные', 'Казахстанская карта'] as const
 
+/** Statuses that mean «done» in any sphere (in addition to done_at). */
+export const DONE_STATUSES: readonly string[] = ['Erledigt', 'готово', 'Готово']
+/** «Отменить» / «снять»: closed without being done (not counted as done). */
+export const CANCELLED_STATUSES: readonly string[] = ['Verworfen', 'снято', 'Отменено']
 /** Statuses that mean «closed» in any sphere (in addition to done_at). */
-export const CLOSED_STATUSES: readonly string[] = ['Erledigt', 'Verworfen', 'готово', 'Готово']
+export const CLOSED_STATUSES: readonly string[] = [...DONE_STATUSES, ...CANCELLED_STATUSES]
+
+/** Status a sphere uses for «снять» / «отменить». */
+export const CANCEL_STATUS: Record<Sphere, string> = {
+  work: 'Verworfen',
+  study: 'снято',
+  body: 'Отменено',
+  money: 'снято',
+  personal: 'снято',
+}
+
+export const INTENSITIES = ['лёгкая', 'средняя', 'интенсивная'] as const
+export type Intensity = (typeof INTENSITIES)[number]
+/** Default points per 10 minutes by intensity (rule 25). */
+export const INTENSITY_POINTS: Record<Intensity, number> = { лёгкая: 1, средняя: 2, интенсивная: 3 }
+
+export const INTAKE_KINDS = ['витамин', 'лекарство', 'другое'] as const
+
+/** Work item type for a recorded success (Erfolg). */
+export const ERFOLG_TYPE = 'Erfolg'
 
 /** Glow-up tracker dropdowns («Трекер»). */
 export const WORKOUT_TYPES = ['Силовая A', 'Силовая B', 'Минимум 15 мин', 'Группа USC', 'Болдеринг', 'Йога', 'Прогулка'] as const

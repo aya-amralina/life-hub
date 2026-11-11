@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { activeHabits, habitsDone, stageForDate, weekHabitShare, type HabitLog, type StageLike } from './habits'
+import { activeHabits, habitsDone, minimumDone, minimumSet, stageForDate, visibleHabits, weekHabitShare, type HabitLog, type StageLike } from './habits'
 
 const stage = (name: string, start: string, end: string, habits: string[]): StageLike => ({
   name,
@@ -39,8 +39,26 @@ describe('rule 13 — «минимум» counts the day', () => {
     expect(habitsDone(log('d', { morning: true, water: true }), ['morning', 'outside', 'water'])).toBe(2)
     expect(habitsDone(null, ['morning'])).toBe(0)
   })
-  it('minimum mode = all active done', () => {
-    expect(habitsDone(log('d', { minimum_mode: true }), ['morning', 'outside'])).toBe(2)
+  it('minimum mode: the day counts fully once the whole set is marked', () => {
+    const all = ['morning', 'outside', 'water'] as const
+    expect(habitsDone(log('d', { minimum_mode: true, water: true, outside: true }), all, ['water', 'outside'])).toBe(3)
+    expect(minimumDone(log('d', { minimum_mode: true, water: true, outside: true }), ['water', 'outside'])).toBe(true)
+  })
+  it('minimum mode with the set not complete: only marked habits of the set count', () => {
+    const all = ['morning', 'outside', 'water'] as const
+    expect(habitsDone(log('d', { minimum_mode: true, water: true, morning: true }), all, ['water', 'outside'])).toBe(1)
+    expect(habitsDone(log('d', { minimum_mode: true }), all, ['water', 'outside'])).toBe(0)
+    expect(minimumDone(log('d', { minimum_mode: true, water: true }), ['water', 'outside'])).toBe(false)
+  })
+  it('minimum set: stage field, default water + 10 minutes outside, unknown keys ignored', () => {
+    expect(minimumSet(null)).toEqual(['outside', 'water'])
+    expect(minimumSet({ minimum_habits: ['morning'] })).toEqual(['morning'])
+    expect(minimumSet({ minimum_habits: ['zzz'] })).toEqual(['outside', 'water'])
+  })
+  it('in minimum mode only the set is shown', () => {
+    const st = { habits: ['morning', 'outside', 'water'], minimum_habits: ['water'] }
+    expect(visibleHabits(st, true)).toEqual(['water'])
+    expect(visibleHabits(st, false)).toEqual(['morning', 'outside', 'water'])
   })
 })
 
@@ -55,9 +73,13 @@ describe('rule 14 — week habit share', () => {
     ]
     expect(weekHabitShare(logs, [], mon, '2026-11-11')).toBeCloseTo(6 / 9)
   })
-  it('missing days count as zero, no reset, minimum day counts fully', () => {
-    const logs = [log('2026-11-09', { minimum_mode: true })]
+  it('missing days count as zero, no reset, a complete minimum day counts fully', () => {
+    const logs = [log('2026-11-09', { minimum_mode: true, water: true, outside: true })]
     expect(weekHabitShare(logs, [], mon, '2026-11-10')).toBeCloseTo(3 / 6)
+  })
+  it('an incomplete minimum day counts its marked habits of the set', () => {
+    const logs = [log('2026-11-09', { minimum_mode: true, water: true })]
+    expect(weekHabitShare(logs, [], mon, '2026-11-09')).toBeCloseTo(1 / 3)
   })
   it('past week uses all 7 days', () => {
     const logs = [log('2026-11-09', { morning: true })]

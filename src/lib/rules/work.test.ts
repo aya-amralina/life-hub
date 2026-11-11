@@ -50,3 +50,55 @@ describe('board grouping', () => {
     expect(g.map((x) => x.status)).toEqual(['Offen', 'In Arbeit', 'Blockiert'])
   })
 })
+
+describe('board groups and Erfolge', async () => {
+  const { boardGroups, fridayQueue, isErfolg } = await import('./work')
+  const today = '2026-11-09'
+  const b = (id: string, p: Record<string, unknown> = {}) => ({
+    id,
+    status: 'Offen',
+    waiting_on: null,
+    people: [],
+    updated_at: '2026-11-01T10:00:00Z',
+    done_at: null,
+    due_date: null,
+    ready_by: null,
+    starts_on: null,
+    type: 'Aufgabe',
+    area: null,
+    outcome: null,
+    ...p,
+  })
+  const items = [
+    b('work', { status: 'In Arbeit' }),
+    b('review', { status: 'Im Review' }),
+    b('open'),
+    b('soon', { starts_on: '2026-11-16' }),
+    b('waiting', { status: 'Wartet auf Antwort' }),
+    b('parked', { status: 'Geparkt' }),
+    b('doneNow', { status: 'Erledigt', done_at: '2026-11-08T10:00:00Z' }),
+    b('doneOld', { status: 'Erledigt', done_at: '2026-10-01T10:00:00Z' }),
+    b('dropped', { status: 'Verworfen' }),
+    b('erfolg', { type: 'Erfolg', status: 'Erledigt', done_at: '2026-11-08T10:00:00Z' }),
+  ]
+  it('groups in board order; Скоро and Стоит; only last week’s Erledigt; Erfolge off the board', () => {
+    expect(boardGroups(items, today).map((g) => [g.key, g.items.map((i) => i.id)])).toEqual([
+      ['In Arbeit', ['work']],
+      ['Im Review', ['review']],
+      ['Offen', ['open']],
+      ['soon', ['soon']],
+      ['stalled', ['waiting', 'parked']],
+      ['Erledigt', ['doneNow']],
+    ])
+  })
+  it('Erfolg: recorded, or done with «что это дало»', () => {
+    expect(isErfolg({ type: 'Erfolg', status: 'Erledigt', done_at: null, outcome: null })).toBe(true)
+    expect(isErfolg({ type: 'Aufgabe', status: 'Erledigt', done_at: null, outcome: 'Kunde live' })).toBe(true)
+    expect(isErfolg({ type: 'Aufgabe', status: 'Erledigt', done_at: null, outcome: '  ' })).toBe(false)
+    expect(isErfolg({ type: 'Aufgabe', status: 'Offen', done_at: null, outcome: 'x' })).toBe(false)
+  })
+  it('Friday review: open tasks, least recently updated first', () => {
+    const q = fridayQueue([b('new', { updated_at: '2026-11-08T00:00:00Z' }), b('old', { updated_at: '2026-10-01T00:00:00Z' }), b('closed', { status: 'Erledigt' })])
+    expect(q.map((i) => i.id)).toEqual(['old', 'new'])
+  })
+})

@@ -11,6 +11,7 @@ export type TxLike = {
   envelope_id: string | null
   is_planned: boolean
   confirmed_at: string | null
+  cancelled_at?: string | null
 }
 
 export type CategoryWeek = {
@@ -33,9 +34,14 @@ export type MoneyWeek = {
 
 const isWeekCategory = (c: string | null): c is WeekCategory => c !== null && (WEEK_CATEGORIES as readonly string[]).includes(c)
 
-/** A planned operation counts as fact only once confirmed. */
-export function isFact(t: Pick<TxLike, 'is_planned' | 'confirmed_at'>): boolean {
-  return !t.is_planned || t.confirmed_at !== null
+/** A planned operation counts as fact only once confirmed; a cancelled one never. */
+export function isFact(t: Pick<TxLike, 'is_planned' | 'confirmed_at' | 'cancelled_at'>): boolean {
+  return !t.cancelled_at && (!t.is_planned || t.confirmed_at !== null)
+}
+
+/** Still in the plan: not cancelled («Отменить» on «Пришло? / Списалось?»). */
+export function isInPlan(t: Pick<TxLike, 'cancelled_at'>): boolean {
+  return !t.cancelled_at
 }
 
 /**
@@ -70,4 +76,97 @@ export function moneyWeek(limits: readonly LimitLike[], txs: readonly TxLike[], 
     status: deviationCents > 0 ? 'over' : 'within',
     hasLimits: limitOf.size > 0,
   }
+}
+
+/** End of the budget (SPEC rule 1: «На счетах 31.12»). */
+export const BUDGET_END: ISODate = '2026-12-31'
+
+/** Rule 1: signed amount in cents — opening and income +, expense −, transfer 0. */
+export function signedCents(t: Pick<TxLike, 'kind' | 'amount_eur'>): number {
+  const c = toCents(t.amount_eur)
+  if (t.kind === 'opening' || t.kind === 'income') return c
+  if (t.kind === 'expense') return -c
+  return 0
+}
+
+/**
+ * Rule 1 «Баланс и прогноз»: running sum of signed amounts up to `date` (inclusive). `fact` counts only
+ * confirmed operations (the «факт» line); `plan` adds planned ones not yet confirmed (the forecast).
+ */
+export function balanceAt(txs: readonly TxLike[], date: ISODate, mode: 'fact' | 'plan'): number {
+  let sum = 0
+  for (const t of txs) {
+    if (t.date > date || !isInPlan(t)) continue
+    if (mode === 'fact' && !isFact(t)) continue
+    sum += signedCents(t)
+  }
+  return sum
+}
+
+export type PlannedQuestion<T> = { tx: T; question: 'Пришло?' | 'Списалось?' }
+
+/**
+ * Rule 18: a planned operation whose day has come (date ≤ today) and that is neither confirmed nor
+ * cancelled asks once: income — «Пришло?», expense and transfer — «Списалось?». Oldest first.
+ */
+export function plannedQuestions<T extends TxLike & { id: string }>(txs: readonly T[], today: ISODate): PlannedQuestion<T>[] {
+  return txs
+    .filter((t) => t.is_planned && t.confirmed_at === null && !t.cancelled_at && t.kind !== 'opening' && t.date <= today)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
+    .map((tx) => ({ tx, question: tx.kind === 'income' ? 'Пришло?' : 'Списалось?' }))
+}
+
+/** Planned operations still ahead (after today), in date order — «Дальше по плану». */
+export function upcomingPlanned<T extends TxLike>(txs: readonly T[], today: ISODate): T[] {
+  return txs
+    .filter((t) => t.is_planned && t.confirmed_at === null && !t.cancelled_at && t.date > today)
+    .sort((a, b) => a.date.localeCompare(b.date))
+}
+
+/**
+ * Rule 3: an overspent week suggests cutting next week's limits by the overspend, per category
+ * (applied only after confirmation). Returns the new limits; a limit never drops below 0.
+ */
+export function cutNextWeek(week: MoneyWeek, nextLimits: readonly LimitLike[]): { category: WeekCategory; limitCents: number; cutCents: number }[] {
+  const next = new Map<string, number>(nextLimits.map((l) => [l.category, toCents(l.limit_eur)]))
+  return week.categories
+    .filter((c) => c.deviationCents > 0)
+    .map((c) => {
+      const before = next.get(c.category) ?? c.limitCents
+      const limitCents = Math.max(0, before - c.deviationCents)
+      return { category: c.category, limitCents, cutCents: before - limitCents }
+    })
+}
+
+export type EnvelopeLike = { id: string; planned_eur: number | null }
+
+/** Rule 4: envelope card — planned / spent (confirmed expenses with this envelope) / left; over > 0 = overspent. */
+export function envelopeSummary(envelope: EnvelopeLike, txs: readonly TxLike[]) {
+  const plannedCents = envelope.planned_eur === null ? 0 : toCents(envelope.planned_eur)
+  const spentCents = txs
+    .filter((t) => t.envelope_id === envelope.id && t.kind === 'expense' && isFact(t))
+    .reduce((s, t) => s + toCents(t.amount_eur), 0)
+  return { plannedCents, spentCents, leftCents: Math.max(0, plannedCents - spentCents), overCents: Math.max(0, spentCents - plannedCents) }
+}
+
+export type MonthRow = { month: string; incomeCents: number; expenseCents: number; endCents: number; hasPlan: boolean }
+
+/**
+ * Months table (like the «Обзор» sheet): per calendar month income and expenses (planned ones included,
+ * cancelled ones not) and the balance at its end with the plan.
+ */
+export function monthsTable(txs: readonly TxLike[]): MonthRow[] {
+  const months = [...new Set(txs.filter((t) => t.kind !== 'opening').map((t) => t.date.slice(0, 7)))].sort()
+  return months.map((month) => {
+    const inMonth = txs.filter((t) => t.date.startsWith(month) && isInPlan(t))
+    const sum = (kind: string) => inMonth.filter((t) => t.kind === kind).reduce((s, t) => s + toCents(t.amount_eur), 0)
+    const last = `${month}-31`
+    return {
+      month,
+      incomeCents: sum('income'),
+      expenseCents: sum('expense'),
+      endCents: balanceAt(txs, last, 'plan'),
+      hasPlan: inMonth.some((t) => !isFact(t)),
+    }
+  })
 }

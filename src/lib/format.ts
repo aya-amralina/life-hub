@@ -54,3 +54,24 @@ export function applyAmountKey(current: string, key: string): string {
   if (int === '0') return key
   return int.length >= 6 ? current : current + key
 }
+
+/** Russian plural: plural(2, ['день', 'дня', 'дней']) → 'дня'. */
+export function plural(n: number, forms: readonly [string, string, string]): string {
+  const a = Math.abs(n) % 100
+  const b = a % 10
+  if (a > 10 && a < 20) return forms[2]
+  if (b === 1) return forms[0]
+  if (b >= 2 && b <= 4) return forms[1]
+  return forms[2]
+}
+
+/** 'вода', 'вода и 10 минут на улице', 'a, b и c'. */
+export function joinRu(parts: readonly string[]): string {
+  if (parts.length <= 1) return parts[0] ?? ''
+  return `${parts.slice(0, -1).join(', ')} и ${parts[parts.length - 1]}`
+}
+
+/** '14:00:00' (Postgres time) → '14:00'. */
+export function formatTime(time: string): string {
+  return time.slice(0, 5)
+}
