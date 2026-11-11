@@ -161,6 +161,47 @@ class SupabaseRest:
         total = headers.get("content-range", "*/0").split("/")[-1]
         return int(total) if total.isdigit() else 0
 
+    def select(self, table: str, columns: str, filters: dict[str, str] | None = None) -> list[dict[str, Any]]:
+        """All rows (paged by 1000) — for the importer's own bookkeeping, never printed."""
+        out: list[dict[str, Any]] = []
+        offset = 0
+        while True:
+            query = {"select": columns, "limit": "1000", "offset": str(offset), **(filters or {})}
+            _, data, _ = self.request("GET", f"/rest/v1/{table}", query=query)
+            out.extend(data or [])
+            if not data or len(data) < 1000:
+                return out
+            offset += 1000
+
+    def insert(
+        self,
+        table: str,
+        rows: list[dict[str, Any]],
+        on_conflict: str = "user_id,source_id",
+        *,
+        ignore_duplicates: bool = True,
+        returning: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Insert in chunks; on a conflict keep the existing row (ignore) or merge the sent columns."""
+        out: list[dict[str, Any]] = []
+        resolution = "ignore-duplicates" if ignore_duplicates else "merge-duplicates"
+        for start in range(0, len(rows), 500):
+            query = {"on_conflict": on_conflict}
+            if returning:
+                query["select"] = returning
+            _, data, _ = self.request(
+                "POST",
+                f"/rest/v1/{table}",
+                query=query,
+                body=rows[start : start + 500],
+                prefer=f"resolution={resolution},return={'representation' if returning else 'minimal'}",
+            )
+            out.extend(data or [])
+        return out
+
+    def patch(self, table: str, filters: dict[str, str], body: dict[str, Any]) -> None:
+        self.request("PATCH", f"/rest/v1/{table}", query=filters, body=body, prefer="return=minimal")
+
     def upsert(self, table: str, rows: list[dict[str, Any]], on_conflict: str = "user_id,source_id") -> None:
         for start in range(0, len(rows), 500):
             self.request(

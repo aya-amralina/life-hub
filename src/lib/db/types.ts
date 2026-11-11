@@ -116,8 +116,6 @@ export type Database = {
           updated_at: string
           user_id: string
           water: boolean
-          workout_min: number | null
-          workout_type: string | null
         }
         Insert: {
           body_cream?: boolean
@@ -137,8 +135,6 @@ export type Database = {
           updated_at?: string
           user_id?: string
           water?: boolean
-          workout_min?: number | null
-          workout_type?: string | null
         }
         Update: {
           body_cream?: boolean
@@ -158,8 +154,6 @@ export type Database = {
           updated_at?: string
           user_id?: string
           water?: boolean
-          workout_min?: number | null
-          workout_type?: string | null
         }
         Relationships: []
       }

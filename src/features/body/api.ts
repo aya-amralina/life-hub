@@ -81,8 +81,6 @@ function emptyLog(date: ISODate): Partial<DailyLog> {
     water: false,
     body_cream: false,
     minimum_mode: false,
-    workout_type: null,
-    workout_min: null,
     face_evening: null,
     energy: null,
     slump: null,

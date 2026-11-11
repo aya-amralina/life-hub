@@ -47,7 +47,7 @@ export const WORK_AREAS = [
   'LIS Front',
 ] as const
 
-export const STUDY_TYPES = ['Лекция', 'HA', 'Сверка', 'Задача', 'Тест', 'Подготовка', 'Орга', 'Hausarbeit', 'Туториум'] as const
+export const STUDY_TYPES = ['Лекция', 'HA', 'Сверка', 'Задача', 'Тест', 'Экзамен', 'Подготовка', 'Орга', 'Hausarbeit', 'Туториум'] as const
 export const STUDY_STATUSES = ['открыто', 'готово', 'снято'] as const
 
 export const BODY_STATUSES = ['Не начато', 'В процессе', 'Готово', 'Отменено'] as const
