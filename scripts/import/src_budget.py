@@ -23,6 +23,7 @@ def build(wb, b: Batch) -> None:
 def _articles(ws, b: Batch) -> list[tuple[int, dict]]:
     ops: list[tuple[int, dict]] = []
     skipped: list[int] = []
+    ended_weeks: list[int] = []
     for n, r in rows(ws, 1):
         sid, date, group, title, amount, sign, note = text(r[0]), excel_date(r[2]), text(r[3]), text(r[4]), number(r[5]), number(r[6]), text(r[9])
         if not sid or not date or amount is None or not title:
@@ -39,6 +40,13 @@ def _articles(ws, b: Batch) -> list[tuple[int, dict]]:
             continue
         # «Неделя N: …» without «(факт)» is a week budget (rule 18a): planned, never auto-confirmed, no question.
         week_budget = kind == "expense" and group == "Жизнь" and title.startswith("Неделя") and "(факт)" not in title
+        if week_budget and date + dt.timedelta(days=6 - date.weekday()) < b.today:
+            # a week that ended before the import: its budget becomes the week's fact (correctable in the app)
+            week_budget = False
+            title = re.sub(r"^(Неделя\s+\d+)\s*:", r"\1 (факт):", title, count=1)
+            if "(факт)" not in title:
+                title = re.sub(r"^(Неделя\s+\d+)", r"\1 (факт)", title, count=1)
+            ended_weeks.append(n)
         planned = week_budget or date > b.today
         row = {
             "source_id": f"budget:{sid}",
@@ -64,7 +72,6 @@ def _articles(ws, b: Batch) -> list[tuple[int, dict]]:
     planned = [o for _, o in ops if o["is_planned"]]
     weekly = [o for o in planned if o["week_budget"]]
     monday = b.today - dt.timedelta(days=b.today.weekday())
-    ended = [o for o in weekly if dt.date.fromisoformat(o["date"]) < monday]
     current = [o for o in weekly if monday <= dt.date.fromisoformat(o["date"]) <= monday + dt.timedelta(days=6)]
     b.report.append(
         f"Бюджет · Статьи: {len(ops)} операций (старт {by_kind['opening']}, доходы {by_kind['income']}, расходы {by_kind['expense']}); "
@@ -73,8 +80,10 @@ def _articles(ws, b: Batch) -> list[tuple[int, dict]]:
     b.report.append(
         f"  плановые: обычные {len(planned) - len(weekly)} (доходы {sum(o['kind'] == 'income' and not o['week_budget'] for o in planned)}, "
         f"расходы {sum(o['kind'] == 'expense' and not o['week_budget'] for o in planned)}) — спросят «Пришло? / Списалось?» в свой день; "
-        f"бюджеты недель «Неделя N» {len(weekly)} — без вопроса (текущая неделя {len(current)}, уже закончились и уйдут из плана {len(ended)})"
+        f"бюджеты недель «Неделя N» {len(weekly)} — без вопроса (текущая неделя {len(current)})"
     )
+    if ended_weeks:
+        b.report.append(f"  недели, закончившиеся до импорта, → подтверждённые «Неделя N (факт)» на сумму бюджета: строки {rows_list(ended_weeks)}")
     if skipped:
         b.report.append(f"  пропущены строки без ID/даты/суммы (сноски): {rows_list(skipped)}")
     return ops

@@ -28,6 +28,7 @@ from model import Batch
 from supabase_rest import ConfigError, SupabaseError, SupabaseRest, config_from_env, load_env
 from xl import DATA, col, find_file
 
+# weeks.end_date is generated in the base (start_date + 6) — never sent.
 # Structure check (Ая edits the files): (sheet, header row) → required header texts by column.
 EXPECTED = {
     "budget": {
@@ -62,7 +63,7 @@ TABLE_ORDER = [
     "activity_types", "activities", "daily_logs", "strength_sets", "measurements", "plan_stages",
 ]
 CONFLICT = {"week_limits": "user_id,week_id,category", "people": "user_id,name", "activity_types": "user_id,name", "measurements": "user_id,date", "weeks": "user_id,start_date"}
-WEEK_COLUMNS = ["start_date", "end_date", "budget_week_no", "study_week", "glowup_week_no", "place_mode", "events", "capacity_base_h", "capacity_max_h"]
+WEEK_COLUMNS = ["start_date", "budget_week_no", "study_week", "glowup_week_no", "place_mode", "events", "capacity_base_h", "capacity_max_h"]
 DAILY_FIELDS = ["morning", "outside", "water", "body_cream", "face_evening", "energy", "slump", "sleep_h", "mood", "note"]
 
 
@@ -233,8 +234,8 @@ def write(b: Batch, rest: SupabaseRest, uid: str, st: State) -> None:
             _write_days(rest, uid, rows, st)
             continue
         ready = [p for p in (prep(t, r) for r in rows) if p]
-        if t not in ("week_limits",):
-            ready = [r for r in ready if r.get("source_id") not in st.source_ids.get(t, set())]
+        # rows already imported are the app's now (limits too); only limits set by hand get replaced on the first run
+        ready = [r for r in ready if r.get("source_id") not in st.source_ids.get(t, set())]
         # rows with different key sets go separately: a missing key must stay a DB default, not null
         groups: dict[frozenset, list] = defaultdict(list)
         for r in ready:

@@ -171,7 +171,10 @@ def _tasks(ws, b: Batch) -> None:
         dates: dict[str, str | None] = {"due_date": due.date.isoformat() if due else None, "starts_on": None, "happens_on": None}
         rng = parse_range(when) if when else None
         single = any_date(re.sub(r"^\D+", "", when)) if when and not rng and re.search(r"\d{1,2}\.\d{1,2}", when) else None
-        if due and (rng or single):
+        if due and rng and rng[1] == due.date and rng[0] <= due.date:
+            dates["starts_on"] = rng[0].isoformat()  # the plan range ends on the deadline: start = its beginning
+            from_plan["диапазон до «Срока» → с даты"] += 1
+        elif due and (rng or single):
             disputed.append(n)
             b.private.append(f"Глоу-ап · Задачи, строка {n}: срок {due.date:%d.%m} из «Срок»; «Когда по плану»: {when} — в заметку")
         elif not due and rng:
