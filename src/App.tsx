@@ -10,6 +10,7 @@ import { MoneyScreen } from '@/features/money/MoneyScreen'
 import { StudyScreen } from '@/features/study/StudyScreen'
 import { WorkScreen } from '@/features/work/WorkScreen'
 import { TodayScreen } from '@/features/today/TodayScreen'
+import { ItemScreen } from '@/features/items/ItemScreen'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -27,6 +28,7 @@ const router = createBrowserRouter([
       { path: 'work/*', element: <WorkScreen /> },
       { path: 'study/*', element: <StudyScreen /> },
       { path: 'body/*', element: <BodyScreen /> },
+      { path: 'item/:id', element: <ItemScreen /> },
       { path: 'settings', element: <SettingsScreen /> },
       { path: '*', element: <Navigate to="/" replace /> },
     ],

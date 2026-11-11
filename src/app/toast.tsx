@@ -4,7 +4,7 @@ import { ToastContext, type ShowToast, type ToastInput } from './toastContext'
 
 type ToastData = ToastInput & { id: number }
 
-/** Inverted toast above the tab bar with an optional action («Отменить»). Auto-hides after 4 s. */
+/** Inverted toast above the tab bar with an optional action («Отменить»). Auto-hides after 5 s. */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<ToastData | null>(null)
   const seq = useRef(0)
@@ -12,7 +12,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!toast) return
-    const timer = setTimeout(() => setToast(null), 4000)
+    const timer = setTimeout(() => setToast(null), 5000)
     return () => clearTimeout(timer)
   }, [toast])
 

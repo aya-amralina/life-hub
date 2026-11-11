@@ -5,7 +5,7 @@ import type { ISODate } from '@/lib/dates'
 
 export type Week = Tables<'weeks'>
 
-export const weekKeys = { byStart: (monday: ISODate) => ['weeks', monday] as const }
+export const weekKeys = { prefix: ['weeks'] as const, byStart: (monday: ISODate) => ['weeks', monday] as const, all: ['weeks', 'all'] as const }
 
 /** The week row for a Monday (null before import / manual setup). */
 export function useWeek(monday: ISODate) {
@@ -41,4 +41,28 @@ export function useEnsureWeek() {
     mutationFn: ensureWeek,
     onSuccess: (week) => qc.setQueryData(weekKeys.byStart(week.start_date), week),
   })
+}
+
+/** All week rows (a few dozen): study weeks, capacities, places. */
+export function useAllWeeks() {
+  return useQuery({
+    queryKey: weekKeys.all,
+    queryFn: async (): Promise<Week[]> => {
+      const { data, error } = await supabase.from('weeks').select('*').order('start_date')
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+/** Get or create a week row and refresh every week cache (a screen may have cached «no row yet»). */
+export function useWeekRow() {
+  const qc = useQueryClient()
+  return async (monday: ISODate, known: readonly Week[] = []): Promise<Week> => {
+    const found = known.find((w) => w.start_date === monday)
+    if (found) return found
+    const week = await ensureWeek(monday)
+    await qc.invalidateQueries({ queryKey: weekKeys.prefix })
+    return week
+  }
 }

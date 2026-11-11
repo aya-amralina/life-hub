@@ -5,14 +5,11 @@ import { ru } from 'date-fns/locale'
 import { useOpenAdd } from '@/app/addSheetContext'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
-import { CheckItem, OverdueTag } from '@/components/ui/CheckItem'
 import { EmptyState, SkeletonCard } from '@/components/ui/Feedback'
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
-import { SPHERE_CLASS, SPHERE_LABEL, type Sphere } from '@/lib/constants'
 import {
   formatDayMonth,
   formatLongDate,
-  formatRelativeDay,
   formatTimeBerlin,
   parseISODate,
   todayBerlin,
@@ -20,12 +17,16 @@ import {
   weekdayShort,
   type ISODate,
 } from '@/lib/dates'
-import { burning, completedOn, nextTargetAfterHorizon } from '@/lib/rules/items'
+import { burning, completedOn, itemsOfDay, nextTargetAfterHorizon } from '@/lib/rules/items'
 import { nextTest } from '@/lib/rules/study'
 import { nachhaken } from '@/lib/rules/work'
 import { EveningCard } from '@/features/body/EveningCard'
 import { HabitsCard } from '@/features/body/HabitsCard'
-import { useItems, useToggleItem, type Item } from '@/features/items/api'
+import { useItems, useUpdateItem } from '@/features/items/api'
+import { donePatch, reopenPatch } from '@/features/items/donePatch'
+import { ItemQuestions } from '@/features/items/ItemQuestions'
+import { ItemRow } from '@/features/items/ItemRow'
+import { MoneyQuestions } from '@/features/money/MoneyQuestions'
 import { MoneyTotal } from '@/features/money/MoneyTotal'
 import { useMoneyWeek } from '@/features/money/useMoneyWeek'
 import { InstallHint } from '@/features/settings/InstallHint'
@@ -55,6 +56,9 @@ export function TodayScreen() {
       />
       <WeekLine week={week.data ?? null} />
       <InstallHint compact />
+      {/* Questions stand first until answered (design 3m). */}
+      <MoneyQuestions />
+      <ItemQuestions />
       <HabitsCard date={today} to="/body" />
       <BurningCard today={today} />
       <MoneyCard today={today} />
@@ -93,15 +97,16 @@ function WeekLine({ week }: { week: Week | null }) {
 
 function BurningCard({ today }: { today: ISODate }) {
   const items = useItems()
-  const toggle = useToggleItem()
+  const update = useUpdateItem()
 
   if (items.isPending) return <SkeletonCard />
   if (items.isError) return <EmptyState title="Не удалось загрузить">Проверь сеть — данные подтянутся сами.</EmptyState>
 
-  const hot = burning(items.data, today)
+  const dayItems = itemsOfDay(items.data, today)
+  const hot = burning(items.data, today).filter((b) => !dayItems.includes(b.item))
   const doneToday = completedOn(items.data, today)
 
-  if (hot.length === 0 && doneToday.length === 0) {
+  if (hot.length === 0 && dayItems.length === 0 && doneToday.length === 0) {
     const next = nextTargetAfterHorizon(items.data, today)
     return (
       <EmptyState title="Ничего не горит">
@@ -112,58 +117,32 @@ function BurningCard({ today }: { today: ISODate }) {
     )
   }
 
+  const open = dayItems.length + hot.length
   return (
     <Card>
       <CardHeader
         title="Горит"
         icon={<Flame size={20} strokeWidth={1.75} aria-hidden="true" className="text-ink2" />}
-        context={hot.length > 0 ? `${hot.length}` : 'всё сделано'}
+        context={open > 0 ? `${open} · на 3 дня вперёд` : 'всё сделано'}
       />
       <div className="flex flex-col gap-2">
-        {hot.map(({ item, date, overdue }) => (
-          <ItemRow key={item.id} item={item} meta={formatRelativeDay(date, today)} overdue={overdue} onToggle={() => toggle.mutate({ id: item.id, done: true })} />
+        {dayItems.map((item) => (
+          <ItemRow key={item.id} item={item} today={today} onToggle={() => update.mutate({ id: item.id, patch: donePatch(item.sphere) })} />
+        ))}
+        {hot.map(({ item }) => (
+          <ItemRow key={item.id} item={item} today={today} onToggle={() => update.mutate({ id: item.id, patch: donePatch(item.sphere) })} />
         ))}
         {doneToday.map((item) => (
-          <ItemRow key={item.id} item={item} checked meta={`готово в ${formatTimeBerlin(item.done_at!)}`} onToggle={() => toggle.mutate({ id: item.id, done: false })} />
+          <ItemRow
+            key={item.id}
+            item={item}
+            today={today}
+            meta={`готово в ${formatTimeBerlin(item.done_at!)}`}
+            onToggle={() => update.mutate({ id: item.id, patch: reopenPatch(item.status === 'Erledigt' || item.status === 'Готово' || item.status === 'готово' ? null : item.status, item.sphere) })}
+          />
         ))}
       </div>
     </Card>
-  )
-}
-
-function ItemRow({
-  item,
-  meta,
-  overdue = false,
-  checked = false,
-  onToggle,
-}: {
-  item: Item
-  meta: string
-  overdue?: boolean
-  checked?: boolean
-  onToggle: () => void
-}) {
-  const sphere = (item.sphere in SPHERE_LABEL ? item.sphere : 'personal') as Sphere
-  const label = SPHERE_LABEL[sphere]
-  return (
-    <CheckItem
-      title={item.title}
-      lang={sphere === 'work' || sphere === 'study' ? 'de' : undefined}
-      checked={checked}
-      dotClass={SPHERE_CLASS[sphere].dot}
-      onToggle={onToggle}
-      meta={
-        overdue && item.due_date ? (
-          <>
-            <span>{label}</span>
-            <OverdueTag>{`Срок прошёл · ${weekdayShort(item.due_date).toLowerCase()} ${formatDayMonth(item.due_date)}`}</OverdueTag>
-          </>
-        ) : (
-          `${label} · ${meta}`
-        )
-      }
-    />
   )
 }
 

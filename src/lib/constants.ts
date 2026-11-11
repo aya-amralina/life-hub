@@ -93,7 +93,5 @@ export const INTAKE_KINDS = ['витамин', 'лекарство', 'друго
 /** Work item type for a recorded success (Erfolg). */
 export const ERFOLG_TYPE = 'Erfolg'
 
-/** Glow-up tracker dropdowns («Трекер»). */
-export const WORKOUT_TYPES = ['Силовая A', 'Силовая B', 'Минимум 15 мин', 'Группа USC', 'Болдеринг', 'Йога', 'Прогулка'] as const
-export const WORKOUT_MINUTES = [15, 30, 45, 60, 90] as const
+/** Glow-up tracker dropdown («Трекер»). Workouts are activities now (activity_types). */
 export const FACE_EVENING = ['Ретиноид', 'Азелаинка', 'Пропуск'] as const

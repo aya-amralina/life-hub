@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useState, type Dispatch, type SetStateAction } from 'react'
 import { Navigate, Outlet } from 'react-router'
 import { AddSheetContext, type AddMode, type OpenAdd } from '@/app/addSheetContext'
 import { useAuth } from '@/app/authContext'
@@ -8,6 +8,7 @@ import { OfflinePill, SkeletonCard } from '@/components/ui/Feedback'
 import { TabBar } from '@/components/ui/TabBar'
 import type { Sphere } from '@/lib/constants'
 import { AddSheet } from '@/features/add/AddSheet'
+import { useRollover } from '@/features/study/useRollover'
 
 const SPHERE_BY_PATH: Record<string, Sphere> = { money: 'money', work: 'work', study: 'study', body: 'body' }
 const sphereForPath = (path: string): Sphere => SPHERE_BY_PATH[path.split('/')[1] ?? ''] ?? 'personal'
@@ -35,6 +36,24 @@ export function AppShell() {
     )
   }
   if (!session) return <Navigate to="/login" replace />
+  return <Shell adding={adding} setAdding={setAdding} openAdd={openAdd} close={close} online={online} />
+}
+
+/** Signed-in frame; background jobs (study rollover) run only with a session. */
+function Shell({
+  adding,
+  setAdding,
+  openAdd,
+  close,
+  online,
+}: {
+  adding: { mode: AddMode; sphere: Sphere } | null
+  setAdding: Dispatch<SetStateAction<{ mode: AddMode; sphere: Sphere } | null>>
+  openAdd: OpenAdd
+  close: () => void
+  online: boolean
+}) {
+  useRollover()
 
   return (
     <AddSheetContext.Provider value={openAdd}>

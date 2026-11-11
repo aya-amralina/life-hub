@@ -20,13 +20,15 @@ export function isItemOpen(item: Pick<ItemLike, 'done_at' | 'status'>): boolean 
   return item.done_at === null && !(item.status !== null && CLOSED_STATUSES.includes(item.status))
 }
 
-/** Done = checked or a «done» status. Cancelled («снято», Verworfen, «Отменено») is closed but not done. */
-export function isItemDone(item: Pick<ItemLike, 'done_at' | 'status'>): boolean {
-  return item.done_at !== null || (item.status !== null && DONE_STATUSES.includes(item.status))
+/** Cancelled («снято», Verworfen, «Отменено»): closed but not done, whatever done_at says. */
+export function isItemCancelled(item: Pick<ItemLike, 'status'>): boolean {
+  return item.status !== null && CANCELLED_STATUSES.includes(item.status)
 }
 
-export function isItemCancelled(item: Pick<ItemLike, 'done_at' | 'status'>): boolean {
-  return item.done_at === null && item.status !== null && CANCELLED_STATUSES.includes(item.status)
+/** Done = checked or a «done» status, and not cancelled. */
+export function isItemDone(item: Pick<ItemLike, 'done_at' | 'status'>): boolean {
+  if (isItemCancelled(item)) return false
+  return item.done_at !== null || (item.status !== null && DONE_STATUSES.includes(item.status))
 }
 
 /** The date that drives urgency: «готово к» if set, otherwise the deadline. */

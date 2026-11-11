@@ -1,7 +1,6 @@
 import type { TablesUpdate } from '@/lib/db/types'
 
-/** New status → patch. Erledigt / Verworfen close the item; any other status reopens it. */
+/** New status → patch. Erledigt closes as done (done_at); Verworfen closes without being done; others reopen. */
 export function statusPatch(status: string): TablesUpdate<'items'> {
-  const closes = status === 'Erledigt' || status === 'Verworfen'
-  return { status, done_at: closes ? new Date().toISOString() : null }
+  return { status, done_at: status === 'Erledigt' ? new Date().toISOString() : null }
 }

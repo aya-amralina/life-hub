@@ -9,7 +9,9 @@ import { Card, CardHeader } from '@/components/ui/Card'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
 import { supabase } from '@/lib/supabase'
+import { ActivitiesSettings } from './ActivitiesSettings'
 import { InstallHint } from './InstallHint'
+import { StagesSettings } from './StagesSettings'
 
 const THEMES = [
   { value: 'system', label: 'Авто' },
@@ -48,6 +50,8 @@ export function SettingsScreen() {
           }}
         />
       </Card>
+      <ActivitiesSettings />
+      <StagesSettings />
       <Card>
         <CardHeader title="Установка" />
         <InstallHint />
@@ -66,7 +70,7 @@ export function SettingsScreen() {
           Выйти
         </Button>
       </Card>
-      <p className="m-0 text-cap text-ink3">Экспорт и восстановление данных появятся на этапе 4.</p>
+      <p className="m-0 text-cap text-ink3">Экспорт и восстановление данных появятся на этапе 5.</p>
     </>
   )
 }

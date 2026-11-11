@@ -1,11 +1,14 @@
+import { useNavigate } from 'react-router'
 import { BottomSheet } from '@/components/ui/BottomSheet'
+import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { cn } from '@/components/ui/cn'
 import { WORK_STATUSES } from '@/lib/constants'
 import type { Item } from '@/features/items/api'
 
-/** Pick a new status — one tap. Erledigt / Verworfen close the item (done_at). */
+/** Pick a new status — one tap. Erledigt closes as done, Verworfen closes without being done. */
 export function StatusSheet({ item, onClose, onPick }: { item: Item | null; onClose: () => void; onPick: (status: string) => void }) {
+  const navigate = useNavigate()
   return (
     <BottomSheet open={item !== null} onClose={onClose} label="Статус">
       {item && (
@@ -29,6 +32,9 @@ export function StatusSheet({ item, onClose, onPick }: { item: Item | null; onCl
               </button>
             ))}
           </div>
+          <Button variant="secondary" onClick={() => navigate(`/item/${item.id}`)}>
+            Открыть карточку
+          </Button>
         </div>
       )}
     </BottomSheet>

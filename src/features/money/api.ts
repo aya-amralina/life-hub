@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import type { Tables, TablesInsert } from '@/lib/db/types'
+import type { Tables, TablesInsert, TablesUpdate } from '@/lib/db/types'
 import { addDaysISO, type ISODate } from '@/lib/dates'
 import type { WeekCategory } from '@/lib/constants'
 import { ensureWeek, weekKeys } from '@/features/weeks/api'
@@ -91,7 +91,74 @@ export function useSaveLimits() {
     },
     onSuccess: (week) => {
       qc.setQueryData(weekKeys.byStart(week.start_date), week)
+      void qc.invalidateQueries({ queryKey: weekKeys.all })
       return qc.invalidateQueries({ queryKey: moneyKeys.all })
     },
   })
+}
+
+export type Envelope = Tables<'envelopes'>
+
+/** All operations (a few hundred): balance, forecast, months, questions. */
+export function useAllTransactions() {
+  return useQuery({
+    queryKey: [...moneyKeys.all, 'tx', 'all'] as const,
+    queryFn: async (): Promise<Transaction[]> => {
+      const { data, error } = await supabase.from('transactions').select('*').order('date').order('created_at').limit(5000)
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+/** Patch an operation (confirm, another date, cancel). Optimistic in every money cache. */
+export function useUpdateTransaction() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, patch }: { id: string; patch: TablesUpdate<'transactions'> }) => {
+      const { error } = await supabase.from('transactions').update(patch).eq('id', id)
+      if (error) throw error
+    },
+    onMutate: async ({ id, patch }) => {
+      await qc.cancelQueries({ queryKey: moneyKeys.all })
+      const prev = qc.getQueriesData<Transaction[]>({ queryKey: moneyKeys.all })
+      for (const [key, data] of prev) {
+        if (Array.isArray(data) && data.some((t) => t && typeof t === 'object' && 'amount_eur' in t)) {
+          qc.setQueryData<Transaction[]>(key, data.map((t) => (t.id === id ? { ...t, ...patch } : t)))
+        }
+      }
+      return { prev }
+    },
+    onError: (_e, _v, ctx) => ctx?.prev.forEach(([key, data]) => qc.setQueryData(key, data)),
+    onSettled: () => qc.invalidateQueries({ queryKey: moneyKeys.all }),
+  })
+}
+
+export function useEnvelopes() {
+  return useQuery({
+    queryKey: [...moneyKeys.all, 'envelopes'] as const,
+    queryFn: async (): Promise<Envelope[]> => {
+      const { data, error } = await supabase.from('envelopes').select('*').eq('archived', false).order('created_at')
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+export function useCreateEnvelope() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (e: TablesInsert<'envelopes'>) => {
+      const { error } = await supabase.from('envelopes').insert(e)
+      if (error) throw error
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: moneyKeys.all }),
+  })
+}
+
+/** Limits of any week by its row id (next week's cut, rule 3). */
+export async function fetchWeekLimits(weekId: string): Promise<WeekLimit[]> {
+  const { data, error } = await supabase.from('week_limits').select('*').eq('week_id', weekId)
+  if (error) throw error
+  return data
 }

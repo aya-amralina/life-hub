@@ -29,7 +29,7 @@
 }
 
 /*
- * Design tokens (design/support.js, «Дизайн-система v0.1»).
+ * Design tokens (docs/DESIGN.md ← design/Life Hub Design System.dc.html, v0.1).
  * light-dark(): first value — светлая тема, second — тёмная.
  * Theme: system by default; <html data-theme="light|dark"> forces one.
  */
@@ -48,6 +48,8 @@
   --inv: light-dark(#22201c, #f1eee7);
   --inv2: light-dark(#47433c, #d2ccc0);
   --on-inv: light-dark(#ffffff, #1a1917);
+  /* text on a solid sphere fill (top step of heat map / habit grid) */
+  --on-sphere: light-dark(#22201c, #1a1917);
 
   --money: light-dark(#5e8c6a, #8dba98);
   --money-soft: light-dark(#e6efe8, #243128);
@@ -67,6 +69,8 @@
   --scrim: light-dark(rgba(34, 32, 28, 0.36), rgba(0, 0, 0, 0.55));
   --shadow-color: light-dark(rgba(34, 32, 28, 0.12), rgba(0, 0, 0, 0.45));
   --seg-shadow-color: light-dark(rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.4));
+  --shadow: 0 8px 32px var(--shadow-color);
+  --seg-shadow: 0 1px 2px var(--seg-shadow-color);
 }
 :root[data-theme='light'] {
   color-scheme: light;
@@ -91,6 +95,7 @@
   --color-inv: var(--inv);
   --color-inv2: var(--inv2);
   --color-on-inv: var(--on-inv);
+  --color-on-sphere: var(--on-sphere);
   --color-money: var(--money);
   --color-money-soft: var(--money-soft);
   --color-work: var(--work);
@@ -120,8 +125,8 @@
   --text-big--line-height: 40px;
   --text-big--letter-spacing: -0.01em;
 
-  --shadow-sheet: 0 8px 32px var(--shadow-color);
-  --shadow-seg: 0 1px 2px var(--seg-shadow-color);
+  --shadow-sheet: var(--shadow);
+  --shadow-seg: var(--seg-shadow);
 
   --animate-skeleton: skeleton 1.2s ease-in-out infinite;
   @keyframes skeleton {

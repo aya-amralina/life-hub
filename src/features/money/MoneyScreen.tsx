@@ -9,13 +9,41 @@ import { WeekSwitcher } from '@/components/ui/WeekSwitcher'
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
 import { addDaysISO, formatDayMonth, formatRelativeDay, todayBerlin, weekStart } from '@/lib/dates'
 import { formatAmount, formatEur, toCents } from '@/lib/format'
+import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { NotesCard } from '@/features/notes/NotesCard'
 import { useDeleteTransaction, useWeekLimits } from './api'
+import { CutNextWeek } from './CutNextWeek'
+import { EnvelopesTab } from './EnvelopesTab'
 import { LimitsSheet } from './LimitsSheet'
+import { MoneyQuestions } from './MoneyQuestions'
 import { MoneyTotal } from './MoneyTotal'
+import { MonthTab } from './MonthTab'
 import { useMoneyWeek } from './useMoneyWeek'
 
+const TABS = [
+  { value: 'week', label: 'Неделя' },
+  { value: 'month', label: 'Месяц' },
+  { value: 'envelopes', label: 'Конверты' },
+] as const
+type Tab = (typeof TABS)[number]['value']
+
 export function MoneyScreen() {
+  const [tab, setTab] = useState<Tab>('week')
+  return (
+    <>
+      <ScreenHeader title="Деньги" />
+      <SegmentedTabs label="Раздел" segments={TABS} value={tab} onChange={setTab} />
+      <MoneyQuestions />
+      {tab === 'week' && <WeekTab />}
+      {tab === 'month' && <MonthTab />}
+      {tab === 'envelopes' && <EnvelopesTab />}
+      {/* Pinned «Правила» and other money notes. */}
+      <NotesCard sphere="money" />
+    </>
+  )
+}
+
+function WeekTab() {
   const today = todayBerlin()
   const thisMonday = weekStart(today)
   const [monday, setMonday] = useState(thisMonday)
@@ -28,9 +56,8 @@ export function MoneyScreen() {
 
   return (
     <>
-      <ScreenHeader title="Деньги" eyebrow={week?.budget_week_no ? `Неделя ${week.budget_week_no} бюджета` : undefined} />
       <WeekSwitcher
-        label={`${formatDayMonth(monday)}–${formatDayMonth(addDaysISO(monday, 6))}`}
+        label={`${week?.budget_week_no ? `Неделя ${week.budget_week_no} · ` : ''}${formatDayMonth(monday)}–${formatDayMonth(addDaysISO(monday, 6))}`}
         onPrev={() => setMonday(addDaysISO(monday, -7))}
         onNext={() => setMonday(addDaysISO(monday, 7))}
         onReset={monday !== thisMonday ? () => setMonday(thisMonday) : undefined}
@@ -53,6 +80,7 @@ export function MoneyScreen() {
             <CardHeader title="Неделя" dotClass="bg-money" context={summary.status === 'over' ? 'перерасход' : 'в лимите'} />
             <MoneyTotal summary={summary} />
           </Card>
+          {summary.status === 'over' && monday <= thisMonday && <CutNextWeek monday={monday} summary={summary} />}
           <Card>
             <CardHeader title="Категории" />
             <div className="flex flex-col gap-4">
@@ -115,7 +143,6 @@ export function MoneyScreen() {
         )}
       </Card>
 
-      <NotesCard sphere="money" />
       <LimitsSheet open={editLimits} onClose={() => setEditLimits(false)} monday={monday} current={limits.data ?? []} />
     </>
   )

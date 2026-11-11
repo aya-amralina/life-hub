@@ -4,7 +4,7 @@ import { NEEDS, cleanupTestUser, live, login, tab } from './helpers'
 test.beforeAll(cleanupTestUser)
 test.afterAll(cleanupTestUser)
 
-test('день отмечается: привычка в 1 тап, энергия, движение — всё сохраняется само', async ({ page }) => {
+test('день отмечается: привычка в 1 тап, энергия, активность — всё сохраняется само', async ({ page }) => {
   test.skip(!live, NEEDS)
   await login(page)
 
@@ -17,16 +17,25 @@ test('день отмечается: привычка в 1 тап, энерги�
   await page.getByRole('button', { name: 'Энергия: 7' }).click()
   await expect(page.getByRole('button', { name: 'Энергия: 7' })).toHaveAttribute('aria-pressed', 'true')
 
+  // «Движение»: several activities a day, score = minutes / 10 × points (средняя — 2)
   await tab(page, 'Тело')
-  await page.getByRole('button', { name: 'Силовая A' }).click()
-  await page.getByRole('button', { name: '30 мин' }).click()
-  await expect(page.getByText('Силовая A · 30 мин')).toBeVisible()
+  await page.getByRole('button', { name: 'Активность', exact: true }).click()
+  const sheet = page.getByRole('dialog', { name: 'Активность' })
+  await sheet.getByLabel('Новый тип').fill('Прогулка')
+  await sheet.getByRole('button', { name: 'Добавить тип' }).click()
+  await sheet.getByRole('button', { name: 'Прогулка', exact: true }).click()
+  await sheet.getByRole('button', { name: '30', exact: true }).click()
+  await sheet.getByRole('button', { name: 'Добавить · +6' }).click()
+  await expect(sheet).toBeHidden()
+  await expect(page.getByText('скор дня 6')).toBeVisible()
 
   // Reload = fresh data from the server
   await page.reload()
   await expect(page.getByRole('checkbox', { name: /Утренний старт/ })).toHaveAttribute('aria-checked', 'true')
   await expect(page.getByRole('button', { name: 'Энергия: 7' })).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.getByRole('button', { name: 'Силовая A' })).toHaveAttribute('aria-pressed', 'true')
+  await tab(page, 'Тело')
+  await expect(page.getByText('скор дня 6')).toBeVisible()
+  await tab(page, 'Сегодня')
 
   // Second tap unmarks
   await page.getByRole('checkbox', { name: /Утренний старт/ }).click()

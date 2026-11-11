@@ -94,3 +94,10 @@ export function formatTimeBerlin(timestamp: string | Date): string {
 export function formatWeekdayDate(iso: ISODate): string {
   return `${weekdayShort(iso)} ${formatDayMonth(iso)}`
 }
+
+/** Day chip label: 'Сегодня', 'Завтра' or 'Чт 12.11'. */
+export function dayChipLabel(d: ISODate, today: ISODate): string {
+  if (d === today) return 'Сегодня'
+  if (d === addDaysISO(today, 1)) return 'Завтра'
+  return formatWeekdayDate(d)
+}

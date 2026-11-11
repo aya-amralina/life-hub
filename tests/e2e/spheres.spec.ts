@@ -31,7 +31,7 @@ test('Учёба: пункт на сегодня попадает в недел�
   const title = `e2e HA ${Date.now()}`
   await login(page)
   await tab(page, 'Учёба')
-  await expect(page.getByText('На эту неделю пунктов нет')).toBeVisible()
+  await expect(page.getByText(/пока пустой/)).toBeVisible()
 
   await page.getByRole('button', { name: 'Добавить' }).click()
   const add = page.getByRole('dialog', { name: 'Добавить' })

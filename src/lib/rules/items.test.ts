@@ -81,6 +81,10 @@ describe('closing statuses: done vs cancelled', () => {
     expect(isItemDone({ ...base, status })).toBe(false)
     expect(isItemCancelled({ ...base, status })).toBe(true)
   })
+  it('Verworfen stays not done even with done_at (stage-2 rows)', async () => {
+    const { isItemDone } = await import('./items')
+    expect(isItemDone({ ...base, status: 'Verworfen', done_at: '2026-11-09T10:00:00Z' })).toBe(false)
+  })
   it('checked item is done', async () => {
     const { isItemDone } = await import('./items')
     expect(isItemDone({ ...base, done_at: '2026-11-09T10:00:00Z' })).toBe(true)

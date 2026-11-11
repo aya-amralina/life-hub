@@ -10,6 +10,26 @@ const user = testUser() // the only account tests sign in with
 const ready = supabaseConfigured() && Boolean(publishable && secret && user)
 const noSession = { auth: { persistSession: false, autoRefreshToken: false } } as const
 
+// Every table of the schema: anon has no privileges, the test user sees only its own rows.
+const TABLES = [
+  'weeks',
+  'items',
+  'daily_logs',
+  'plan_stages',
+  'transactions',
+  'week_limits',
+  'envelopes',
+  'notes',
+  'activity_types',
+  'activities',
+  'intake',
+  'people',
+  'strength_sets',
+  'measurements',
+  'wishlist',
+  'reviews',
+] as const
+
 async function adminFindUserId(email: string): Promise<string | undefined> {
   const admin = createClient(url!, secret!, noSession)
   const { data, error } = await admin.auth.admin.listUsers({ perPage: 100 })
@@ -26,7 +46,7 @@ describe.skipIf(!ready)('live: Supabase keys, privileges, test user', () => {
 
   it('publishable key without a session has no privileges (anon: no GRANTs)', async () => {
     const sb = createClient(url!, publishable!, noSession)
-    for (const table of ['weeks', 'items'] as const) {
+    for (const table of TABLES) {
       const { data, error } = await sb.from(table).select('id').limit(1)
       expect(data).toBeNull()
       expect(error?.code).toBe('42501') // permission denied
@@ -56,7 +76,7 @@ describe.skipIf(!ready)('live: Supabase keys, privileges, test user', () => {
     const { data, error } = await sb.auth.signInWithPassword(user!)
     expect(error).toBeNull()
     expect(data.session?.access_token).toBeTruthy()
-    for (const table of ['weeks', 'items'] as const) {
+    for (const table of TABLES) {
       const res = await sb.from(table).select('id', { count: 'exact', head: true })
       expect(res.error).toBeNull()
     }
@@ -68,11 +88,38 @@ describe.skipIf(!ready)('live: Supabase keys, privileges, test user', () => {
     expect(realId).toBeTruthy()
     const sb = createClient(url!, publishable!, noSession)
     expect((await sb.auth.signInWithPassword(user!)).error).toBeNull()
-    for (const table of ['weeks', 'items'] as const) {
+    for (const table of TABLES) {
       const res = await sb.from(table).select('id', { count: 'exact', head: true }).eq('user_id', realId!)
       expect(res.error).toBeNull()
       expect(res.count).toBe(0)
     }
+    await sb.auth.signOut()
+  })
+})
+
+describe.skipIf(!ready)('live: stage 3 tables — the test user writes and cleans up its own rows', () => {
+  it('activity type + activity + intake: insert, read back, delete', async () => {
+    const sb = createClient(url!, publishable!, noSession)
+    expect((await sb.auth.signInWithPassword(user!)).error).toBeNull()
+    const type = await sb.from('activity_types').insert({ name: `it-${Date.now()}`, intensity: 'лёгкая', points_per_10min: 1 }).select('id').single()
+    expect(type.error).toBeNull()
+    const act = await sb.from('activities').insert({ date: '2026-11-10', type_id: type.data!.id, minutes: 20 }).select('id').single()
+    expect(act.error).toBeNull()
+    const intake = await sb.from('intake').insert({ name: 'it', start_date: '2026-11-10' }).select('id').single()
+    expect(intake.error).toBeNull()
+    // the type is in use — deleting it first is refused (on delete restrict)
+    expect((await sb.from('activity_types').delete().eq('id', type.data!.id)).error).not.toBeNull()
+    expect((await sb.from('activities').delete().eq('id', act.data!.id)).error).toBeNull()
+    expect((await sb.from('activity_types').delete().eq('id', type.data!.id)).error).toBeNull()
+    expect((await sb.from('intake').delete().eq('id', intake.data!.id)).error).toBeNull()
+    await sb.auth.signOut()
+  })
+
+  it('items: start after deadline is refused by the schema', async () => {
+    const sb = createClient(url!, publishable!, noSession)
+    expect((await sb.auth.signInWithPassword(user!)).error).toBeNull()
+    const res = await sb.from('items').insert({ sphere: 'personal', title: 'it', starts_on: '2026-12-10', due_date: '2026-12-01' })
+    expect(res.error?.code).toBe('23514') // check violation
     await sb.auth.signOut()
   })
 })
