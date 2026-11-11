@@ -45,5 +45,18 @@ class MiscTest(unittest.TestCase):
         self.assertEqual(balance_end(txs), 60.0)
 
 
+
+class MoneyTasksTest(unittest.TestCase):
+    def test_future_actions(self):
+        from src_budget import future_actions
+        today = D(2026, 11, 11)
+        todo = "120 € → «Конверты» (ушли на Франкфурт). Отмени Uber One до 13.11."
+        self.assertEqual(future_actions(todo, D(2026, 10, 17), today, "Разложить"), [("Отмени Uber One до 13.11", D(2026, 11, 13))])
+        self.assertEqual(future_actions("Не трогать — это подушка.", D(2026, 11, 14), today, "Папа"), [])
+        self.assertEqual(future_actions("До 11.12 — ничего не списывается.", D(2026, 11, 12), today, "USC"), [])
+        self.assertEqual(future_actions("100 € жильцу из «Депозита» — копилку можно закрыть.", D(2026, 11, 30), today, "Депозит жильцу")[0][1], D(2026, 11, 30))
+        self.assertEqual(future_actions("Отмени X до 01.11.", D(2026, 10, 1), today, None), [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -60,12 +60,7 @@ def _weeks_and_stages(ws, b: Batch) -> None:
                 "targets": {k: int(v) if float(v).is_integer() else v for k, v in t.items()},
             },
         )
-    b.report.append(f"Глоу-ап · Недели: {n_weeks} недель, этапов {len(stages)} (даты этапа — по его неделям; цели — самые частые за этап)")
-    if stages:
-        b.questions.append(
-            "Глоу-ап · этапы: какие привычки начинаются с какого этапа, в файле не записано отдельно. "
-            "Ставлю всем этапам все три (утро, улица, вода) и минимум «вода и 10 минут на улице» — поправишь в Настройках → Этапы. Так?"
-        )
+    b.report.append(f"Глоу-ап · Недели: {n_weeks} недель, этапов {len(stages)} (все три привычки, минимум — вода и 10 минут на улице)")
 
 
 def _activity_types(ws, b: Batch) -> list[str]:
@@ -142,11 +137,13 @@ def _strength(ws, b: Batch) -> None:
 
 
 def _measurements(ws, b: Batch) -> None:
-    done, reminders, other = 0, 0, []
+    done, reminders, other, comp = 0, 0, [], []
     for n, r in rows(ws, 5):
         date = excel_date(r[0])
         if not date:
-            other.append(n)
+            if not any(isinstance(v, str) and "пример" in v.lower() for v in r):
+                other.append(n)
+                comp.append(" · ".join(str(v).strip() for v in r if v not in (None, "")))
             continue
         vals = {"waist_cm": number(r[1]), "hips_cm": number(r[2]), "thigh_cm": number(r[3]), "arm_cm": number(r[4]), "weight_kg": number(r[5]) if not isinstance(r[5], (dt.date, dt.datetime)) else None}
         photos = {"photo_body": is_check(r[6]), "photo_face": is_check(r[7]), "photo_part": is_check(r[8])}
@@ -157,35 +154,32 @@ def _measurements(ws, b: Batch) -> None:
             # an empty measurement day = a reminder item on that day (SPEC §6)
             b.add("items", {"source_id": f"glow:measure-day:{date.isoformat()}", "sphere": "body", "type": "Замер", "title": "Замеры", "status": "Не начато", "happens_on": date.isoformat(), "done_at": None})
             reminders += 1
-    b.report.append(f"Глоу-ап · Замеры: записей {done}, дней-напоминаний {reminders}" + (f"; строки без даты (таблица состава тела и пример) — {len(other)}" if other else ""))
-    if other:
-        b.questions.append(
-            f"Глоу-ап · Замеры: под таблицей есть блок без дат ({len(other)} строк — похоже, состав тела: жир, вода, мышцы…). "
-            "В схеме для него места нет (разбор body comp — этап 6). Сохранить его заметкой «Состав тела» в Теле или пропустить?"
-        )
-
-
-_DAY_IN = re.compile(r"^(с|начиная с)\s+(\d{1,2}\.\d{1,2})", re.I)
+    if comp:
+        b.add("notes", {"source_id": "glow:body-composition", "sphere": "body", "title": "Состав тела", "body_md": "\n".join(f"- {c}" for c in comp), "pinned": False})
+    b.report.append(f"Глоу-ап · Замеры: записей {done}, дней-напоминаний {reminders}" + (f"; блок без дат ({len(other)} строк) → заметка «Состав тела»" if other else ""))
 
 
 def _tasks(ws, b: Batch) -> None:
-    count, closed, starts, unclear = 0, 0, 0, []
+    """Deadline from «Срок». Only when «Срок» is empty: a range in «Когда по плану» → starts_on + due_date, a single
+    date → happens_on; «неделя N» and anything else stays in the note (decision 2026-11-11)."""
+    count, closed, from_plan, disputed = 0, 0, Counter(), []
     for n, r in rows(ws, 4):
         title = text(r[0])
         if not title:
             continue
         due, when, status, note = any_date(r[1]), text(r[2]), STATUS.get((text(r[3]) or "").lower(), "Не начато"), text(r[4])
-        starts_on = None
-        if when:
-            m = _DAY_IN.match(when)
-            if m:
-                d = any_date(m[2])
-                starts_on = d.date.isoformat() if d else None
-            elif parse_range(when) or re.search(r"\d", when):
-                unclear.append(n)
-        if starts_on and due and starts_on > due.date.isoformat():
-            starts_on = None
-        starts += starts_on is not None
+        dates: dict[str, str | None] = {"due_date": due.date.isoformat() if due else None, "starts_on": None, "happens_on": None}
+        rng = parse_range(when) if when else None
+        single = any_date(re.sub(r"^\D+", "", when)) if when and not rng and re.search(r"\d{1,2}\.\d{1,2}", when) else None
+        if due and (rng or single):
+            disputed.append(n)
+            b.private.append(f"Глоу-ап · Задачи, строка {n}: срок {due.date:%d.%m} из «Срок»; «Когда по плану»: {when} — в заметку")
+        elif not due and rng:
+            dates["starts_on"], dates["due_date"] = rng[0].isoformat(), rng[1].isoformat()
+            from_plan["диапазон → с даты + срок"] += 1
+        elif not due and single:
+            dates["happens_on"] = single.date.isoformat()
+            from_plan["дата → в день"] += 1
         done = status == "Готово"
         closed += done
         b.add(
@@ -196,61 +190,57 @@ def _tasks(ws, b: Batch) -> None:
                 "title": title,
                 "type": "Задача",
                 "status": status,
-                "due_date": due.date.isoformat() if due else None,
-                "starts_on": starts_on,
+                **dates,
                 "notes": "\n".join(x for x in (f"по плану: {when}" if when else None, note) if x) or None,
                 "done_at": noon(b.today) if done else None,
             },
         )
         count += 1
-    b.report.append(f"Глоу-ап · Задачи: {count} (закрытых «Готово» — {closed}; «с даты» — {starts})")
-    if unclear:
-        b.questions.append(
-            f"Глоу-ап · Задачи: в «Когда по плану» у строк {rows_list(unclear)} — даты и диапазоны («8–9.11», «21.12–8.01», «неделя N»). "
-            "Срок беру из «Срок», а это поле кладу в заметку пункта «по плану: …», без «с даты». Или сделать диапазоны «с даты»?"
-        )
+    b.report.append(
+        f"Глоу-ап · Задачи: {count} (закрытых «Готово» — {closed}); срок из «Срок» у {sum(1 for i in b.rows['items'] if i['source_id'].startswith('glow:task:') and i.get('due_date') and not i.get('starts_on'))}"
+        + (", из «Когда по плану»: " + ", ".join(f"{k} {v}" for k, v in from_plan.items()) if from_plan else "")
+        + (f"; спорные (есть «Срок», а в «Когда по плану» тоже дата) — строки {rows_list(disputed)}" if disputed else "")
+    )
 
 
 def _doctors(ws, b: Batch) -> None:
-    section, visits, other_lines, intake_rows = None, 0, [], []
+    """Visits → items «Визит»; analyses and supplements stay in one note. A table header right under a section
+    title (only short labels) is not copied into the note."""
+    section, visits, lines = None, 0, []
+    after_title = False
     for n, r in rows(ws, 1):
         filled = [v for v in r if v not in (None, "")]
         first = text(r[0])
-        if len(filled) == 1 and first and len(first) < 40:
+        if len(filled) == 1 and first:
             section = first
-            other_lines.append(f"\n**{first}**")
+            lines.append(f"\n**{first}**")
+            after_title = True
             continue
-        if section == "Визиты":
-            if first == "Врач":
-                continue  # header
-            if len(filled) >= 3:
-                when = any_date(r[4]) if len(r) > 4 else None
-                b.add(
-                    "items",
-                    {
-                        "source_id": f"glow:visit:{stable_id(first)}",
-                        "sphere": "body",
-                        "title": first,
-                        "type": "Визит",
-                        "status": STATUS.get((text(r[3]) or "").lower(), "Не начато"),
-                        "happens_on": when.date.isoformat() if when else None,
-                        "happens_time": when.time if when else None,
-                        "notes": "\n".join(f"{k}: {v}" for k, v in (("Где", text(r[1])), ("Когда", text(r[2])), ("С чем идти", text(r[5])), ("Что взять", text(r[6])), ("Итог", text(r[7]) if len(r) > 7 else None)) if v) or None,
-                        "done_at": None,
-                    },
-                )
-                visits += 1
-                continue
-        if section and section != "Визиты" and len(filled) >= 3 and first:
-            intake_rows.append(n)
-        other_lines.append("- " + " · ".join(str(v).strip() for v in filled))
-    b.add("notes", {"source_id": "glow:doctors", "sphere": "body", "title": "Врачи, анализы и добавки", "body_md": "\n".join(other_lines).strip(), "pinned": False})
-    b.report.append(f"Глоу-ап · Врачи: визитов → пункты «Визит» {visits}; остальное (анализы, добавки) — заметкой")
-    if intake_rows:
-        b.questions.append(
-            f"Глоу-ап · Врачи: строки {rows_list(intake_rows)} похожи на приём (добавки/лекарства). В «Приём» нужна дата начала, в файле её нет — "
-            "завести их в «Приём» с началом = сегодня или оставить только в заметке и добавить руками?"
-        )
+        is_header = after_title and len(filled) >= 2 and all(isinstance(v, str) and len(v.strip()) <= 30 for v in filled)
+        after_title = False
+        if is_header:
+            continue
+        if section == "Визиты" and len(filled) >= 3:
+            when = any_date(r[4]) if len(r) > 4 else None
+            b.add(
+                "items",
+                {
+                    "source_id": f"glow:visit:{stable_id(first)}",
+                    "sphere": "body",
+                    "title": first,
+                    "type": "Визит",
+                    "status": STATUS.get((text(r[3]) or "").lower(), "Не начато"),
+                    "happens_on": when.date.isoformat() if when else None,
+                    "happens_time": when.time if when else None,
+                    "notes": "\n".join(f"{k}: {v}" for k, v in (("Где", text(r[1])), ("Когда", text(r[2])), ("С чем идти", text(r[5])), ("Что взять", text(r[6])), ("Итог", text(r[7]) if len(r) > 7 else None)) if v) or None,
+                    "done_at": None,
+                },
+            )
+            visits += 1
+            continue
+        lines.append("- " + " · ".join(str(v).strip() for v in filled))
+    b.add("notes", {"source_id": "glow:doctors", "sphere": "body", "title": "Врачи, анализы и добавки", "body_md": "\n".join(lines).strip(), "pinned": False})
+    b.report.append(f"Глоу-ап · Врачи: визитов → пункты «Визит» {visits}; анализы и добавки — заметкой (заголовки таблиц не копирую), в «Приём» не завожу")
 
 
 def _sheet_note(ws, b: Batch) -> None:

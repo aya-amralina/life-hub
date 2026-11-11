@@ -127,7 +127,7 @@ class State:
         self.activities = {(r["date"], r["type_id"]) for r in rest.select("activities", "date,type_id", f)}
         self.limits = {(r["week_id"], r["category"]) for r in rest.select("week_limits", "week_id,category,source_id", f) if not r["source_id"]}
         self.measure_days = {r["date"] for r in rest.select("measurements", "date", f)}
-        self.app_expenses = [r for r in rest.select("transactions", "date,amount_eur,source_id,kind", f) if not r["source_id"] and r["kind"] == "expense"]
+        self.app_expenses = [r for r in rest.select("transactions", "date,amount_eur,source_id,kind,grp", f) if not r["source_id"] and r["kind"] == "expense"]
 
 
 def summary(b: Batch, st: State) -> list[str]:
@@ -189,6 +189,8 @@ def checks(b: Batch, st: State) -> list[str]:
     out.append(f"остаток на 31.12.2026 по импортированным операциям: {bal:.2f} € (SPEC: 1788.14 €){' ✓' if abs(bal - 1788.14) < 0.005 else ' — отличается'}")
     out.append(f"часов учёбы в Н04: {h04:g} (SPEC: 27.5){' ✓' if abs(h04 - 27.5) < 0.01 else ' — отличается (файл правился)'}")
     out.append(f"пунктов чеклиста: {checklist}; задач Работы: {work}")
+    app = plan.app_forecast(tx, st.app_expenses, b.today)
+    out.append(f"прогноз «На счетах 31.12» в приложении (бюджеты недель по правилу 18a, траты из приложения учтены): {app:.2f} €")
     if st.app_expenses:
         weeks = {m for m in b.weeks if b.weeks[m].get("budget_week_no")}
         inside = [e for e in st.app_expenses if any(m.isoformat() <= e["date"] <= (m + dt.timedelta(days=6)).isoformat() for m in weeks)]

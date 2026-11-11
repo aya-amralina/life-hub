@@ -183,10 +183,36 @@ describe('months table', async () => {
       t('2026-10-20', 'expense', 100),
       t('2026-11-01', 'income', 500, { is_planned: true }),
       t('2026-11-02', 'expense', 50, { is_planned: true, cancelled_at: '2026-11-03T00:00:00Z' }),
-    ])
+    ], '2026-10-20')
     expect(rows).toEqual([
       { month: '2026-10', incomeCents: 0, expenseCents: 10000, endCents: 90000, hasPlan: false },
       { month: '2026-11', incomeCents: 50000, expenseCents: 0, endCents: 140000, hasPlan: true },
     ])
   })
+})
+
+describe('rule 18a: week budgets («Неделя N»)', async () => {
+  const { balanceAt, plannedQuestions } = await import('./money')
+  const t = (id: string, date: string, kind: string, amount_eur: number, x: Record<string, unknown> = {}) => ({
+    id, date, kind, amount_eur, category: null, envelope_id: null, is_planned: false, confirmed_at: null, cancelled_at: null, grp: 'Жизнь', week_budget: false, ...x,
+  })
+  const today = '2026-11-11' // Wed of the week 09.11–15.11
+  const txs = [
+    t('o', '2026-10-13', 'opening', 1000, { grp: null }),
+    t('w4', '2026-11-02', 'expense', 100, { is_planned: true, week_budget: true }), // finished week
+    t('w5', '2026-11-09', 'expense', 100, { is_planned: true, week_budget: true }), // current week
+    t('w6', '2026-11-16', 'expense', 100, { is_planned: true, week_budget: true }), // later week
+    t('coffee', '2026-11-10', 'expense', 30, { confirmed_at: '2026-11-10T10:00:00Z' }), // spent from the app
+  ]
+  it('never asks «Списалось?»', () => expect(plannedQuestions(txs, today)).toEqual([]))
+  it('finished week drops out; current costs max(budget, spent); later counts in full', () => {
+    // 1000 − 30 (spent) − 70 (rest of w5) − 100 (w6); w4 is gone
+    expect(balanceAt(txs, '2026-12-31', 'plan', today)).toBe(80000)
+  })
+  it('spent over the budget: the current week costs what was spent', () => {
+    const over = [...txs, t('big', '2026-11-11', 'expense', 150, { confirmed_at: '2026-11-11T10:00:00Z' })]
+    // 1000 − 180 spent − 0 rest − 100 (w6)
+    expect(balanceAt(over, '2026-12-31', 'plan', today)).toBe(72000)
+  })
+  it('fact never includes week budgets', () => expect(balanceAt(txs, '2026-12-31', 'fact', today)).toBe(97000))
 })

@@ -639,6 +639,7 @@ export type Database = {
           title: string
           updated_at: string
           user_id: string
+          week_budget: boolean
         }
         Insert: {
           account?: string | null
@@ -658,6 +659,7 @@ export type Database = {
           title: string
           updated_at?: string
           user_id?: string
+          week_budget?: boolean
         }
         Update: {
           account?: string | null
@@ -677,6 +679,7 @@ export type Database = {
           title?: string
           updated_at?: string
           user_id?: string
+          week_budget?: boolean
         }
         Relationships: [
           {

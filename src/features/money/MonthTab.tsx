@@ -40,18 +40,17 @@ export function MonthTab() {
   }
 
   const factNow = balanceAt(all, today, 'fact')
-  const planNow = balanceAt(all, today, 'plan')
-  const planEnd = balanceAt(all, BUDGET_END, 'plan')
-  const gap = factNow - planNow
-  // The gap usually means a planned operation waits for «Пришло? / Списалось?».
-  const waitingFor = plannedQuestions(all, today).map((q) => q.tx.title)
-  const waitNote = gap !== 0 && waitingFor.length ? ` — ждём ${joinRu(waitingFor.slice(0, 3))}` : ''
+  const planEnd = balanceAt(all, BUDGET_END, 'plan', today)
+  // Fact vs plan today = the planned operations still waiting for «Пришло? / Списалось?».
+  const pending = plannedQuestions(all, today)
+  const gap = -pending.reduce((s, q) => s + signedCents(q.tx), 0)
+  const waitNote = pending.length ? ` — ждём ${joinRu(pending.slice(0, 3).map((q) => q.tx.title))}` : ''
   const ops = all
     .filter((t) => t.date.startsWith(month) && t.kind !== 'opening')
     .filter((t) => (filter[0] === 'plan' ? !isFact(t) && !t.cancelled_at : filter[0] === 'fact' ? isFact(t) : true))
     .sort((a, b) => b.date.localeCompare(a.date))
   const next = upcomingPlanned(all, today).slice(0, 5)
-  const months = monthsTable(all)
+  const months = monthsTable(all, today)
 
   return (
     <>
@@ -158,11 +157,11 @@ function OperationRow({ t, today, onConfirm }: { t: Transaction; today: ISODate;
           {t.title}
         </span>
         <span className="block text-cap text-ink2">
-          {[muted ? 'убрано из плана' : planned ? 'план' : 'факт', t.category, t.account].filter(Boolean).join(' · ')}
+          {[muted ? 'убрано из плана' : t.week_budget && planned ? 'бюджет недели' : planned ? 'план' : 'факт', t.category, t.account].filter(Boolean).join(' · ')}
         </span>
       </span>
       <span className={cn('text-base tabular-nums', muted && 'text-ink3 line-through')}>{signed(t)}</span>
-      {planned && t.date <= today && (
+      {planned && !t.week_budget && t.date <= today && (
         <button type="button" onClick={onConfirm} className="h-11 flex-none rounded-xl border border-line2 px-3 text-cap font-semibold active:bg-sub">
           Подтвердить
         </button>

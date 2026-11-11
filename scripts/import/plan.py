@@ -101,3 +101,25 @@ def per_week_done(items: list[dict]) -> dict[dt.date, int]:
         if i["sphere"] == "study" and not is_open(i):
             out[i["week"]] += 1
     return out
+
+
+def app_forecast(txs: list[dict], app_expenses: list[dict], today: dt.date, end: str = "2026-12-31") -> float:
+    """«На счетах 31.12» as the app computes it (money.ts balanceAt, plan): week budgets of finished weeks drop
+    out, the current week costs max(budget, spent in the app), later weeks in full; app expenses are facts."""
+    monday = today - dt.timedelta(days=today.weekday())
+    sunday = monday + dt.timedelta(days=6)
+    spent = sum(float(e["amount_eur"]) for e in app_expenses if e.get("grp") == "Жизнь" and monday.isoformat() <= e["date"] <= sunday.isoformat())
+    total = -sum(float(e["amount_eur"]) for e in app_expenses if e["date"] <= end)
+    for t in txs:
+        if t["date"] > end:
+            continue
+        if t.get("week_budget"):
+            d = dt.date.fromisoformat(t["date"])
+            w = d - dt.timedelta(days=d.weekday())
+            if w + dt.timedelta(days=6) < today:
+                continue
+            if w <= today:
+                total -= max(0.0, t["amount_eur"] - spent)
+                continue
+        total += signed(t)
+    return round(total, 2)

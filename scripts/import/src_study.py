@@ -17,8 +17,8 @@ TEST_WORDS = re.compile(r"test|klausur|prüfung|exam|zwischen|zt\b|тест|эк
 
 
 def data_status(value: str | None) -> tuple[str | None, str | None]:
-    """«подтверждено…» → confirmed, «допущение…» → assumption, «проверить» → check; «по ритму…», «из прошлых
-    данных…» are not confirmed — assumption. Returns (status, rule used)."""
+    """«подтверждено…» → confirmed, «допущение…» → assumption, «проверить» → check; «по ритму…» → assumption, «из прошлых
+    данных…» → check (decision 2026-11-11). Returns (status, rule used)."""
     if not value:
         return None, None
     v = value.strip().lower()
@@ -31,7 +31,7 @@ def data_status(value: str | None) -> tuple[str | None, str | None]:
     if v.startswith("по ритму"):
         return "assumption", "по ритму"
     if v.startswith("из прошл"):
-        return "assumption", "из прошлых данных"
+        return "check", "из прошлых данных"
     return "check", "другое"
 
 
@@ -185,11 +185,6 @@ def _deadlines(ws, b: Batch, items: list[dict]) -> None:
         + "); статус данных: "
         + ", ".join(f"{k} {v}" for k, v in rules.most_common())
     )
-    if rules.get("по ритму") or rules.get("из прошлых данных"):
-        b.questions.append(
-            f"Учёба · Дедлайны: «по ритму ISIS…» ({rules.get('по ритму', 0)}) и «из прошлых данных…» ({rules.get('из прошлых данных', 0)}) — в SPEC их нет. "
-            "Ставлю им «допущение» (значок не «подтверждено»). Или «проверить»?"
-        )
     if no_date:
         b.report.append(f"  без даты (сноски): строки {rows_list(no_date)}")
 

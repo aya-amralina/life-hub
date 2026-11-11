@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
 from collections import Counter
 
 from model import Batch, noon, rows_list
-from xl import excel_date, number, rows, text
+from xl import excel_date, number, parse_text_date, rows, stable_id, text
 
 CATEGORIES = ["Продукты", "Кофейни и перекусы", "Выходы и еда вне дома", "Мелочи", "Шопинг", "Доставка"]
 GROUPS = {"Доход", "Обязательное", "Поездки и события", "Долги", "Жизнь", "Буфер"}
@@ -36,7 +37,9 @@ def _articles(ws, b: Batch) -> list[tuple[int, dict]]:
         else:
             b.issues.append(f"Бюджет · Статьи, строка {n}: нет знака ±1")
             continue
-        planned = date > b.today
+        # «Неделя N: …» without «(факт)» is a week budget (rule 18a): planned, never auto-confirmed, no question.
+        week_budget = kind == "expense" and group == "Жизнь" and title.startswith("Неделя") and "(факт)" not in title
+        planned = week_budget or date > b.today
         row = {
             "source_id": f"budget:{sid}",
             "date": date.isoformat(),
@@ -49,6 +52,7 @@ def _articles(ws, b: Batch) -> list[tuple[int, dict]]:
             "account": None,
             "is_planned": planned,
             "confirmed_at": None if planned else noon(date),
+            "week_budget": week_budget,
         }
         if group and group not in GROUPS and kind != "opening":
             b.issues.append(f"Бюджет · Статьи, строка {n}: группа не из справочника — оставлю пустой")
@@ -58,26 +62,21 @@ def _articles(ws, b: Batch) -> list[tuple[int, dict]]:
     by_kind = Counter(o["kind"] for _, o in ops)
     confirmed = [o for _, o in ops if not o["is_planned"]]
     planned = [o for _, o in ops if o["is_planned"]]
-    weekly = [o for o in planned if o["grp"] == "Жизнь" and o["title"].startswith("Неделя")]
+    weekly = [o for o in planned if o["week_budget"]]
+    monday = b.today - dt.timedelta(days=b.today.weekday())
+    ended = [o for o in weekly if dt.date.fromisoformat(o["date"]) < monday]
+    current = [o for o in weekly if monday <= dt.date.fromisoformat(o["date"]) <= monday + dt.timedelta(days=6)]
     b.report.append(
         f"Бюджет · Статьи: {len(ops)} операций (старт {by_kind['opening']}, доходы {by_kind['income']}, расходы {by_kind['expense']}); "
-        f"подтверждёнными (дата ≤ {b.today:%d.%m}) — {len(confirmed)}, плановыми — {len(planned)}"
+        f"подтверждёнными — {len(confirmed)}, плановыми — {len(planned)}"
     )
     b.report.append(
-        f"  из плановых: доходы {sum(o['kind'] == 'income' for o in planned)}, расходы {sum(o['kind'] == 'expense' for o in planned)}; "
-        f"«Неделя N» (недельные траты «Жизнь») — {len(weekly)}"
+        f"  плановые: обычные {len(planned) - len(weekly)} (доходы {sum(o['kind'] == 'income' and not o['week_budget'] for o in planned)}, "
+        f"расходы {sum(o['kind'] == 'expense' and not o['week_budget'] for o in planned)}) — спросят «Пришло? / Списалось?» в свой день; "
+        f"бюджеты недель «Неделя N» {len(weekly)} — без вопроса (текущая неделя {len(current)}, уже закончились и уйдут из плана {len(ended)})"
     )
     if skipped:
         b.report.append(f"  пропущены строки без ID/даты/суммы (сноски): {rows_list(skipped)}")
-    current_weekly = [o for o in confirmed if o["grp"] == "Жизнь" and o["title"].startswith("Неделя") and "(факт)" not in o["title"]]
-    if weekly or current_weekly:
-        b.questions.append(
-            "Бюджет: строки «Неделя N: …» (группа «Жизнь») — это план трат недели, а не одно списание. "
-            f"Плановых таких {len(weekly)}" + (f", ещё {len(current_weekly)} без «(факт)» уже с наступившей датой" if current_weekly else "") + ". "
-            "Как плановые операции они спросят «Списалось?» в свой день и вместе с тратами через «+» посчитаются дважды. "
-            "Предлагаю: импортировать их плановыми, но без вопроса, и когда неделя закончилась — убирать строку из плана "
-            "(факт недели = траты из приложения). Подтвердишь?"
-        )
     return ops
 
 
@@ -105,11 +104,18 @@ def _weeks(ws, b: Batch) -> None:
 
 
 def _calendar(ws, b: Batch, ops: list[tuple[int, dict]]) -> None:
-    matched, unmatched, actions = 0, [], []
+    matched, unmatched, actions, tasks = 0, [], [], []
+    archive = []
     for n, r in rows(ws, 1):
+        archive.append("- " + " · ".join(str(v.strftime("%d.%m") if isinstance(v, (dt.date, dt.datetime)) else v).strip() for v in r[1:8] if v not in (None, "")))
         date, what, amount, kind, account, todo = excel_date(r[2]), text(r[3]), number(r[4]), text(r[5]), text(r[6]), text(r[7])
         if not date:
             continue
+        for title, due in future_actions(todo, date, b.today, what):
+            # an action still ahead (e.g. «Отмени Uber One до 13.11») becomes a money task
+            b.add("items", {"source_id": f"budget:todo:{stable_id(due.isoformat(), title)}", "sphere": "money", "title": title, "status": "открыто", "due_date": due.isoformat(), "notes": todo, "done_at": None})
+            tasks.append(n)
+            b.private.append(f"Задача Денег из «Календаря», строка {n}: до {due:%d.%m} · {title}")
         same_amount = [o for _, o in ops if amount is not None and abs(o["amount_eur"] - abs(amount)) < 0.005]
         cands = [o for o in same_amount if o["date"] == date.isoformat()]
         if not cands:  # «~15.11», ranges: the calendar date can differ by a few days
@@ -128,17 +134,38 @@ def _calendar(ws, b: Batch, ops: list[tuple[int, dict]]) -> None:
         else:
             unmatched.append(n)
             b.private.append(f"Бюджет · Календарь, строка {n} (без пары в «Статьях»): {date:%d.%m} · {kind or ''} · {what or ''} · {amount if amount is not None else ''}")
-    b.report.append(f"Бюджет · Календарь: сопоставлено с «Статьями» {matched} (дата ±7 дней и сумма), без пары {len(unmatched)}" + (f" (строки {rows_list(unmatched)})" if unmatched else ""))
-    if unmatched:
-        b.questions.append(
-            f"Бюджет · Календарь: {len(unmatched)} строк без пары в «Статьях» (такой суммы там нет) — их «Счёт» и «Что сделать» некуда дописать. "
-            "Пропустить (они в data/import-dry-run.txt) или поправить суммы/даты в Excel?"
-        )
-    if actions:
-        b.questions.append(
-            f"Бюджет · Календарь: {len(actions)} строк с «Что сделать» (строки {rows_list(actions)}) — дописаны в заметку операции. "
-            "Какие из них сделать задачами Денег? Список с текстами — в data/import-dry-run.txt."
-        )
+    b.add("notes", {"source_id": "budget:calendar", "sphere": "money", "title": "Календарь списаний (архив)", "body_md": "\n".join(archive), "pinned": False})
+    b.report.append(
+        f"Бюджет · Календарь: сопоставлено с «Статьями» {matched} (счёт и «Что сделать» → в операцию, «Что сделать» — {len(actions)}), "
+        f"без пары {len(unmatched)}; весь лист ({len(archive)} строк) → заметка «Календарь списаний (архив)»; "
+        f"задач Денег (действие сегодня или позже) {len(tasks)}" + (f" — строки {rows_list(tasks)}" if tasks else "")
+    )
+
+
+ACTION = re.compile(r"(отмени|отменить|закр[оы]|переве|перекин|оплат|отда[йт]|верн|подай|подать|запиш|продли|позвони|напиши|купи|сними|жильцу|€\s*(?:—|→)\s*(?:в\s+)?[«A-ZА-Я])", re.I)
+DUE_IN_TEXT = re.compile(r"\bдо\s+(\d{1,2}\.\d{1,2})")
+
+
+def future_actions(todo: str | None, row_date: dt.date, today: dt.date, what: str | None) -> list[tuple[str, dt.date]]:
+    """Actions of «Что сделать» due today or later. A sentence with its own date («Отмени Uber One до 13.11») is a
+    task of its own; other action sentences of the row make one task named after the operation, due on the row's
+    date. Explanations («Не трогать», «ничего не списывается») are skipped."""
+    out: list[tuple[str, dt.date]] = []
+    row_actions = []
+    for sentence in re.split(r"(?<=[.!])\s+", todo or ""):
+        sentence = sentence.strip().rstrip(".")
+        if not sentence or not ACTION.search(sentence):
+            continue
+        m = DUE_IN_TEXT.search(sentence)
+        own = parse_text_date(m[1]) if m else None
+        if own:
+            if own.date >= today:
+                out.append((sentence[:140], own.date))
+        else:
+            row_actions.append(sentence)
+    if row_actions and row_date >= today:
+        out.append(((what or row_actions[0])[:140], row_date))
+    return out
 
 
 def _envelopes(ws, b: Batch) -> None:
@@ -155,9 +182,7 @@ def _envelopes(ws, b: Batch) -> None:
         n_ok += 1
     debts = [n for n, k in other if k == "Долг"]
     rest = [n for n, k in other if k != "Долг"]
-    b.report.append(f"Бюджет · Конверты и копилки: {n_ok} (конверты и копилки)" + (f"; «Долг» — {len(debts)}" if debts else "") + (f"; строки без типа (итоги/разделы) — {rows_list(rest)}" if rest else ""))
-    if debts:
-        b.questions.append(f"Бюджет · Конверты: {len(debts)} строки с типом «Долг» (строки {rows_list(debts)}). В базе у конвертов есть только «конверт» и «копилка» — пропустить их (долги уже есть операциями группы «Долги») или завести копилкой?")
+    b.report.append(f"Бюджет · Конверты и копилки: {n_ok}" + (f"; «Долг» пропущено {len(debts)} (строки {rows_list(debts)})" if debts else "") + (f"; строки без типа (итоги/разделы) — {rows_list(rest)}" if rest else ""))
 
 
 def _rules(ws, b: Batch) -> None:

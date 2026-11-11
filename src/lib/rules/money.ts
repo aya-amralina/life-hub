@@ -1,5 +1,5 @@
 import { WEEK_CATEGORIES, type WeekCategory } from '../constants'
-import { addDaysISO, type ISODate } from '../dates'
+import { addDaysISO, weekStart as weekStartISO, type ISODate } from '../dates'
 import { toCents } from '../format'
 
 export type LimitLike = { category: string; limit_eur: number }
@@ -12,6 +12,9 @@ export type TxLike = {
   is_planned: boolean
   confirmed_at: string | null
   cancelled_at?: string | null
+  /** «Неделя N: …» — planned spending of a week, not one debit (rule 18a). */
+  week_budget?: boolean
+  grp?: string | null
 }
 
 export type CategoryWeek = {
@@ -89,15 +92,34 @@ export function signedCents(t: Pick<TxLike, 'kind' | 'amount_eur'>): number {
   return 0
 }
 
+/** Life expenses actually spent (facts, group «Жизнь») in Mon–Sun of `weekStart`. */
+function spentLifeInWeek(txs: readonly TxLike[], monday: ISODate): number {
+  const sunday = addDaysISO(monday, 6)
+  return txs
+    .filter((t) => t.kind === 'expense' && !t.week_budget && isFact(t) && t.grp === 'Жизнь' && t.date >= monday && t.date <= sunday)
+    .reduce((s, t) => s + toCents(t.amount_eur), 0)
+}
+
 /**
  * Rule 1 «Баланс и прогноз»: running sum of signed amounts up to `date` (inclusive). `fact` counts only
  * confirmed operations (the «факт» line); `plan` adds planned ones not yet confirmed (the forecast).
+ * Rule 18a, week budgets in the plan: a finished week drops out (its fact is the app's expenses); the
+ * current week adds only what is left of the budget, so the week costs max(budget, already spent);
+ * later weeks count in full.
  */
-export function balanceAt(txs: readonly TxLike[], date: ISODate, mode: 'fact' | 'plan'): number {
+export function balanceAt(txs: readonly TxLike[], date: ISODate, mode: 'fact' | 'plan', today: ISODate = date): number {
   let sum = 0
   for (const t of txs) {
     if (t.date > date || !isInPlan(t)) continue
     if (mode === 'fact' && !isFact(t)) continue
+    if (t.week_budget && !isFact(t)) {
+      const monday = weekStartISO(t.date)
+      if (addDaysISO(monday, 6) < today) continue
+      if (monday <= today) {
+        sum -= Math.max(0, toCents(t.amount_eur) - spentLifeInWeek(txs, monday))
+        continue
+      }
+    }
     sum += signedCents(t)
   }
   return sum
@@ -108,10 +130,11 @@ export type PlannedQuestion<T> = { tx: T; question: 'Пришло?' | 'Спис�
 /**
  * Rule 18: a planned operation whose day has come (date ≤ today) and that is neither confirmed nor
  * cancelled asks once: income — «Пришло?», expense and transfer — «Списалось?». Oldest first.
+ * Week budgets («Неделя N») never ask (rule 18a).
  */
 export function plannedQuestions<T extends TxLike & { id: string }>(txs: readonly T[], today: ISODate): PlannedQuestion<T>[] {
   return txs
-    .filter((t) => t.is_planned && t.confirmed_at === null && !t.cancelled_at && t.kind !== 'opening' && t.date <= today)
+    .filter((t) => t.is_planned && t.confirmed_at === null && !t.cancelled_at && !t.week_budget && t.kind !== 'opening' && t.date <= today)
     .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
     .map((tx) => ({ tx, question: tx.kind === 'income' ? 'Пришло?' : 'Списалось?' }))
 }
@@ -155,7 +178,7 @@ export type MonthRow = { month: string; incomeCents: number; expenseCents: numbe
  * Months table (like the «Обзор» sheet): per calendar month income and expenses (planned ones included,
  * cancelled ones not) and the balance at its end with the plan.
  */
-export function monthsTable(txs: readonly TxLike[]): MonthRow[] {
+export function monthsTable(txs: readonly TxLike[], today: ISODate): MonthRow[] {
   const months = [...new Set(txs.filter((t) => t.kind !== 'opening').map((t) => t.date.slice(0, 7)))].sort()
   return months.map((month) => {
     const inMonth = txs.filter((t) => t.date.startsWith(month) && isInPlan(t))
@@ -165,7 +188,7 @@ export function monthsTable(txs: readonly TxLike[]): MonthRow[] {
       month,
       incomeCents: sum('income'),
       expenseCents: sum('expense'),
-      endCents: balanceAt(txs, last, 'plan'),
+      endCents: balanceAt(txs, last, 'plan', today),
       hasPlan: inMonth.some((t) => !isFact(t)),
     }
   })
