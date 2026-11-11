@@ -301,6 +301,8 @@ def write(b: Batch, rest: SupabaseRest, uid: str, st: State, changes: dict[str, 
                   f"отменено/снято {sum(c.kind == 'remove' for c in cs)}, конфликтов оставлено {sum(c.kind == 'conflict' for c in cs)}")
         else:
             ready = [p for p in (prep(t, r) for r in b.rows.get(t, [])) if p and p.get("source_id") not in st.source_ids.get(t, set())]
+            if t == "activity_types":
+                ready = [r for r in ready if r["name"] not in st.types]  # same name = already there
             insert_groups(t, ready)
             if ready:
                 print(f"{t}: добавлено {len(ready)}")
