@@ -21,8 +21,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div
         aria-live="polite"
-        className="pointer-events-none fixed inset-x-0 z-40 mx-auto max-w-[560px] px-4"
-        style={{ bottom: 'calc(max(8px, env(safe-area-inset-bottom)) + 62px + 88px)' }}
+        className="pointer-events-none fixed inset-x-0 z-40 mx-auto max-w-[560px] px-4 print:hidden"
+        style={{ bottom: 'calc(var(--nav-h) + 88px)' }}
       >
         {toast && (
           <div

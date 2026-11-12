@@ -199,3 +199,41 @@ export function monthsTable(txs: readonly TxLike[], today: ISODate): MonthRow[] 
     }
   })
 }
+
+export type ActualBalances = { date: ISODate; balances: Record<string, string | number> }
+export type Reconciliation = { date: ISODate; actualCents: number; calculatedCents: number; diffCents: number; matches: boolean; missing: string[] }
+
+/**
+ * Real balances (entered in the Sunday review, later the «Остатки» sheet) against the calculated balance on the
+ * same date (start + facts, rule 1). The latest entry with any amount wins. Within 1 € it «сходится»; accounts
+ * not entered are named (the comparison then covers only what was entered).
+ */
+export function reconcile(
+  entries: readonly ActualBalances[],
+  txs: readonly TxLike[],
+  accounts: readonly string[],
+): Reconciliation | null {
+  const parse = (v: string | number) => {
+    if (typeof v === 'number') return Math.round(v * 100)
+    const s = v.trim().replace(/\s/g, '').replace(',', '.')
+    return /^-?\d+(\.\d{1,2})?$/.test(s) ? Math.round(Number(s) * 100) : null
+  }
+  for (const e of [...entries].sort((a, b) => b.date.localeCompare(a.date))) {
+    const amounts = Object.entries(e.balances)
+      .map(([k, v]) => [k, parse(v)] as const)
+      .filter((x): x is readonly [string, number] => x[1] !== null)
+    if (!amounts.length) continue
+    const actualCents = amounts.reduce((s, [, c]) => s + c, 0)
+    const calculatedCents = balanceAt(txs, e.date, 'fact')
+    const diffCents = actualCents - calculatedCents
+    return {
+      date: e.date,
+      actualCents,
+      calculatedCents,
+      diffCents,
+      matches: Math.abs(diffCents) < 100,
+      missing: accounts.filter((a) => !amounts.some(([k]) => k === a)),
+    }
+  }
+  return null
+}

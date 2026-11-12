@@ -30,3 +30,15 @@ export function useSaveReview() {
     onSettled: (_d, _e, v) => qc.invalidateQueries({ queryKey: key(v.weekId) }),
   })
 }
+
+/** Real balances entered in the Sunday reviews (newest first) — for the reconciliation on «Месяц». */
+export function useEnteredBalances() {
+  return useQuery({
+    queryKey: ['reviews', 'balances'] as const,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('reviews').select('balances, updated_at').order('updated_at', { ascending: false }).limit(20)
+      if (error) throw error
+      return data
+    },
+  })
+}

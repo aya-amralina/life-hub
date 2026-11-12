@@ -83,8 +83,9 @@ function Shell({
   return (
     <AddSheetContext.Provider value={openAdd}>
       <main
-        className="pt-safe mx-auto flex max-w-[560px] flex-col gap-4 px-4"
-        style={{ paddingBottom: focus ? 'max(8px, env(safe-area-inset-bottom))' : 'calc(max(8px, env(safe-area-inset-bottom)) + 62px + 104px)' }}
+        className="pt-safe mx-auto flex max-w-[560px] flex-col gap-4 px-4 print:!pb-0"
+        // above the tab bar (its measured height) and the «+» (56 + gaps); nothing extra in print
+        style={{ paddingBottom: focus ? 'max(8px, env(safe-area-inset-bottom))' : 'calc(var(--nav-h) + 96px)' }}
       >
         {(!online || pending > 0) && (
           <div className="pt-4">

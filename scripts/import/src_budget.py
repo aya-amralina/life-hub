@@ -140,8 +140,7 @@ def _calendar(ws, b: Batch, ops: list[tuple[int, dict]]) -> None:
         if cands:
             op = cands[0]
             matched += 1
-            if account:
-                op["account"] = account
+            # the account is never guessed from a calendar match — only a «Счёт» column of «Статьи» sets it
             if todo:
                 op["note"] = f"{op['note']}\n{todo}" if op["note"] else todo
                 actions.append(n)
@@ -151,7 +150,7 @@ def _calendar(ws, b: Batch, ops: list[tuple[int, dict]]) -> None:
             b.private.append(f"Бюджет · Календарь, строка {n} (без пары в «Статьях»): {date:%d.%m} · {kind or ''} · {what or ''} · {amount if amount is not None else ''}")
     b.add("notes", {"source_id": "budget:calendar", "sphere": "money", "title": "Календарь списаний (архив)", "body_md": "\n".join(archive), "pinned": False})
     b.report.append(
-        f"Бюджет · Календарь: сопоставлено с «Статьями» {matched} (счёт и «Что сделать» → в операцию, «Что сделать» — {len(actions)}), "
+        f"Бюджет · Календарь: сопоставлено с «Статьями» {matched} («Что сделать» → в заметку операции — {len(actions)}; счёт не переносится), "
         f"без пары {len(unmatched)}; весь лист ({len(archive)} строк) → заметка «Календарь списаний (архив)»; "
         f"задач Денег (действие сегодня или позже) {len(tasks)}" + (f" — строки {rows_list(tasks)}" if tasks else "")
     )

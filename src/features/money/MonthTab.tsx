@@ -11,7 +11,10 @@ import { formatEur, toCents } from '@/lib/format'
 import { balanceLine } from '@/lib/rules/charts'
 import { XYChart } from '@/components/charts/Chart'
 import { ChartLegend } from '@/components/charts/chartParts'
-import { BUDGET_END, balanceAt, isFact, monthsTable, plannedQuestions, signedCents, upcomingPlanned } from '@/lib/rules/money'
+import { BUDGET_END, balanceAt, isFact, monthsTable, plannedQuestions, reconcile, signedCents, upcomingPlanned } from '@/lib/rules/money'
+import { ACCOUNTS } from '@/lib/constants'
+import { Chip } from '@/components/ui/Chip'
+import { useEnteredBalances } from '@/features/review/api'
 import { joinRu } from '@/lib/format'
 import { useAllTransactions, useUpdateTransaction, type Transaction } from './api'
 
@@ -35,6 +38,8 @@ export function MonthTab() {
   const update = useUpdateTransaction()
   const [month, setMonth] = useState(today.slice(0, 7))
   const [filter, setFilter] = useState<Filter[]>([])
+  const [showRemoved, setShowRemoved] = useState(false)
+  const entered = useEnteredBalances()
 
   if (txs.isPending) return <SkeletonCard />
   const all = txs.data ?? []
@@ -42,14 +47,21 @@ export function MonthTab() {
     return <EmptyState title="Операций пока нет">Они придут из «Статей» бюджета при импорте. Траты через «+» появятся здесь сразу.</EmptyState>
   }
 
+  // «сейчас» = start + operations with status «факт»; planned ones with a past date only wait for an answer
   const factNow = balanceAt(all, today, 'fact')
   const planEnd = balanceAt(all, BUDGET_END, 'plan', today)
-  // Fact vs plan today = the planned operations still waiting for «Пришло? / Списалось?».
   const pending = plannedQuestions(all, today)
-  const gap = -pending.reduce((s, q) => s + signedCents(q.tx), 0)
-  const waitNote = pending.length ? ` — ждём ${joinRu(pending.slice(0, 3).map((q) => q.tx.title))}` : ''
-  const ops = all
-    .filter((t) => t.date.startsWith(month) && t.kind !== 'opening')
+  const pendingCents = pending.reduce((s, q) => s + signedCents(q.tx), 0)
+  // real balances from the Sunday review against the calculated balance on that day
+  const check = reconcile(
+    (entered.data ?? []).map((r) => ({ date: todayBerlin(new Date(r.updated_at)), balances: (r.balances ?? {}) as Record<string, string> })),
+    all,
+    ACCOUNTS,
+  )
+  const inMonth = all.filter((t) => t.date.startsWith(month) && t.kind !== 'opening')
+  const removed = inMonth.filter((t) => t.cancelled_at)
+  const ops = inMonth
+    .filter((t) => showRemoved || !t.cancelled_at)
     .filter((t) => (filter[0] === 'plan' ? !isFact(t) && !t.cancelled_at : filter[0] === 'fact' ? isFact(t) : true))
     .sort((a, b) => b.date.localeCompare(a.date))
   const next = upcomingPlanned(all, today).slice(0, 5)
@@ -66,6 +78,12 @@ export function MonthTab() {
           <span className="text-big font-semibold">{formatEur(factNow, { whole: true })}</span>
           <span className="text-base text-ink2">сейчас</span>
         </div>
+        <div className="text-cap text-ink2">старт и операции со статусом «факт»</div>
+        {pending.length > 0 && (
+          <p className="m-0 text-cap font-semibold text-ink tabular-nums">
+            {`Ждут подтверждения: ${joinRu(pending.slice(0, 3).map((q) => q.tx.title))}${pending.length > 3 ? ` и ещё ${pending.length - 3}` : ''} · ${pendingCents > 0 ? '+' : '−'}${formatEur(Math.abs(pendingCents), { whole: true })}`}
+          </p>
+        )}
         <div className="text-base text-ink2 tabular-nums">план на 31.12 — {formatEur(planEnd, { whole: true })}</div>
         <XYChart
           label="Баланс до 31.12: план и факт"
@@ -87,9 +105,11 @@ export function MonthTab() {
           ]}
         />
         <p className="m-0 text-cap text-ink2 tabular-nums">
-          {gap === 0
-            ? 'Факт совпадает с планом.'
-            : `Факт ${gap > 0 ? 'выше' : 'ниже'} плана на ${formatEur(Math.abs(gap), { whole: true })}${waitNote}.`}
+          {check === null
+            ? 'Реальных остатков пока нет — внеси их в воскресном обзоре, сравню с расчётом.'
+            : `Остатки на ${formatDayMonth(check.date)}: ${formatEur(check.actualCents, { whole: true })}, по расчёту ${formatEur(check.calculatedCents, { whole: true })} — ${
+                check.matches ? 'сходится' : `расхождение ${check.diffCents > 0 ? '+' : '−'}${formatEur(Math.abs(check.diffCents))}`
+              }.${check.missing.length ? ` Не внесены: ${check.missing.join(', ')}.` : ''}`}
         </p>
       </Card>
 
@@ -126,6 +146,11 @@ export function MonthTab() {
         selected={filter}
         onChange={(v) => setFilter(v as Filter[])}
       />
+      {removed.length > 0 && (
+        <Chip selected={showRemoved} onClick={() => setShowRemoved(!showRemoved)} className="self-start">
+          Показать убранные · {removed.length}
+        </Chip>
+      )}
       <Card>
         <CardHeader title="Операции" context={`${ops.length}`} />
         {ops.length === 0 ? (
@@ -192,14 +217,14 @@ function OperationRow({ t, today, onConfirm }: { t: Transaction; today: ISODate;
     <li className="flex min-h-12 items-center gap-3 border-t border-line py-1 first:border-t-0">
       <span className="w-10 flex-none text-cap text-ink2 tabular-nums">{formatDayMonth(t.date)}</span>
       <span className="min-w-0 flex-1">
-        <span lang="de" className={cn('block text-base [overflow-wrap:anywhere]', muted && 'text-ink3')}>
+        <span lang="de" className={cn('block text-base [overflow-wrap:anywhere]', muted && 'text-ink3 line-through')}>
           {t.title}
         </span>
         <span className="block text-cap text-ink2">
           {[muted ? 'убрано из плана' : t.week_budget && planned ? 'бюджет недели' : planned ? 'план' : 'факт', t.category, t.account].filter(Boolean).join(' · ')}
         </span>
       </span>
-      <span className={cn('text-base tabular-nums', muted && 'text-ink3 line-through')}>{signed(t)}</span>
+      {!muted && <span className="text-base tabular-nums">{signed(t)}</span>}
       {planned && !t.week_budget && t.date <= today && (
         <button type="button" onClick={onConfirm} className="h-11 flex-none rounded-xl border border-line2 px-3 text-cap font-semibold active:bg-sub">
           Подтвердить

@@ -1,4 +1,5 @@
 import { BookOpen, Briefcase, PersonStanding, Sun, Wallet, type LucideIcon } from 'lucide-react'
+import { useEffect, useRef } from 'react'
 import { NavLink } from 'react-router'
 import { cn } from './cn'
 
@@ -12,12 +13,30 @@ const TABS: readonly Tab[] = [
   { to: '/body', label: 'Тело', icon: PersonStanding, activeIcon: 'text-body' },
 ]
 
-/** Bottom tab bar. Active: icon in sphere colour (Сегодня — neutral), label 600. */
+/**
+ * Bottom tab bar. Active: icon in sphere colour (Сегодня — neutral), label 600.
+ * Publishes its real height (safe area, text size) as --nav-h: the content padding, «+» and the toast sit above it.
+ */
 export function TabBar() {
+  const ref = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const root = document.documentElement
+    const set = () => root.style.setProperty('--nav-h', `${Math.ceil(el.getBoundingClientRect().height)}px`)
+    set()
+    const ro = new ResizeObserver(set)
+    ro.observe(el)
+    return () => {
+      ro.disconnect()
+      root.style.removeProperty('--nav-h')
+    }
+  }, [])
   return (
     <nav
+      ref={ref}
       aria-label="Разделы"
-      className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card px-1 pt-1.5"
+      className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card px-1 pt-1.5 print:hidden"
     >
       <ul className="mx-auto grid max-w-[560px] grid-cols-5">
         {TABS.map(({ to, label, icon: Glyph, activeIcon }) => (

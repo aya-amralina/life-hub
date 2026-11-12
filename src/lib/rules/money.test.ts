@@ -240,3 +240,34 @@ describe('rule 26: a week with «Неделя N (факт)» — app expenses st
     expect(moneyWeek([{ category: 'Продукты', limit_eur: 50 }], txs, '2026-11-02').spentCents).toBe(3000)
   })
 })
+
+describe('reconciliation: real balances vs the calculated balance', async () => {
+  const { reconcile } = await import('./money')
+  const t = (date: string, kind: string, amount_eur: number, x: Record<string, unknown> = {}) => ({
+    date, kind, amount_eur, category: null, envelope_id: null, is_planned: false, confirmed_at: null, cancelled_at: null, ...x,
+  })
+  const txs = [
+    t('2026-10-13', 'opening', 1000),
+    t('2026-11-10', 'expense', 100),
+    t('2026-11-12', 'expense', 50, { is_planned: true }), // planned: not in the calculated «now»
+  ]
+  const accounts = ['Revolut', 'Sparkasse', 'Наличные']
+  it('latest entry with amounts; within 1 € it matches', () => {
+    const r = reconcile(
+      [
+        { date: '2026-11-01', balances: { Revolut: '999' } },
+        { date: '2026-11-15', balances: { Revolut: '600,50', Sparkasse: '300', Наличные: '' } },
+      ],
+      txs,
+      accounts,
+    )
+    expect(r).toMatchObject({ date: '2026-11-15', actualCents: 90050, calculatedCents: 90000, diffCents: 50, matches: true, missing: ['Наличные'] })
+  })
+  it('a real difference is named', () => {
+    expect(reconcile([{ date: '2026-11-15', balances: { Revolut: '850' } }], txs, accounts)).toMatchObject({ diffCents: -5000, matches: false })
+  })
+  it('nothing entered — nothing to compare', () => {
+    expect(reconcile([{ date: '2026-11-15', balances: { Revolut: '' } }], txs, accounts)).toBeNull()
+    expect(reconcile([], txs, accounts)).toBeNull()
+  })
+})
