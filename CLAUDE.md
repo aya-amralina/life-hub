@@ -93,6 +93,14 @@ public/                      # иконки PWA, шрифт Onest (woff2, self-h
 - Вход: основной — e-mail + пароль (`signInWithPassword`), запасной — magic link для браузера (`signInWithOtp`, `shouldCreateUser: false`). Входа кодом нет. Регистрация в Supabase выключена, пользователь один и создан вручную с паролем.
 - Форма входа: `autocomplete="username"` у e-mail и `autocomplete="current-password"` у пароля, `name`/`id` у полей — чтобы менеджер паролей iPhone подставлял данные. Пароль не логируем и не храним (кроме тестового пользователя: `LIFEHUB_TEST_PASSWORD` в `.env.local`).
 
+## Правки data/*.xlsx (разрешены Ае, 12.11.2026)
+1. Если рядом лежит `~$…`-файл (книга открыта в Excel) — остановиться и сказать Ае.
+2. Сначала копия в `data/_old/<имя>-ГГГГ-ММ-ДД-ЧЧММ.xlsx`.
+3. Менять только ячейки ввода; формулы, оформление, проверку значений и условное форматирование не трогать. Правка — точечно в XML ячейки внутри xlsx (openpyxl при сохранении теряет кэш формул и часть оформления).
+4. Пересчитать формулы: LibreOffice headless, если есть. Если нет — сказать Ае и поставить в книге `fullCalcOnLoad` (Excel пересчитает при открытии); назвать формулы, зависящие от изменённых ячеек.
+5. Показать, какие ячейки изменились (сравнение с копией: значения и формулы).
+6. Потом `npm run import:check`; запись — по договорённости с Аей.
+
 ## Деплой
 GitHub (приватный `life-hub`, `main` = прод) → Vercel Hobby (пресет Vite, env `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` для Production и Preview, `vercel.json` — SPA rewrite). Supabase Free, Frankfurt.
 

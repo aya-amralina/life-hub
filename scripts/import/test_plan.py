@@ -111,6 +111,15 @@ class UpdateTest(unittest.TestCase):
         changes = upd.diff("items", new, old, base, self.ctx, set(), D(2026, 11, 11))
         self.assertEqual([c.kind for c in changes], ["insert"])
 
+    def test_family_of_keys(self):
+        f = self.upd.family
+        self.assertEqual(f("budget:env:подушка: revolut"), "budget:env")
+        self.assertEqual(f("budget:env:E5"), "budget:env")
+        self.assertEqual(f("budget:N8"), "budget")
+        self.assertEqual(f("study:dl:abc"), "study:dl")
+        self.assertEqual(f("glow:measure-day:2026-11-20"), "glow:measure-day")
+        self.assertEqual(f("budget:week6:Продукты"), "budget")
+
     def test_links_compare_by_key(self):
         upd = self.upd
         ctx = {"week_id": {}, "week_start": {}, "key_of": {"u-e2": "budget:env:E2"}, "id_of": {"budget:env:E2": "u-e2", "budget:env:E3": "u-e3"}}

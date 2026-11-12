@@ -11,6 +11,7 @@ Fields the app never edits (week classification, notes, weeks) follow Excel with
 from __future__ import annotations
 
 import datetime as dt
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -47,8 +48,12 @@ KEY_FIELDS = {"envelope_key": "envelope_id", "debt_key": "debt_id", "pot_key": "
 
 
 def family(key: str) -> str:
-    """«budget:env:E2» → «budget:env», «budget:N8» → «budget»: rows of one kind from one source."""
-    return key.rsplit(":", 1)[0]
+    """Kind of row from one source: «budget:env:E2» → «budget:env», «budget:N8» → «budget», «glow:task:…» →
+    «glow:task». Only a word-only second part is a kind — names after it may contain «:» («budget:env:подушка: revolut»)."""
+    parts = key.split(":")
+    if len(parts) >= 3 and re.fullmatch(r"[a-z-]+", parts[1]):
+        return f"{parts[0]}:{parts[1]}"
+    return parts[0]
 
 
 def item_fields(row: dict) -> list[str]:

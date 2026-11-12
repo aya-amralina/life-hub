@@ -144,3 +144,36 @@ def app_forecast_all(txs: list[dict], today: dt.date, end: str = "2026-12-31") -
                 continue
         total += {"opening": amount, "income": amount, "expense": -amount}.get(t["kind"], 0.0)
     return round(total, 2)
+
+
+ACCOUNTS = ("Revolut", "Sparkasse", "Наличные", "Казахстанская карта")
+
+
+def fact_balance(txs: list[dict], date: str) -> float:
+    """«сейчас» as money.ts balanceAt(fact): start + operations with status «факт», not cancelled; a week with
+    «итог недели» counts that total instead of the app's weekly-category expenses of the week."""
+    def monday(s: str) -> dt.date:
+        d = dt.date.fromisoformat(s[:10])
+        return d - dt.timedelta(days=d.weekday())
+
+    live = [t for t in txs if not t.get("cancelled_at") and _is_fact(t) and t["date"][:10] <= date]
+    fact_weeks = {monday(t["date"]) for t in live if t.get("entry_kind") == "week_total"}
+    total = 0.0
+    for t in live:
+        if not _week_row(t) and t["kind"] == "expense" and t.get("category") in WEEK_CATEGORIES and monday(t["date"]) in fact_weeks:
+            continue
+        amount = float(t["amount_eur"])
+        total += {"opening": amount, "income": amount, "expense": -amount}.get(t["kind"], 0.0)
+    return round(total, 2)
+
+
+def reconcile(balances: list[dict], txs: list[dict]) -> dict | None:
+    """Latest date of «Остатки» with account rows: their sum against the calculated balance on that date."""
+    rows = [b for b in balances if b["account"] in ACCOUNTS]
+    if not rows:
+        return None
+    date = max(b["date"][:10] for b in rows)
+    on = {b["account"]: float(b["amount_eur"]) for b in rows if b["date"][:10] == date}
+    actual = round(sum(on.values()), 2)
+    calc = fact_balance(txs, date)
+    return {"date": date, "actual": actual, "calculated": calc, "diff": round(actual - calc, 2), "missing": [a for a in ACCOUNTS if a not in on]}

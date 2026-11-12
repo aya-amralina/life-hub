@@ -156,6 +156,7 @@ class State:
         self.types = {r["name"]: r["id"] for r in rest.select("activity_types", "id,name", f)}
         self.activities = {(r["date"], r["type_id"]) for r in rest.select("activities", "date,type_id", f)}
         self.measure_days = {r["date"] for r in rest.select("measurements", "date", f)}
+        self.balances = rest.select("actual_balances", "date,account,amount_eur,source_id", f)
         self.all_tx = rest.select("transactions", "source_id,date,amount_eur,kind,grp,category,entry_kind,is_planned,confirmed_at,cancelled_at", f)
         # source keys of linked rows (envelopes incl. archived, debts) — links are compared by key
         self.keys = {r["id"]: r["source_id"] for t in ("envelopes", "debts") for r in rest.select(t, "id,source_id", {**f, "source_id": "not.is.null"})}
@@ -260,7 +261,20 @@ def checks(b: Batch, st: State, tx_changes: list[upd.Change]) -> list[str]:
     before = plan.app_forecast_all(st.all_tx, b.today)
     after = plan.app_forecast_all(simulate_tx(st, b, tx_changes), b.today)
     excel = plan.balance_end([t for t in b.rows["transactions"]])
-    out = ["", "=== Прогноз «На счетах 31.12» ==="]
+    today = b.today.isoformat()
+    after_tx = simulate_tx(st, b, tx_changes)
+    out = ["", "=== Баланс «сейчас» (старт + «факт») ==="]
+    out.append(f"сейчас в приложении: {plan.fact_balance(st.all_tx, today):.2f} € → после записи: {plan.fact_balance(after_tx, today):.2f} €")
+    # «Остатки» after the run: rows of the base (review ones stay) + the Excel ones
+    excel_bal = {r["source_id"]: r for r in b.rows.get("actual_balances", [])}
+    balances = [r for r in st.balances if r.get("source_id") not in excel_bal] + list(excel_bal.values())
+    rec = plan.reconcile(balances, after_tx)
+    if rec is None:
+        out.append("сверка: в «Остатках» нет строк по счетам")
+    else:
+        verdict = "сходится" if abs(rec["diff"]) < 1 else f"расхождение {rec['diff']:+.2f} €"
+        out.append(f"сверка на {rec['date']}: «Остатки» {rec['actual']:.2f} € против расчёта {rec['calculated']:.2f} € — {verdict}" + (f" (нет строк: {', '.join(rec['missing'])})" if rec["missing"] else ""))
+    out += ["", "=== Прогноз «На счетах 31.12» ==="]
     out.append(f"сейчас в приложении: {before:.2f} € → после записи: {after:.2f} € (конфликты не применены)")
     out.append(f"по Excel (все строки со знаком, как «Обзор»): {excel:.2f} €")
     h04 = plan.week_hours(b.rows["items"], "Н04", b.weeks)
