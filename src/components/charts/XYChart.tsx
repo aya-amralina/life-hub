@@ -111,6 +111,7 @@ export function XYChart({
               radius={[3, 3, 0, 0]}
               isAnimationActive={false}
               unit={b.unit}
+              minPointSize={b.minPointSize}
             />
           ))}
           {lines.map((l) => (

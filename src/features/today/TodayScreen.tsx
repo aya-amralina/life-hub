@@ -1,11 +1,14 @@
-import { CalendarDays, Flame, Hourglass, MapPin, Plus, Settings } from 'lucide-react'
+import { useState } from 'react'
+import { CalendarDays, CircleCheck, Flame, Hourglass, MapPin, Plus, Settings } from 'lucide-react'
 import { Link } from 'react-router'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { useOpenAdd } from '@/app/addSheetContext'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
+import { cn } from '@/components/ui/cn'
 import { EmptyState, SkeletonCard } from '@/components/ui/Feedback'
+import { GroupHeader } from '@/components/ui/GroupHeader'
 import { CalendarLink } from '@/components/layout/CalendarLink'
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
 import {
@@ -106,6 +109,7 @@ function WeekLine({ week }: { week: Week | null }) {
 function BurningCard({ today }: { today: ISODate }) {
   const items = useItems()
   const update = useUpdateItem()
+  const [doneOpen, setDoneOpen] = useState(false)
 
   if (items.isPending) return <SkeletonCard />
   if (items.isError) return <EmptyState title="Не удалось загрузить">Проверь сеть — данные подтянутся сами.</EmptyState>
@@ -133,23 +137,47 @@ function BurningCard({ today }: { today: ISODate }) {
         icon={<Flame size={20} strokeWidth={1.75} aria-hidden="true" className="text-ink2" />}
         context={open > 0 ? `${open} · на 3 дня вперёд` : 'всё сделано'}
       />
-      <div className="flex flex-col gap-2">
-        {dayItems.map((item) => (
-          <ItemRow key={item.id} item={item} today={today} onToggle={() => update.mutate({ id: item.id, patch: donePatch(item.sphere) })} />
-        ))}
-        {hot.map(({ item }) => (
-          <ItemRow key={item.id} item={item} today={today} onToggle={() => update.mutate({ id: item.id, patch: donePatch(item.sphere) })} />
-        ))}
-        {doneToday.map((item) => (
-          <ItemRow
-            key={item.id}
-            item={item}
-            today={today}
-            meta={`готово в ${formatTimeBerlin(item.done_at!)}`}
-            onToggle={() => update.mutate({ id: item.id, patch: reopenPatch(item.status === 'Erledigt' || item.status === 'Готово' || item.status === 'готово' ? null : item.status, item.sphere) })}
+      {open > 0 && (
+        <div className="flex flex-col gap-2">
+          {dayItems.map((item) => (
+            <ItemRow key={item.id} item={item} today={today} onToggle={() => update.mutate({ id: item.id, patch: donePatch(item.sphere) })} />
+          ))}
+          {hot.map(({ item }) => (
+            <ItemRow key={item.id} item={item} today={today} onToggle={() => update.mutate({ id: item.id, patch: donePatch(item.sphere) })} />
+          ))}
+        </div>
+      )}
+      {/* done today folds away under «Сделано» (closed by default), so the card shows what is still burning */}
+      {doneToday.length > 0 && (
+        <div className={cn('flex flex-col', open > 0 && 'border-t border-line pt-2')}>
+          <GroupHeader
+            mark={<CircleCheck size={16} strokeWidth={1.75} aria-hidden="true" className="flex-none text-ink2" />}
+            title="Сделано"
+            count={doneToday.length}
+            summary={doneOpen ? undefined : 'показать'}
+            open={doneOpen}
+            onToggle={() => setDoneOpen(!doneOpen)}
           />
-        ))}
-      </div>
+          <div
+            inert={!doneOpen}
+            className={cn('grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none', doneOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}
+          >
+            <div className="-mx-1 min-h-0 overflow-hidden">
+              <div className="flex flex-col gap-2 px-1 pt-2 pb-1">
+                {doneToday.map((item) => (
+                  <ItemRow
+                    key={item.id}
+                    item={item}
+                    today={today}
+                    meta={`готово в ${formatTimeBerlin(item.done_at!)}`}
+                    onToggle={() => update.mutate({ id: item.id, patch: reopenPatch(item.status === 'Erledigt' || item.status === 'Готово' || item.status === 'готово' ? null : item.status, item.sphere) })}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </Card>
   )
 }

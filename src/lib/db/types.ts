@@ -148,6 +148,7 @@ export type Database = {
         Row: {
           body_cream: boolean
           care: string[]
+          coffee_cups: number | null
           created_at: string
           date: string
           energy: number | null
@@ -168,6 +169,7 @@ export type Database = {
         Insert: {
           body_cream?: boolean
           care?: string[]
+          coffee_cups?: number | null
           created_at?: string
           date: string
           energy?: number | null
@@ -188,6 +190,7 @@ export type Database = {
         Update: {
           body_cream?: boolean
           care?: string[]
+          coffee_cups?: number | null
           created_at?: string
           date?: string
           energy?: number | null

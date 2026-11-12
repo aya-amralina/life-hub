@@ -3,13 +3,13 @@ import { ChartCard } from '@/components/charts/ChartCard'
 import { HeatGrid } from '@/components/charts/HeatGrid'
 import { XYChart } from '@/components/charts/Chart'
 import { ChartLegend } from '@/components/charts/chartParts'
-import { formatChartNumber as chartNumber } from '@/lib/format'
+import { formatChartNumber as chartNumber, plural } from '@/lib/format'
 import { Chip } from '@/components/ui/Chip'
 import { SkeletonCard } from '@/components/ui/Feedback'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { addDaysISO, formatDayMonth, todayBerlin, weekStart } from '@/lib/dates'
 import { activityPoints, weekPointsTarget } from '@/lib/rules/activities'
-import { activityWeeks, habitCalendar, intakeBands, repsSeries, wellbeingSeries, type Period } from '@/lib/rules/charts'
+import { activityWeeks, coffeeSeries, coffeeWeek, habitCalendar, intakeBands, repsSeries, wellbeingSeries, type Period } from '@/lib/rules/charts'
 import { useActivities, useActivityTypes, useIntake, useStrengthSets } from './activityApi'
 import { useLogsSince, useStages } from './api'
 
@@ -19,11 +19,12 @@ const PERIODS = [
   { value: 'month', label: 'Месяц' },
 ] as const
 
-/** Тело → Графики (SPEC §5): wellbeing, habit calendar, activity score vs target, reps growth. */
+/** Тело → Графики (SPEC §5): wellbeing, coffee, habit calendar, activity score vs target, reps growth. */
 export function BodyCharts() {
   return (
     <>
       <WellbeingCard />
+      <CoffeeCard />
       <HabitsGridCard />
       <ActivityCard />
       <RepsCard />
@@ -74,6 +75,60 @@ function WellbeingCard() {
         <span className="text-cap text-ink2">Шкала 1–10. Разрыв — день без отметки, не ноль.</span>
       </div>
       {withIntake && !bands.length && <p className="m-0 text-cap text-ink2">В этом периоде приёма нет.</p>}
+    </ChartCard>
+  )
+}
+
+/** Cups per day from the evening block; sleep on request — to see whether late coffee costs sleep. */
+function CoffeeCard() {
+  const today = todayBerlin()
+  const [period, setPeriod] = useState<Period>('day')
+  const [withSleep, setWithSleep] = useState(false)
+  const logs = useLogsSince(addDaysISO(today, -190))
+  if (logs.isPending) return <SkeletonCard />
+  const data = coffeeSeries(logs.data ?? [], today, period)
+  const answered = (logs.data ?? []).filter((l) => l.coffee_cups !== null).length
+  const week = coffeeWeek(logs.data ?? [], today)
+  // left axis 0 … an even top, at least 4 cups
+  const top = Math.max(4, Math.ceil(Math.max(0, ...data.map((p) => p.cups ?? 0)) / 2) * 2)
+  return (
+    <ChartCard title="Кофе" dotClass="bg-body" context={period === 'day' ? 'чашек в день' : 'в среднем за день'}>
+      <SegmentedTabs label="Период" segments={PERIODS} value={period} onChange={setPeriod} />
+      {week.answered > 0 && (
+        <div className="flex items-baseline gap-2 tabular-nums">
+          <span className="text-big font-semibold">{week.cups}</span>
+          <span className="text-base text-ink2">
+            {plural(week.cups, ['чашка', 'чашки', 'чашек'])} за 7 дней
+            {week.without > 0 ? ` · без кофе ${week.without} ${plural(week.without, ['день', 'дня', 'дней'])}` : ''}
+          </span>
+        </div>
+      )}
+      <XYChart
+        label={withSleep ? 'Чашки кофе и сон' : 'Чашки кофе'}
+        data={data}
+        height={168}
+        empty={answered < 3}
+        emptyText="Мало данных — отмечай кофе в «Вечере», график появится через несколько дней"
+        bars={[{ key: 'cups', name: 'Кофе', color: 'body', minPointSize: 3 }]}
+        lines={withSleep ? [{ key: 'sleep', name: 'Сон', color: 'ink2', dash: true, axis: 'right', unit: ' ч' }] : []}
+        yLeft={{ domain: [0, top], ticks: [0, top / 2, top] }}
+        yRight={withSleep ? { domain: [0, 12], ticks: [0, 6, 12], unit: ' ч' } : undefined}
+        todayKey={period === 'day' ? today : undefined}
+      />
+      {withSleep && (
+        <ChartLegend
+          items={[
+            { name: 'Кофе, чашки', color: 'body', kind: 'bar' },
+            { name: 'Сон, часы — правая ось', color: 'ink2', kind: 'dash' },
+          ]}
+        />
+      )}
+      <div className="flex items-center gap-3">
+        <Chip selected={withSleep} onClick={() => setWithSleep(!withSleep)} className="flex-none">
+          Сравнить со сном
+        </Chip>
+        <span className="text-cap text-ink2">0 — день без кофе. Разрыв — день без отметки.</span>
+      </div>
     </ChartCard>
   )
 }

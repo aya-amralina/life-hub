@@ -14,25 +14,18 @@ export type WellbeingPoint = { key: ISODate; label: string; mood: number | null;
 const MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
 const monthLabel = (iso: ISODate) => MONTHS[Number(iso.slice(5, 7)) - 1]!
 
-/**
- * Wellbeing chart (SPEC §5): day — values per day (last 14 days), week — averages per Mon–Sun (last 13 weeks),
- * month — averages per month (last 6). Empty days/buckets are null — a gap in the line, never a zero.
- */
-export function wellbeingSeries(logs: readonly WellbeingLog[], today: ISODate, period: Period): WellbeingPoint[] {
-  const byDate = new Map(logs.map((l) => [l.date, l]))
-  const bucket = (key: ISODate, label: string, days: ISODate[]): WellbeingPoint => {
-    const rows = days.map((d) => byDate.get(d)).filter((l): l is WellbeingLog => Boolean(l))
-    const pick = (f: (l: WellbeingLog) => number | null) => avg(rows.map(f).filter((v): v is number => v !== null).map(Number))
-    return { key, label, mood: pick((l) => l.mood), energy: pick((l) => l.energy), sleep: pick((l) => l.sleep_h) }
-  }
+/** Buckets of a chart period: day — the last 14 days, week — the last 13 Mon–Sun weeks, month — the last 6 months (only days ≤ today). */
+export function periodBuckets(today: ISODate, period: Period): { key: ISODate; label: string; days: ISODate[] }[] {
   if (period === 'day') {
-    return Array.from({ length: 14 }, (_, i) => addDaysISO(today, i - 13)).map((d) => bucket(d, formatDayMonth(d), [d]))
+    return Array.from({ length: 14 }, (_, i) => addDaysISO(today, i - 13)).map((d) => ({ key: d, label: formatDayMonth(d), days: [d] }))
   }
   if (period === 'week') {
     const last = weekStart(today)
-    return Array.from({ length: 13 }, (_, i) => addDaysISO(last, (i - 12) * 7)).map((m) =>
-      bucket(m, formatDayMonth(m), Array.from({ length: 7 }, (_, d) => addDaysISO(m, d)).filter((d) => d <= today)),
-    )
+    return Array.from({ length: 13 }, (_, i) => addDaysISO(last, (i - 12) * 7)).map((m) => ({
+      key: m,
+      label: formatDayMonth(m),
+      days: Array.from({ length: 7 }, (_, d) => addDaysISO(m, d)).filter((d) => d <= today),
+    }))
   }
   const months: ISODate[] = []
   let y = Number(today.slice(0, 4))
@@ -48,8 +41,48 @@ export function wellbeingSeries(logs: readonly WellbeingLog[], today: ISODate, p
   return months.map((first) => {
     const days: ISODate[] = []
     for (let d = first; d.slice(0, 7) === first.slice(0, 7) && d <= today; d = addDaysISO(d, 1)) days.push(d)
-    return bucket(first, monthLabel(first), days)
+    return { key: first, label: monthLabel(first), days }
   })
+}
+
+/**
+ * Wellbeing chart (SPEC §5): day — values per day (last 14 days), week — averages per Mon–Sun (last 13 weeks),
+ * month — averages per month (last 6). Empty days/buckets are null — a gap in the line, never a zero.
+ */
+export function wellbeingSeries(logs: readonly WellbeingLog[], today: ISODate, period: Period): WellbeingPoint[] {
+  const byDate = new Map(logs.map((l) => [l.date, l]))
+  return periodBuckets(today, period).map(({ key, label, days }) => {
+    const rows = days.map((d) => byDate.get(d)).filter((l): l is WellbeingLog => Boolean(l))
+    const pick = (f: (l: WellbeingLog) => number | null) => avg(rows.map(f).filter((v): v is number => v !== null).map(Number))
+    return { key, label, mood: pick((l) => l.mood), energy: pick((l) => l.energy), sleep: pick((l) => l.sleep_h) }
+  })
+}
+
+export type CoffeeLog = { date: ISODate; coffee_cups: number | null; sleep_h: number | null }
+export type CoffeePoint = { key: ISODate; label: string; cups: number | null; sleep: number | null }
+
+/**
+ * Coffee chart: cups per day (0 — a day without coffee, a real zero; null — not answered, a gap), averages per
+ * week / month over the answered days only. Sleep alongside — to compare.
+ */
+export function coffeeSeries(logs: readonly CoffeeLog[], today: ISODate, period: Period): CoffeePoint[] {
+  const byDate = new Map(logs.map((l) => [l.date, l]))
+  return periodBuckets(today, period).map(({ key, label, days }) => {
+    const rows = days.map((d) => byDate.get(d)).filter((l): l is CoffeeLog => Boolean(l))
+    const pick = (f: (l: CoffeeLog) => number | null) => avg(rows.map(f).filter((v): v is number => v !== null).map(Number))
+    return { key, label, cups: pick((l) => l.coffee_cups), sleep: pick((l) => l.sleep_h) }
+  })
+}
+
+/** The last 7 days (today included): cups in total, answered days, days without coffee. */
+export function coffeeWeek(logs: readonly CoffeeLog[], today: ISODate): { cups: number; answered: number; without: number } {
+  const from = addDaysISO(today, -6)
+  const days = logs.filter((l) => l.date >= from && l.date <= today && l.coffee_cups !== null)
+  return {
+    cups: days.reduce((s, l) => s + Number(l.coffee_cups), 0),
+    answered: days.length,
+    without: days.filter((l) => Number(l.coffee_cups) === 0).length,
+  }
 }
 
 export type Band = { from: string; to: string; label: string }

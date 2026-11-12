@@ -87,6 +87,7 @@ function emptyLog(date: ISODate): Partial<DailyLog> {
     energy: null,
     slump: null,
     sleep_h: null,
+    coffee_cups: null,
     mood: null,
     note: null,
   }

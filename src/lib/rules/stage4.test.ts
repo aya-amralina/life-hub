@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { bandsOn, calendarBands, calendarEvents, monthGrid, parseFilters } from './calendar'
-import { activityWeeks, balanceLine, enoughForMonths, erfolgeByMonth, habitCalendar, intakeBands, repsSeries, studyHeatmap, wellbeingSeries } from './charts'
+import { activityWeeks, balanceLine, coffeeSeries, coffeeWeek, enoughForMonths, erfolgeByMonth, habitCalendar, intakeBands, repsSeries, studyHeatmap, wellbeingSeries } from './charts'
 
 const today = '2026-11-11' // Wed
 
@@ -32,6 +32,30 @@ describe('wellbeing series', () => {
     const s = wellbeingSeries(logs, today, 'day')
     expect(intakeBands([{ name: 'D3', start_date: '2026-11-09', end_date: null }], s, today)).toEqual([{ from: '2026-11-09', to: today, label: 'D3' }])
     expect(intakeBands([{ name: 'old', start_date: '2026-01-01', end_date: '2026-02-01' }], s, today)).toEqual([])
+  })
+})
+
+describe('coffee', () => {
+  const logs = [
+    { date: '2026-11-09', coffee_cups: 2, sleep_h: 7 },
+    { date: '2026-11-10', coffee_cups: 0, sleep_h: 8 },
+    { date: '2026-11-11', coffee_cups: null, sleep_h: 6.5 },
+    { date: '2026-11-02', coffee_cups: 3, sleep_h: null },
+  ]
+  it('day: a day without coffee is 0, an unanswered day is a gap', () => {
+    const s = coffeeSeries(logs, today, 'day')
+    expect(s).toHaveLength(14)
+    expect(s.find((p) => p.key === '2026-11-10')).toMatchObject({ cups: 0, sleep: 8 })
+    expect(s.at(-1)).toMatchObject({ key: today, cups: null, sleep: 6.5 })
+  })
+  it('week: average over answered days only', () => {
+    const s = coffeeSeries(logs, today, 'week')
+    expect(s.at(-1)).toMatchObject({ key: '2026-11-09', cups: 1, sleep: 7.2 })
+    expect(s.at(-2)).toMatchObject({ key: '2026-11-02', cups: 3, sleep: null })
+  })
+  it('last 7 days: cups, answered days, days without coffee', () => {
+    expect(coffeeWeek(logs, today)).toEqual({ cups: 2, answered: 2, without: 1 })
+    expect(coffeeWeek([], today)).toEqual({ cups: 0, answered: 0, without: 0 })
   })
 })
 

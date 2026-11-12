@@ -2,7 +2,8 @@
 
 export type SphereColor = 'money' | 'work' | 'study' | 'body' | 'ink2'
 export type XYLine = { key: string; name: string; color: SphereColor; dash?: boolean; axis?: 'left' | 'right'; unit?: string }
-export type XYBar = { key: string; name: string; color: SphereColor; axis?: 'left' | 'right'; opacity?: number; unit?: string }
+// minPointSize: a real 0 drawn as a thin stub, so it differs from a gap (null)
+export type XYBar = { key: string; name: string; color: SphereColor; axis?: 'left' | 'right'; opacity?: number; unit?: string; minPointSize?: number }
 export type XYAxis = { domain: [number | 'auto', number | 'auto']; ticks?: number[]; unit?: string }
 export type XYBand = { from: string; to: string; label: string }
 

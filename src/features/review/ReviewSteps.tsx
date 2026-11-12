@@ -120,7 +120,7 @@ export function BodyStep({ monday, note, onNote }: { monday: ISODate; note: stri
   const share = weekHabitShare(logs.data ?? [], stages.data ?? [], monday, today < sunday ? today : sunday)
   const stage = stages.data?.length ? stageForDate(stages.data, monday) : null
   const minDays = (logs.data ?? []).filter((l) => minimumDone(l, minimumSet(stage))).length
-  const avg = (f: (l: { mood: number | null; energy: number | null; sleep_h: number | null }) => number | null) => {
+  const avg = (f: (l: { mood: number | null; energy: number | null; sleep_h: number | null; coffee_cups: number | null }) => number | null) => {
     const v = (logs.data ?? []).map(f).filter((x): x is number => x !== null).map(Number)
     return v.length ? String(Math.round((v.reduce((s, x) => s + x, 0) / v.length) * 10) / 10).replace('.', ',') : '—'
   }
@@ -147,6 +147,8 @@ export function BodyStep({ monday, note, onNote }: { monday: ISODate; note: stri
           <dd className="m-0 text-right">{avg((l) => l.energy)}</dd>
           <dt className="text-ink2">Сон, часов в среднем</dt>
           <dd className="m-0 text-right">{avg((l) => l.sleep_h)}</dd>
+          <dt className="text-ink2">Кофе, чашек в день</dt>
+          <dd className="m-0 text-right">{avg((l) => l.coffee_cups)}</dd>
           <dt className="text-ink2">Очки активности</dt>
           <dd className="m-0 text-right">
             {String(points).replace('.', ',')}
