@@ -17,6 +17,7 @@ const StudyScreen = lazy(() => import('@/features/study/StudyScreen').then((m) =
 const WorkScreen = lazy(() => import('@/features/work/WorkScreen').then((m) => ({ default: m.WorkScreen })))
 const ItemScreen = lazy(() => import('@/features/items/ItemScreen').then((m) => ({ default: m.ItemScreen })))
 const ReviewScreen = lazy(() => import('@/features/review/ReviewScreen').then((m) => ({ default: m.ReviewScreen })))
+const JournalScreen = lazy(() => import('@/features/journal/JournalScreen').then((m) => ({ default: m.JournalScreen })))
 const CalendarScreen = lazy(() => import('@/features/calendar/CalendarScreen').then((m) => ({ default: m.CalendarScreen })))
 
 function Lazy({ page: Page }: { page: LazyExoticComponent<ComponentType> }) {
@@ -49,6 +50,7 @@ const router = createBrowserRouter([
       { path: 'body/*', element: <Lazy page={BodyScreen} /> },
       { path: 'item/:id', element: <Lazy page={ItemScreen} /> },
       { path: 'calendar', element: <Lazy page={CalendarScreen} /> },
+      { path: 'journal', element: <Lazy page={JournalScreen} /> },
       { path: 'review', element: <Lazy page={ReviewScreen} /> },
       { path: 'settings', element: <Lazy page={SettingsScreen} /> },
       { path: '*', element: <Navigate to="/" replace /> },

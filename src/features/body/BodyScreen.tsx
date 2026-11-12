@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CalendarClock, NotebookPen, Plus, X } from 'lucide-react'
+import { CalendarClock, Plus, X } from 'lucide-react'
 import { Button, IconButton } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Chip } from '@/components/ui/Chip'
@@ -24,6 +24,7 @@ import { ItemQuestions } from '@/features/items/ItemQuestions'
 import { ItemRow } from '@/features/items/ItemRow'
 import { ActivitySheet } from './ActivitySheet'
 import { BodyCharts } from './BodyCharts'
+import { DayNoteCard } from '@/features/journal/DayNoteCard'
 import { bodyDataKeys, useActivities, useActivityTypes, useWrite } from './activityApi'
 import { useDailyLog, useSaveDailyLog, useStages, useWeekLogs } from './api'
 import { EveningCard } from './EveningCard'
@@ -86,7 +87,7 @@ function DayTab() {
         </>
       )}
       <EveningCard date={date} />
-      <NoteCard date={date} />
+      <DayNoteCard date={date} />
       <WeekShare date={date} />
       <BodyTasks />
       <StageCard />
@@ -223,31 +224,6 @@ function CareCard({ date }: { date: ISODate }) {
         </div>
       )}
       {faceShown && <p className="m-0 text-cap text-ink2">Вечер: лицо — {face} (старая отметка)</p>}
-    </Card>
-  )
-}
-
-function NoteCard({ date }: { date: ISODate }) {
-  const log = useDailyLog(date)
-  const save = useSaveDailyLog(date)
-  const [note, setNote] = useState<string | null>(null)
-  if (log.isPending) return null
-  const saved = log.data?.note ?? ''
-  return (
-    <Card>
-      <CardHeader title="Заметка дня" icon={<NotebookPen size={20} strokeWidth={1.75} aria-hidden="true" className="text-ink2" />} />
-      <textarea
-        aria-label="Заметка дня"
-        placeholder="Что было важного — пара слов"
-        rows={2}
-        value={note ?? saved}
-        onChange={(e) => setNote(e.target.value)}
-        onBlur={() => {
-          if (note !== null && note !== saved) save.mutate({ note: note.trim() || null })
-          setNote(null)
-        }}
-        className="rounded-xl border border-line2 bg-card px-4 py-3 text-base text-ink outline-none placeholder:text-ink3 focus:border-ink2"
-      />
     </Card>
   )
 }

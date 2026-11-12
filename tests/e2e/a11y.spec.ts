@@ -20,6 +20,7 @@ const SCREENS: { name: string; go: (p: Page) => Promise<void> }[] = [
   { name: 'Тело · Графики', go: async (p) => (await p.goto('/body'), await p.getByRole('tab', { name: 'Графики' }).click()) },
   { name: 'Тело · Приём', go: async (p) => (await p.goto('/body'), await p.getByRole('tab', { name: 'Приём' }).click()) },
   { name: 'Календарь', go: async (p) => void (await p.goto('/calendar')) },
+  { name: 'Журнал', go: async (p) => void (await p.goto('/journal')) },
   { name: 'Настройки', go: async (p) => void (await p.goto('/settings')) },
   { name: 'Обзор', go: async (p) => void (await p.goto('/review')) },
 ]
@@ -56,7 +57,7 @@ test('доступность: контраст и роли (axe), зоны на�
   await sb.from('items').insert({ sphere: 'study', title: 'Übungsblatt 4', area: 'GLET', week_id: week.id, hours_est: 3, due_date: berlinDate(-1), status: 'открыто' })
   await sb.from('items').insert({ sphere: 'work', title: 'Release', status: 'In Arbeit', area: 'Kundendashboard', next_step: 'Changelog', due_date: berlinDate(2) })
   await sb.from('wishlist').insert({ title: 'Kopfhörer', price_eur: 79, added_at: new Date(Date.now() - 50 * 3_600_000).toISOString() })
-  await sb.from('daily_logs').insert({ date: berlinDate(), mood: 7, energy: 6, sleep_h: 7.5, water: true })
+  await sb.from('daily_logs').insert({ date: berlinDate(), mood: 7, energy: 6, sleep_h: 7.5, water: true, note: 'Спокойный день' })
   await sb.auth.signOut()
 
   const report: string[] = []
