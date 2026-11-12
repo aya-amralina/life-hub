@@ -16,7 +16,7 @@ describe('formatEur', () => {
     expect(formatAmount(-0, { whole: true })).toBe('0')
   })
   it('negative', () => {
-    expect(formatEur(-180)).toBe(`-1,80${NB}€`)
+    expect(formatEur(-180)).toBe(`−1,80${NB}€`)
   })
   it('whole drops ,00 only for round sums', () => {
     expect(formatEur(2000, { whole: true })).toBe(`20${NB}€`)

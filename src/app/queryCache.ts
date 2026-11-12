@@ -3,6 +3,10 @@ import { idb } from './idb'
 
 const KEY = 'query-cache'
 const MAX_AGE = 7 * 24 * 3_600_000
+// Shape of the cached rows. Bump when a migration adds a column the screens rely on (entry_kind, coffee_cups …):
+// a cache saved before it is dropped, not shown — otherwise old rows look like something else for a moment
+// (a week budget without entry_kind asked «Списалось?»).
+const VERSION = 2
 
 /**
  * Read cache for offline (SPEC §1): successful queries are kept in IndexedDB, so the app opens without network
@@ -11,9 +15,9 @@ const MAX_AGE = 7 * 24 * 3_600_000
  */
 export function persistQueryCache(qc: QueryClient) {
   void idb
-    .get<{ at: number; state: DehydratedState }>(KEY)
+    .get<{ at: number; v?: number; state: DehydratedState }>(KEY)
     .then((saved) => {
-      if (!saved || Date.now() - saved.at >= MAX_AGE) return
+      if (!saved || saved.v !== VERSION || Date.now() - saved.at >= MAX_AGE) return
       hydrate(qc, saved.state)
       // restored data is only a fallback: mark it stale so screens refetch (when there is network)
       void qc.invalidateQueries()
@@ -25,7 +29,7 @@ export function persistQueryCache(qc: QueryClient) {
     if (timer) clearTimeout(timer)
     timer = null
     const state = dehydrate(qc, { shouldDehydrateQuery: (q) => q.state.status === 'success' })
-    void idb.set(KEY, { at: Date.now(), state }).catch(() => {})
+    void idb.set(KEY, { at: Date.now(), v: VERSION, state }).catch(() => {})
   }
   qc.getQueryCache().subscribe(() => {
     if (!timer) timer = setTimeout(save, 2000)

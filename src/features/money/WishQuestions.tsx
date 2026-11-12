@@ -7,12 +7,12 @@ import { wishDue } from '@/lib/rules/wishlist'
 import { useUpdateWish, useWishlist, type Wish } from './wishlistApi'
 
 /** Rule 5: after 48 hours a wish asks «Всё ещё нужно?» — on «Сегодня» and in «Хотелки». */
-export function WishQuestions() {
+export function WishQuestions({ only }: { only?: number } = {}) {
   const wishes = useWishlist()
   const update = useUpdateWish()
   const toast = useToast()
   const now = new Date()
-  const due = (wishes.data ?? []).filter((w) => wishDue(w, now))
+  const due = (wishes.data ?? []).filter((w) => wishDue(w, now)).filter((_, i) => only === undefined || i === only)
 
   const decide = (w: Wish, decision: 'buy' | 'skip') => {
     update.mutate({ id: w.id, patch: { decision, decided_at: new Date().toISOString() } })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isFact, moneyWeek, type TxLike } from './money'
+import { isFact, moneyWeek, weekSpendings, type TxLike } from './money'
 
 const tx = (p: Partial<TxLike>): TxLike => ({
   date: '2026-11-10',
@@ -60,6 +60,23 @@ describe('rule 2 — money week', () => {
   it('isFact', () => {
     expect(isFact({ is_planned: false, confirmed_at: null })).toBe(true)
     expect(isFact({ is_planned: true, confirmed_at: null })).toBe(false)
+  })
+})
+
+describe('«Траты недели» — only what counts for the week', () => {
+  it('fact with a weekly category; no planned, one-off or week rows; envelope expenses listed but not in the limit sum', () => {
+    const txs = [
+      tx({ date: '2026-11-10', amount_eur: 12, category: 'Продукты' }),
+      tx({ date: '2026-11-12', amount_eur: 4.2, category: 'Кофейни и перекусы' }),
+      tx({ date: '2026-11-11', amount_eur: 20, category: 'Продукты', envelope_id: 'e1' }),
+      tx({ date: '2026-11-12', amount_eur: 650, category: null }),
+      tx({ date: '2026-11-12', amount_eur: 30, category: 'Продукты', is_planned: true, confirmed_at: null }),
+      tx({ date: '2026-11-12', amount_eur: 3, category: null, entry_kind: 'week_budget', is_planned: true, confirmed_at: 'x' }),
+      tx({ date: '2026-11-16', amount_eur: 9, category: 'Продукты' }),
+    ]
+    const w = weekSpendings(txs, '2026-11-09')
+    expect(w.list.map((t) => t.amount_eur)).toEqual([4.2, 20, 12])
+    expect(w.limitCents).toBe(1620)
   })
 })
 

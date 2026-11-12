@@ -1,15 +1,16 @@
 import { Check, Hourglass, Pause, X } from 'lucide-react'
 import { cn } from './cn'
 
-/** Work status label: neutral, statuses differ by the shape of the mark. */
-export function StatusBadge({ status }: { status: string }) {
+/** Work status label: neutral, statuses differ by the shape of the mark. `plain` — mark + name without the chip. */
+export function StatusBadge({ status, plain = false }: { status: string; plain?: boolean }) {
   const strong = status === 'In Arbeit'
   return (
     <span
       lang="de"
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-lg bg-sub px-2 py-[3px] text-cap whitespace-nowrap',
-        strong ? 'text-ink' : 'text-ink2',
+        'inline-flex items-center gap-1.5 whitespace-nowrap',
+        // plain: inside a status tile that already has its own border — no chip within a frame
+        plain ? 'gap-2 text-base text-ink' : cn('rounded-lg bg-sub px-2 py-[3px] text-cap', strong ? 'text-ink' : 'text-ink2'),
       )}
     >
       <StatusMark status={status} />

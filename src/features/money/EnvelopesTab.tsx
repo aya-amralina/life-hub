@@ -10,9 +10,9 @@ import { MetaChip } from '@/components/ui/MetaChip'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { formatDayMonth, formatWeekdayDate, todayBerlin } from '@/lib/dates'
-import { formatEur, parseEurInput } from '@/lib/format'
+import { formatEur, parseEurInput, plural } from '@/lib/format'
 import { debtSummary, envelopeSummary, envelopesLeft, goalProgress } from '@/lib/rules/money'
-import { useActualBalances, useAllTransactions, useCreateEnvelope, useDebts, useEnvelopes, type Debt, type Envelope } from './api'
+import { useActualBalances, useAllTransactions, useCreateEnvelope, useDebts, useEnvelopes, useSaveGoalBalance, type Debt, type Envelope } from './api'
 
 const field = 'h-12 w-full rounded-xl border border-line2 bg-card px-4 text-base text-ink outline-none focus:border-ink2'
 const DIRECTION: Record<string, string> = { i_owe: 'я должна', owed_to_me: 'мне должны', from_pot: 'заём из копилки' }
@@ -57,7 +57,7 @@ export function EnvelopesTab() {
             <div className="flex flex-col gap-1">
               <span className="text-cap text-ink2">Отложено в конвертах</span>
               <span className="text-big font-semibold tabular-nums">{eur(left)}</span>
-              <span className="text-cap text-ink2 tabular-nums">осталось в {envs.length} конвертах · потрачено {eur(spent)}</span>
+              <span className="text-cap text-ink2 tabular-nums">осталось в {envs.length} {plural(envs.length, ['конверте', 'конвертах', 'конвертах'])} · потрачено {eur(spent)}</span>
             </div>
           )}
           {envs.map((e) => (
@@ -111,6 +111,11 @@ function EnvelopeCard({ e, s }: { e: Envelope; s: ReturnType<typeof envelopeSumm
 function GoalCard({ g, p, loans }: { g: Envelope; p: ReturnType<typeof goalProgress>; loans: Debt[] }) {
   const today = todayBerlin()
   const late = p.due !== null && p.due < today && (p.share ?? 0) < 1
+  const save = useSaveGoalBalance()
+  const toast = useToast()
+  const [entering, setEntering] = useState(false)
+  const [input, setInput] = useState('')
+  const cents = parseEurInput(input)
   return (
     <Card>
       <div className="flex items-baseline gap-2">
@@ -123,9 +128,30 @@ function GoalCard({ g, p, loans }: { g: Envelope; p: ReturnType<typeof goalProgr
       </div>
       {p.targetCents !== null && <ProgressBar value={p.nowCents ?? 0} max={p.targetCents} fillClass="bg-money" label={`${g.name}: накоплено`} />}
       <div className="flex flex-wrap items-center gap-2 text-cap text-ink2 tabular-nums">
-        {p.nowCents !== null ? <span>остаток на {formatDayMonth(p.asOf!)}</span> : <span>остаток не внесён — строка в «Остатках» или воскресный обзор</span>}
+        {p.nowCents !== null ? <span>остаток на {formatDayMonth(p.asOf!)}</span> : <span>остаток пока не внесён</span>}
         {p.due && (late ? <MetaChip kind="late" text={`Срок прошёл · ${formatWeekdayDate(p.due)}`} /> : <MetaChip kind="flag" text={`до ${formatWeekdayDate(p.due)}`} />)}
       </div>
+      {entering ? (
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (cents === null) return
+            save.mutate({ goal: g, date: today, amount: cents / 100 }, { onSuccess: () => toast({ text: `${g.name}: остаток ${eur(cents)} на сегодня` }) })
+            setEntering(false)
+            setInput('')
+          }}
+        >
+          <input autoFocus value={input} onChange={(e) => setInput(e.target.value)} inputMode="decimal" placeholder="Сейчас в кармашке, €" aria-label={`Остаток: ${g.name}`} className={`${field} min-w-0 flex-1`} />
+          <Button type="submit" disabled={cents === null}>
+            Сохранить
+          </Button>
+        </form>
+      ) : (
+        <Button variant="secondary" className="h-11 self-start" onClick={() => setEntering(true)}>
+          {p.nowCents !== null ? 'Обновить остаток' : 'Внести остаток'}
+        </Button>
+      )}
       {loans.map((d) => (
         <p key={d.id} className="m-0 rounded-xl bg-sub px-3 py-2 text-cap text-ink">
           Взято в долг из этой цели: {eur(Math.round(Number(d.amount_eur) * 100))}

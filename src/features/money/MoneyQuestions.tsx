@@ -10,12 +10,12 @@ import { useAllTransactions, useUpdateTransaction, type Transaction } from './ap
  * Rule 18: a planned operation whose day has come asks once — income «Пришло?», expense «Списалось?».
  * Confirm (the amount can be corrected), another date, or cancel (out of the plan). Stands first until answered.
  */
-export function MoneyQuestions() {
+export function MoneyQuestions({ only }: { only?: number } = {}) {
   const today = todayBerlin()
   const txs = useAllTransactions()
   const update = useUpdateTransaction()
   const toast = useToast()
-  const list = plannedQuestions(txs.data ?? [], today)
+  const list = plannedQuestions(txs.data ?? [], today).filter((_, i) => only === undefined || i === only)
 
   const answer = (tx: Transaction, patch: Parameters<typeof update.mutate>[0]['patch'], text: string) => {
     const before = { date: tx.date, amount_eur: tx.amount_eur, confirmed_at: tx.confirmed_at, cancelled_at: tx.cancelled_at }

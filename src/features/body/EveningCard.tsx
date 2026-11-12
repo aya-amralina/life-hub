@@ -1,36 +1,62 @@
-import { Minus, Moon, Plus } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { Moon } from 'lucide-react'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { SkeletonCard } from '@/components/ui/Feedback'
+import { GroupHeader } from '@/components/ui/GroupHeader'
 import { Scale } from '@/components/ui/Scale'
+import { Stepper } from '@/components/ui/Stepper'
 import { cn } from '@/components/ui/cn'
-import { hourBerlin, todayBerlin, type ISODate } from '@/lib/dates'
+import { addDaysISO, hourBerlin, todayBerlin, type ISODate } from '@/lib/dates'
 import { plural } from '@/lib/format'
-import { useDailyLog, useSaveDailyLog } from './api'
+import { EVENING_FROM, eveningAnswered, isEvening, lastBefore } from '@/lib/rules/day'
+import { useDailyLog, useLogsSince, useSaveDailyLog } from './api'
 
 const ONE_TO_TEN = Array.from({ length: 10 }, (_, i) => ({ value: i + 1 }))
-// 5 … 12 h in half-hour steps
-const SLEEP = Array.from({ length: 15 }, (_, i) => 5 + i / 2).map((v) => ({ value: v, label: String(v).replace('.', ',') }))
 const SLUMP = [
   { value: 'yes', label: 'Да' },
   { value: 'no', label: 'Нет' },
 ] as const
 
-export const MOOD_OPENS_AT = 18
 const MAX_CUPS = 20
 const cupsWord = (n: number) => plural(n, ['чашка', 'чашки', 'чашек'])
+const MOON = <Moon size={20} strokeWidth={1.75} aria-hidden="true" className="flex-none text-ink2" />
 
-/** Evening block: energy, sleep, mood, slump, coffee — one tap per question. Mood opens after 18:00 (today). */
-export function EveningCard({ date, title = 'Вечер' }: { date: ISODate; title?: string }) {
+/**
+ * «Вечер»: energy, mood, slump, coffee — one tap per question (sleep is a morning mark, it lives with the habits).
+ * Mood opens after 18:00 (today). `foldable` («Сегодня»): before 18:00 the card is one line and opens by a tap.
+ */
+export function EveningCard({ date, foldable = false, context }: { date: ISODate; foldable?: boolean; context?: ReactNode }) {
   const log = useDailyLog(date)
   const save = useSaveDailyLog(date)
+  const recent = useLogsSince(addDaysISO(date, -14))
+  const [opened, setOpened] = useState(false)
   if (log.isPending) return <SkeletonCard />
 
-  const moodLocked = date === todayBerlin() && hourBerlin() < MOOD_OPENS_AT
+  const early = date === todayBerlin() && !isEvening(hourBerlin())
   const slump = log.data?.slump === true ? 'yes' : log.data?.slump === false ? 'no' : null
+  const { answered, total } = eveningAnswered(log.data)
+
+  if (foldable && early && !opened) {
+    return (
+      <Card>
+        <GroupHeader
+          mark={MOON}
+          title="Вечер"
+          summary={answered > 0 ? `отмечено ${answered} из ${total}` : `после ${EVENING_FROM}:00 · ${total} вопроса`}
+          open={false}
+          onToggle={() => setOpened(true)}
+        />
+      </Card>
+    )
+  }
 
   return (
     <Card>
-      <CardHeader title={title} icon={<Moon size={20} strokeWidth={1.75} aria-hidden="true" className="text-ink2" />} />
+      {foldable && early ? (
+        <GroupHeader mark={MOON} title="Вечер" open onToggle={() => setOpened(false)} />
+      ) : (
+        <CardHeader title="Вечер" icon={MOON} context={context ?? (answered > 0 && answered < total ? `${answered} из ${total}` : undefined)} />
+      )}
       <div className="flex flex-col gap-6">
         <Scale
           label="Энергия"
@@ -41,19 +67,12 @@ export function EveningCard({ date, title = 'Вечер' }: { date: ISODate; tit
           hintHigh="10 — полон сил"
         />
         <Scale
-          label="Сон, ч"
-          options={SLEEP}
-          value={log.data?.sleep_h ?? null}
-          onChange={(v) => save.mutate({ sleep_h: v })}
-          format={(v) => String(v).replace('.', ',')}
-        />
-        <Scale
           label="Настроение"
           options={ONE_TO_TEN}
           value={log.data?.mood ?? null}
           onChange={(v) => save.mutate({ mood: v })}
-          disabled={moodLocked}
-          disabledHint={`откроется после ${MOOD_OPENS_AT}:00`}
+          disabled={early}
+          disabledHint={`откроется после ${EVENING_FROM}:00`}
         />
         <Scale
           label="Провал после обеда"
@@ -63,21 +82,24 @@ export function EveningCard({ date, title = 'Вечер' }: { date: ISODate; tit
           onChange={(v) => save.mutate({ slump: v === null ? null : v === 'yes' })}
           format={(v) => (v === 'yes' ? 'да' : 'нет')}
         />
-        <CoffeeField value={log.data?.coffee_cups ?? null} onChange={(v) => save.mutate({ coffee_cups: v })} />
+        <CoffeeField
+          value={log.data?.coffee_cups ?? null}
+          last={lastBefore(recent.data ?? [], date, (l) => l.coffee_cups)}
+          onChange={(v) => save.mutate({ coffee_cups: v })}
+        />
       </div>
     </Card>
   )
 }
 
-/** «Кофе»: Нет / Да (tapping the chosen one again clears it); «Да» opens a cups counter, 1 … 20. */
-function CoffeeField({ value, onChange }: { value: number | null; onChange: (v: number | null) => void }) {
+/** «Кофе»: Нет / Да (tapping the chosen one again clears it); «Да» opens a cups counter, 1 … 20; «как в прошлый раз» — one tap. */
+function CoffeeField({ value, last, onChange }: { value: number | null; last: number | null; onChange: (v: number | null) => void }) {
   const drank = value !== null && value > 0
   const key = (selected: boolean) =>
     cn(
       'flex h-11 items-center justify-center rounded-xl text-base transition-transform duration-100',
       selected ? 'bg-inv font-semibold text-on-inv' : 'bg-sub text-ink active:scale-[.96] active:bg-line2',
     )
-  const step = 'flex size-11 flex-none items-center justify-center rounded-lg bg-card text-ink transition-transform duration-100 active:scale-[.96] disabled:bg-transparent disabled:text-dis disabled:scale-100'
   return (
     <div role="group" aria-label="Кофе" className="flex flex-col gap-2">
       <div className="flex justify-between text-base">
@@ -93,18 +115,15 @@ function CoffeeField({ value, onChange }: { value: number | null; onChange: (v: 
         </button>
       </div>
       {drank && (
-        <div className="flex items-center gap-2 rounded-xl bg-sub p-1">
-          <button type="button" aria-label="На одну чашку меньше" disabled={value <= 1} onClick={() => onChange(value - 1)} className={step}>
-            <Minus size={20} strokeWidth={1.75} aria-hidden="true" />
-          </button>
-          <output aria-live="polite" className="flex flex-1 items-baseline justify-center gap-1 tabular-nums">
-            <span className="text-title font-semibold">{value}</span>
-            <span className="text-cap text-ink2">{cupsWord(value)}</span>
-          </output>
-          <button type="button" aria-label="Ещё чашка" disabled={value >= MAX_CUPS} onClick={() => onChange(value + 1)} className={step}>
-            <Plus size={20} strokeWidth={1.75} aria-hidden="true" />
-          </button>
-        </div>
+        <Stepper onMinus={() => onChange(value - 1)} onPlus={() => onChange(value + 1)} minusLabel="На одну чашку меньше" plusLabel="Ещё чашка" minusDisabled={value <= 1} plusDisabled={value >= MAX_CUPS}>
+          <span className="text-title font-semibold">{value}</span>
+          <span className="text-cap text-ink2">{cupsWord(value)}</span>
+        </Stepper>
+      )}
+      {value === null && last !== null && last > 0 && (
+        <button type="button" onClick={() => onChange(last)} className="flex h-11 items-center self-start rounded-xl border border-line2 px-3 text-cap text-ink active:bg-sub">
+          Как в прошлый раз · {last} {cupsWord(last)}
+        </button>
       )}
     </div>
   )

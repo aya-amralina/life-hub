@@ -1,18 +1,21 @@
 import { useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useOpenAdd } from '@/app/addSheetContext'
-import { Button, IconButton } from '@/components/ui/Button'
+import { useToast } from '@/app/toastContext'
+import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { EmptyState, SkeletonCard } from '@/components/ui/Feedback'
 import { ProgressBar } from '@/components/ui/ProgressBar'
+import { Swipeable } from '@/components/ui/Swipeable'
 import { WeekSwitcher } from '@/components/ui/WeekSwitcher'
 import { CalendarLink } from '@/components/layout/CalendarLink'
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
 import { addDaysISO, formatDayMonth, formatRelativeDay, todayBerlin, weekStart } from '@/lib/dates'
-import { formatAmount, formatEur, toCents } from '@/lib/format'
+import { formatAmount, formatEur, plural, toCents } from '@/lib/format'
+import { plannedQuestions, weekSpendings } from '@/lib/rules/money'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { NotesCard } from '@/features/notes/NotesCard'
-import { useDeleteTransaction, useWeekLimits } from './api'
+import { useAddExpense, useAllTransactions, useDeleteTransaction, useWeekLimits, type Transaction } from './api'
 import { CutNextWeek } from './CutNextWeek'
 import { EnvelopesTab } from './EnvelopesTab'
 import { LimitsSheet } from './LimitsSheet'
@@ -36,7 +39,8 @@ export function MoneyScreen() {
     <>
       <ScreenHeader title="Деньги" right={<CalendarLink sphere="money" />} />
       <SegmentedTabs label="Раздел" segments={TABS} value={tab} onChange={setTab} />
-      <MoneyQuestions />
+      {/* the questions themselves — on «Неделя» (and «Сегодня»); other tabs only say that some are waiting */}
+      {tab === 'week' ? <MoneyQuestions /> : <PendingLink onOpen={() => (setTab('week'), window.scrollTo({ top: 0 }))} />}
       {tab === 'week' && <WeekTab />}
       {tab === 'month' && <MonthTab />}
       {tab === 'envelopes' && <EnvelopesTab />}
@@ -47,6 +51,21 @@ export function MoneyScreen() {
   )
 }
 
+function PendingLink({ onOpen }: { onOpen: () => void }) {
+  const txs = useAllTransactions()
+  const n = plannedQuestions(txs.data ?? [], todayBerlin()).length
+  if (n === 0) return null
+  return (
+    <button type="button" onClick={onOpen} className="flex min-h-11 items-center gap-2 rounded-xl bg-sub px-4 text-left text-base active:bg-line2">
+      <span className="size-2 flex-none rounded-full bg-money" />
+      <span className="min-w-0 flex-1">
+        {plural(n, ['Ждёт', 'Ждут', 'Ждут'])} подтверждения · <span className="font-semibold tabular-nums">{n}</span>
+      </span>
+      <ChevronRight size={20} strokeWidth={1.75} aria-hidden="true" className="flex-none text-ink3" />
+    </button>
+  )
+}
+
 function WeekTab() {
   const today = todayBerlin()
   const thisMonday = weekStart(today)
@@ -54,9 +73,8 @@ function WeekTab() {
   const [editLimits, setEditLimits] = useState(false)
   const { week, txs, summary, pending } = useMoneyWeek(monday)
   const limits = useWeekLimits(week?.id ?? null)
-  const del = useDeleteTransaction()
   const openAdd = useOpenAdd()
-  const expenses = txs.filter((t) => t.kind === 'expense')
+  const spendings = weekSpendings(txs, monday)
 
   return (
     <>
@@ -106,7 +124,7 @@ function WeekTab() {
                   </div>
                 ))}
             </div>
-            <Button variant="quiet" className="-ml-3 self-start" onClick={() => setEditLimits(true)}>
+            <Button variant="secondary" className="h-11 self-start" icon={<Pencil size={16} strokeWidth={1.75} aria-hidden="true" className="text-ink2" />} onClick={() => setEditLimits(true)}>
               Изменить лимиты
             </Button>
           </Card>
@@ -120,34 +138,67 @@ function WeekTab() {
       )}
 
       <Card>
-        <CardHeader title="Траты недели" context={expenses.length ? formatEur(expenses.reduce((s, t) => s + toCents(t.amount_eur), 0)) : undefined} />
-        {expenses.length === 0 ? (
+        <CardHeader title="Траты недели" context={spendings.list.length ? formatEur(spendings.limitCents) : undefined} />
+        {spendings.list.length === 0 ? (
           <p className="m-0 text-cap text-ink2">Пока ни одной. Хорошая неделя для кошелька.</p>
         ) : (
-          <ul className="m-0 flex list-none flex-col p-0">
-            {expenses.map((t) => (
-              <li key={t.id} className="flex items-center gap-3 border-t border-line py-2 first:border-t-0">
-                <div className="min-w-0 flex-1">
-                  <div className="text-base [overflow-wrap:anywhere]">{t.title}</div>
-                  <div className="text-cap text-ink2">
-                    {[formatRelativeDay(t.date, today), t.category !== t.title ? t.category : null, t.account, t.envelope_id ? 'конверт' : null]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </div>
-                </div>
-                <span className="text-base tabular-nums">{formatEur(toCents(t.amount_eur))}</span>
-                {t.source_id === null && (
-                  <IconButton shape="square" label={`Удалить трату ${t.title}`} onClick={() => del.mutate(t.id)} className="border-transparent text-ink3">
-                    <Trash2 size={20} strokeWidth={1.75} aria-hidden="true" />
-                  </IconButton>
-                )}
-              </li>
-            ))}
-          </ul>
+          <>
+            <ul className="m-0 flex list-none flex-col p-0">
+              {spendings.list.map((t) => (
+                <li key={t.id} className="border-t border-line first:border-t-0">
+                  <SpendingRow t={t} today={today} />
+                </li>
+              ))}
+            </ul>
+            <p className="m-0 text-cap text-ink2">Только то, что идёт в лимит недели. Свою трату убирает свайп влево или тап по строке.</p>
+          </>
         )}
       </Card>
 
       <LimitsSheet open={editLimits} onClose={() => setEditLimits(false)} monday={monday} current={limits.data ?? []} />
     </>
+  )
+}
+
+/** A week's expense: own ones (not from Excel) are removed by a swipe left or by a tap → «Удалить»; a toast brings it back. */
+function SpendingRow({ t, today }: { t: Transaction; today: string }) {
+  const del = useDeleteTransaction()
+  const add = useAddExpense()
+  const toast = useToast()
+  const [open, setOpen] = useState(false)
+  const own = t.source_id === null
+  const remove = () => {
+    del.mutate(t.id)
+    toast({
+      text: `${t.title} · ${formatEur(toCents(t.amount_eur))} — убрала`,
+      actionLabel: 'Вернуть',
+      onAction: () => add.mutate({ id: t.id, date: t.date, amount_eur: t.amount_eur, category: t.category, account: t.account, title: t.title }),
+    })
+  }
+  const body = (
+    <>
+      <span className="min-w-0 flex-1">
+        <span className="block text-base [overflow-wrap:anywhere]">{t.title}</span>
+        <span className="block text-cap text-ink2">
+          {[formatRelativeDay(t.date, today), t.category !== t.title ? t.category : null, t.account, t.envelope_id ? 'конверт' : null].filter(Boolean).join(' · ')}
+        </span>
+      </span>
+      <span className="text-base tabular-nums">{formatEur(toCents(t.amount_eur))}</span>
+    </>
+  )
+  if (!own) return <div className="flex min-h-11 items-center gap-3 py-2">{body}</div>
+  return (
+    <Swipeable onLeft={remove} leftLabel="Удалить" leftIcon={Trash2}>
+      <div className="flex items-center gap-2 bg-card">
+        <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="flex min-h-11 min-w-0 flex-1 items-center gap-3 py-2 text-left">
+          {body}
+        </button>
+        {open && (
+          <Button variant="secondary" className="h-11 flex-none" icon={<Trash2 size={16} strokeWidth={1.75} aria-hidden="true" />} onClick={remove}>
+            Удалить
+          </Button>
+        )}
+      </div>
+    </Swipeable>
   )
 }

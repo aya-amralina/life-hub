@@ -7,9 +7,9 @@ const eurWhole = new Intl.NumberFormat('ru-RU', {
 })
 const decimal1 = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 })
 
-/** Normalize any whitespace Intl inserts (nbsp, narrow nbsp) to a regular no-break space. */
+/** Normalize any whitespace Intl inserts (nbsp, narrow nbsp) to a regular no-break space; a real minus «−», not a hyphen. */
 function nbsp(s: string): string {
-  return s.replace(/[\u00a0\u202f ]/g, '\u00a0')
+  return s.replace(/[\u00a0\u202f ]/g, '\u00a0').replace('-', '\u2212')
 }
 
 /** Euro amount from cents: 3250 → '32,50 €'. `whole` drops ',00' for round sums: 2000 → '20 €'. */

@@ -1,5 +1,5 @@
 import { useRef, useState, type PointerEvent, type ReactNode } from 'react'
-import { Check, Redo2 } from 'lucide-react'
+import { Check, Redo2, type LucideIcon } from 'lucide-react'
 import { cn } from './cn'
 
 const THRESHOLD = 80
@@ -15,6 +15,7 @@ export function Swipeable({
   onLongPress,
   rightLabel = 'Готово',
   leftLabel = 'Перенести',
+  leftIcon: LeftIcon = Redo2,
   children,
 }: {
   onRight?: () => void
@@ -22,6 +23,7 @@ export function Swipeable({
   onLongPress?: () => void
   rightLabel?: string
   leftLabel?: string
+  leftIcon?: LucideIcon
   children: ReactNode
 }) {
   const [dx, setDx] = useState(0)
@@ -79,7 +81,7 @@ export function Swipeable({
             </span>
           ) : (
             <span className="flex items-center gap-1">
-              {leftLabel} <Redo2 size={16} strokeWidth={2} />
+              {leftLabel} <LeftIcon size={16} strokeWidth={2} />
             </span>
           )}
         </div>

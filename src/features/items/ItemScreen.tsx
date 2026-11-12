@@ -290,9 +290,9 @@ function ItemForm({ item }: { item: FullItem }) {
                   type="button"
                   aria-pressed={(status ?? 'Offen') === s}
                   onClick={() => setStatus(s)}
-                  className={cn('flex min-h-12 items-center rounded-xl border px-3 text-left active:bg-sub', (status ?? 'Offen') === s ? 'border-inv' : 'border-line2')}
+                  className={cn('flex min-h-12 items-center rounded-xl border px-3 text-left active:bg-sub', (status ?? 'Offen') === s ? 'border-inv bg-sub font-semibold' : 'border-line2')}
                 >
-                  <StatusBadge status={s} />
+                  <StatusBadge status={s} plain />
                 </button>
               ))}
             </div>

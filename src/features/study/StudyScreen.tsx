@@ -98,11 +98,7 @@ function WeekTab() {
                 <div lang="de">
                   <CardHeader title={subject} dotClass="bg-study" context={hours ? `${formatHours(closed)} из ${formatHours(hours)}` : undefined} />
                 </div>
-                <div className="flex flex-col gap-2">
-                  {list.map((i) => (
-                    <StudyRow key={i.id} item={i} today={today} monday={monday} weeks={weeks.data ?? []} />
-                  ))}
-                </div>
+                <SubjectRows list={list} today={today} monday={monday} weeks={weeks.data ?? []} />
               </Card>
             )
           })}
@@ -122,6 +118,37 @@ function WeekTab() {
         </>
       )}
       <MoveSheet open={moving} onClose={() => setMoving(false)} waiting={waiting} all={all} weeks={weeks.data ?? []} monday={thisMonday} />
+    </>
+  )
+}
+
+/** A subject's rows of the week: open ones first; done ones fold under «Сделано · N» (closed by default). */
+function SubjectRows({ list, today, monday, weeks }: { list: Item[]; today: ISODate; monday: ISODate; weeks: Week[] }) {
+  const [doneOpen, setDoneOpen] = useState(false)
+  const rest = list.filter((i) => !isItemDone(i))
+  const done = list.filter((i) => isItemDone(i))
+  return (
+    <>
+      {rest.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {rest.map((i) => (
+            <StudyRow key={i.id} item={i} today={today} monday={monday} weeks={weeks} />
+          ))}
+        </div>
+      )}
+      {done.length > 0 && (
+        <div className={rest.length > 0 ? 'flex flex-col gap-2 border-t border-line pt-1' : 'flex flex-col gap-2'}>
+          <GroupHeader
+            mark={<CircleCheck size={16} strokeWidth={1.75} aria-hidden="true" className="flex-none text-ink2" />}
+            title="Сделано"
+            count={done.length}
+            summary={doneOpen ? undefined : 'показать'}
+            open={doneOpen}
+            onToggle={() => setDoneOpen(!doneOpen)}
+          />
+          {doneOpen && done.map((i) => <StudyRow key={i.id} item={i} today={today} monday={monday} weeks={weeks} />)}
+        </div>
+      )}
     </>
   )
 }

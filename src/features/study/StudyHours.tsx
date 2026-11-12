@@ -1,5 +1,6 @@
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { formatHours } from '@/lib/format'
+import { loadPhrase } from '@/lib/rules/day'
 import { LOAD_LABEL, type LoadStatus } from '@/lib/rules/study'
 
 /** «12 ч из 27,5 ч» (closed / planned) + capacity status of the plan (rule 7). */
@@ -8,11 +9,14 @@ export function StudyHours({
   load,
   itemsDone,
   itemsTotal,
+  brief = false,
 }: {
   done: number
   load: { hours: number; base: number; max: number; status: LoadStatus }
   itemsDone: number
   itemsTotal: number
+  /** «Сегодня»: the plan in plain words instead of the numbers of rule 7. */
+  brief?: boolean
 }) {
   if (load.hours === 0) {
     // No hour estimates yet (manual items before import) — count items instead of «0 ч из 0 ч».
@@ -35,7 +39,7 @@ export function StudyHours({
       </div>
       <ProgressBar value={done} max={load.hours} fillClass="bg-study" label="Часы недели" />
       <div className={load.status === 'ok' ? 'text-cap text-ink2 tabular-nums' : 'text-cap font-semibold text-amber-ink tabular-nums'}>
-        План {formatHours(load.hours)} · база {formatHours(load.base)}, максимум {formatHours(load.max)} — {LOAD_LABEL[load.status]}
+        {brief ? loadPhrase(load) : `План ${formatHours(load.hours)} · база ${formatHours(load.base)}, максимум ${formatHours(load.max)} — ${LOAD_LABEL[load.status]}`}
       </div>
     </div>
   )

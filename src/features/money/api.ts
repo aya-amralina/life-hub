@@ -198,6 +198,21 @@ export function useActualBalances() {
   })
 }
 
+/** «Внести остаток» of a goal's pocket: one «Остатки» row per day (account — the goal's Excel ID, else its name). */
+export function useSaveGoalBalance() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ goal, date, amount }: { goal: Pick<Envelope, 'id' | 'name' | 'source_id'>; date: ISODate; amount: number }) => {
+      const account = goal.source_id?.startsWith('budget:env:') ? goal.source_id.slice('budget:env:'.length) : goal.name
+      const { error } = await supabase
+        .from('actual_balances')
+        .upsert({ date, account, envelope_id: goal.id, amount_eur: amount, origin: 'review' }, { onConflict: 'user_id,date,account' })
+      if (error) throw error
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: moneyKeys.all }),
+  })
+}
+
 /** The Sunday review writes the balances it asks for into «Остатки» (one row per day and account). */
 export function useSaveActualBalances() {
   const qc = useQueryClient()

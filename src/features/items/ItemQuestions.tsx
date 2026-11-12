@@ -11,12 +11,12 @@ import { donePatch, reopenPatch } from './donePatch'
 const asSphere = (s: string): Sphere => (s in SPHERE_LABEL ? (s as Sphere) : 'personal')
 
 /** Rule 17: «Состоялось?» for past day-items — on «Сегодня» (all spheres) and inside a sphere. */
-export function ItemQuestions({ sphere }: { sphere?: Sphere }) {
+export function ItemQuestions({ sphere, only }: { sphere?: Sphere; only?: number }) {
   const today = todayBerlin()
   const items = useItems()
   const update = useUpdateItem()
   const toast = useToast()
-  const list = happenedQuestions(items.data ?? [], today).filter((i) => !sphere || i.sphere === sphere)
+  const list = happenedQuestions(items.data ?? [], today).filter((i) => !sphere || i.sphere === sphere).filter((_, i) => only === undefined || i === only)
 
   const answer = (item: Item, patch: Parameters<typeof update.mutate>[0]['patch'], text: string) => {
     const before = { status: item.status, done_at: item.done_at, happens_on: item.happens_on, happens_time: item.happens_time }

@@ -41,6 +41,9 @@ test('Учёба: пункт на сегодня попадает в недел�
   const box = page.getByRole('checkbox', { name: title })
   await expect(box).toHaveAttribute('aria-checked', 'false')
   await box.click()
+  // done rows fold under «Сделано · N» of the subject
+  await expect(box).toBeHidden()
+  await page.getByRole('button', { name: /Сделано\s*1/ }).click()
   await expect(box).toHaveAttribute('aria-checked', 'true')
 })
 

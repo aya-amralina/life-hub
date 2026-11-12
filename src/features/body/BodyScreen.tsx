@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CalendarClock, Plus, X } from 'lucide-react'
+import { CalendarClock, NotebookPen, Plus, X } from 'lucide-react'
 import { Button, IconButton } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Chip } from '@/components/ui/Chip'
@@ -85,7 +85,7 @@ function DayTab() {
           <CareCard date={date} />
         </>
       )}
-      <EveningCard date={date} title="Самочувствие" />
+      <EveningCard date={date} />
       <NoteCard date={date} />
       <WeekShare date={date} />
       <BodyTasks />
@@ -234,9 +234,11 @@ function NoteCard({ date }: { date: ISODate }) {
   if (log.isPending) return null
   const saved = log.data?.note ?? ''
   return (
-    <label className="flex flex-col gap-2">
-      <span className="text-cap text-ink2">Заметка дня</span>
+    <Card>
+      <CardHeader title="Заметка дня" icon={<NotebookPen size={20} strokeWidth={1.75} aria-hidden="true" className="text-ink2" />} />
       <textarea
+        aria-label="Заметка дня"
+        placeholder="Что было важного — пара слов"
         rows={2}
         value={note ?? saved}
         onChange={(e) => setNote(e.target.value)}
@@ -244,9 +246,9 @@ function NoteCard({ date }: { date: ISODate }) {
           if (note !== null && note !== saved) save.mutate({ note: note.trim() || null })
           setNote(null)
         }}
-        className="rounded-xl border border-line2 bg-card px-4 py-3 text-base text-ink outline-none focus:border-ink2"
+        className="rounded-xl border border-line2 bg-card px-4 py-3 text-base text-ink outline-none placeholder:text-ink3 focus:border-ink2"
       />
-    </label>
+    </Card>
   )
 }
 
@@ -258,9 +260,14 @@ function WeekShare({ date }: { date: ISODate }) {
   const share = weekHabitShare(logs.data, stages.data, monday, todayBerlin())
   if (share === null) return null
   return (
-    <p className="m-0 text-cap text-ink2">
-      Неделя: {Math.round(share * 100)} % привычек отмечено. Без стриков — каждый день с чистого листа.
-    </p>
+    <Card>
+      <CardHeader title="Неделя" dotClass="bg-body" context="привычки" />
+      <div className="flex items-baseline gap-2 tabular-nums">
+        <span className="text-big font-semibold">{Math.round(share * 100)} %</span>
+        <span className="text-base text-ink2">отмечено</span>
+      </div>
+      <p className="m-0 text-cap text-ink2">Без стриков — каждый день с чистого листа.</p>
+    </Card>
   )
 }
 

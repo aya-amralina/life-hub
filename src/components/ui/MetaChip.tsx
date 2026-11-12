@@ -34,6 +34,7 @@ export function MetaChip({ kind, text, className }: Chip & { className?: string 
   const Icon = ICON[kind]
   return (
     <span
+      title={kind === 'rigid' ? text : undefined}
       className={cn(
         'inline-flex h-[18px] items-center gap-1 rounded-md border border-transparent px-1.5 text-cap leading-4 whitespace-nowrap tabular-nums',
         STYLE[kind],
@@ -41,7 +42,8 @@ export function MetaChip({ kind, text, className }: Chip & { className?: string 
       )}
     >
       {Icon && <Icon size={12} strokeWidth={kind === 'ok' ? 2.5 : 2.25} aria-hidden="true" />}
-      {text}
+      {/* «жёсткий» — the lock alone in the row (keeps the meta on one line); the words stay for screen readers and as a hint */}
+      {kind === 'rigid' ? <span className="sr-only">{text}</span> : text}
     </span>
   )
 }

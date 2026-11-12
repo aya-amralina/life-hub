@@ -46,8 +46,9 @@ test('графики: Тело → Графики и тепловая карта
   await page.getByRole('tab', { name: 'Графики' }).click()
   await expect(page.getByRole('figure', { name: 'Настроение, энергия и сон' })).toBeVisible()
   await expect(page.getByText('Мало данных', { exact: false }).first()).toBeVisible() // reps/activity are empty
-  await page.getByRole('tab', { name: 'Неделя' }).click()
+  await page.getByRole('tab', { name: 'Неделя' }).first().click() // «Самочувствие»; «Кофе» has its own period
   await expect(page.getByText('средние за неделю')).toBeVisible()
+  await expect(page.getByRole('figure', { name: 'Чашки кофе' })).toBeVisible()
   await expect(page.getByRole('group', { name: 'Календарь привычек' })).toBeVisible()
 
   await tab(page, 'Учёба')

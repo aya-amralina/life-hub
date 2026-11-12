@@ -98,6 +98,19 @@ export function signedCents(t: Pick<TxLike, 'kind' | 'amount_eur'>): number {
 }
 
 /**
+ * «Траты недели»: what the week's list shows — fact expenses with a weekly category in Mon–Sun, newest first.
+ * Planned operations, one-off rows of the plan and week rows («Неделя N») live in «Месяц», not here.
+ * `limitCents` — the part that counts against the limit (rule 4: an envelope's expense does not).
+ */
+export function weekSpendings<T extends TxLike>(txs: readonly T[], monday: ISODate): { list: T[]; limitCents: number } {
+  const sunday = addDaysISO(monday, 6)
+  const list = txs
+    .filter((t) => t.kind === 'expense' && !isWeekRow(t) && isFact(t) && isWeekCategory(t.category) && t.date >= monday && t.date <= sunday)
+    .sort((a, b) => b.date.localeCompare(a.date))
+  return { list, limitCents: list.filter((t) => t.envelope_id === null).reduce((s, t) => s + toCents(t.amount_eur), 0) }
+}
+
+/**
  * What the week's budget has already covered: expenses with a weekly category (the app's «+» expenses) in
  * Mon–Sun. One-off rows of the plan (a purchase in group «Жизнь» without a weekly category) are separate.
  */

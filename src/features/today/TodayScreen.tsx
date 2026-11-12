@@ -15,6 +15,7 @@ import {
   formatDayMonth,
   formatLongDate,
   formatTimeBerlin,
+  hourBerlin,
   parseISODate,
   todayBerlin,
   weekStart,
@@ -22,28 +23,30 @@ import {
   type ISODate,
 } from '@/lib/dates'
 import { burning, completedOn, itemsOfDay, nextTargetAfterHorizon } from '@/lib/rules/items'
+import { isEvening, spentOn } from '@/lib/rules/day'
 import { nextTest } from '@/lib/rules/study'
+import { formatEur } from '@/lib/format'
 import { nachhaken } from '@/lib/rules/work'
 import { EveningCard } from '@/features/body/EveningCard'
 import { HabitsCard } from '@/features/body/HabitsCard'
 import { useItems, useUpdateItem } from '@/features/items/api'
 import { donePatch, reopenPatch } from '@/features/items/donePatch'
-import { ItemQuestions } from '@/features/items/ItemQuestions'
 import { ItemRow } from '@/features/items/ItemRow'
-import { MoneyQuestions } from '@/features/money/MoneyQuestions'
+import { useWeekTransactions } from '@/features/money/api'
 import { ReviewCard } from '@/features/review/ReviewCard'
-import { WishQuestions } from '@/features/money/WishQuestions'
 import { MoneyTotal } from '@/features/money/MoneyTotal'
 import { useMoneyWeek } from '@/features/money/useMoneyWeek'
 import { InstallHint } from '@/features/settings/InstallHint'
 import { StudyHours } from '@/features/study/StudyHours'
 import { useStudyWeek } from '@/features/study/useStudyWeek'
+import { QuestionStack } from './QuestionStack'
 import { useWeek, type Week } from '@/features/weeks/api'
 
 export function TodayScreen() {
   const today = todayBerlin()
   const week = useWeek(weekStart(today))
   const weekday = format(parseISODate(today), 'EEEE', { locale: ru })
+  const evening = isEvening(hourBerlin())
 
   return (
     <>
@@ -67,17 +70,27 @@ export function TodayScreen() {
       <InstallHint compact />
       <ReviewCard today={today} />
       {/* Questions stand first until answered (design 3m). */}
-      <MoneyQuestions />
-      <ItemQuestions />
-      <WishQuestions />
+      <QuestionStack />
+      {/* by the time of day: from 18:00 «Вечер» moves up, with what the day came to */}
+      {evening && <EveningCard date={today} context={<DaySummary today={today} />} />}
       <HabitsCard date={today} to="/body" />
       <BurningCard today={today} />
       <MoneyCard today={today} />
       <WorkCard today={today} />
       <StudyCard today={today} />
-      <EveningCard date={today} />
+      {!evening && <EveningCard date={today} foldable />}
     </>
   )
+}
+
+/** «сделано 3 · потрачено 4,20 €» — the day in one line, in the header of «Вечер». */
+function DaySummary({ today }: { today: ISODate }) {
+  const items = useItems()
+  const txs = useWeekTransactions(weekStart(today))
+  const done = completedOn(items.data ?? [], today).length
+  const spent = spentOn(txs.data ?? [], today)
+  if (done === 0 && spent === 0) return null
+  return <>{[done > 0 ? `сделано ${done}` : null, spent > 0 ? `потрачено ${formatEur(spent)}` : null].filter(Boolean).join(' · ')}</>
 }
 
 /** «● Неделя 5 бюджета ● Н04 учёба ● Неделя 1 глоу-апа ⌖ у сестры» — sphere dots as labels. */
@@ -245,7 +258,7 @@ function StudyCard({ today }: { today: ISODate }) {
   return (
     <Card>
       <CardHeader title="Учёба" dotClass="bg-study" context={week?.study_week ?? undefined} to="/study" />
-      {items.length > 0 && <StudyHours done={done} load={load} itemsDone={itemsDone} itemsTotal={items.length} />}
+      {items.length > 0 && <StudyHours done={done} load={load} itemsDone={itemsDone} itemsTotal={items.length} brief />}
       {test && (
         <div className="flex items-start gap-2 text-base">
           <CalendarDays size={20} strokeWidth={1.75} aria-hidden="true" className="mt-0.5 flex-none text-ink2" />
