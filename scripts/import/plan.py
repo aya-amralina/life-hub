@@ -106,6 +106,10 @@ def per_week_done(items: list[dict]) -> dict[dt.date, int]:
 WEEK_CATEGORIES = {"Продукты", "Кофейни и перекусы", "Выходы и еда вне дома", "Мелочи", "Шопинг", "Доставка"}
 
 
+def _week_row(t: dict) -> bool:
+    return t.get("entry_kind") in ("week_budget", "week_total")
+
+
 def _is_fact(t: dict) -> bool:
     return not t.get("cancelled_at") and (not t.get("is_planned") or bool(t.get("confirmed_at")))
 
@@ -119,19 +123,19 @@ def app_forecast_all(txs: list[dict], today: dt.date, end: str = "2026-12-31") -
         return d - dt.timedelta(days=d.weekday())
 
     live = [t for t in txs if not t.get("cancelled_at")]
-    fact_weeks = {monday(t["date"]) for t in live if t.get("week_budget") and _is_fact(t)}
+    fact_weeks = {monday(t["date"]) for t in live if t.get("entry_kind") == "week_total" and _is_fact(t)}
 
     def spent(week: dt.date) -> float:
-        return sum(float(t["amount_eur"]) for t in live if t["kind"] == "expense" and not t.get("week_budget") and _is_fact(t) and t.get("category") in WEEK_CATEGORIES and monday(t["date"]) == week)
+        return sum(float(t["amount_eur"]) for t in live if t["kind"] == "expense" and not _week_row(t) and _is_fact(t) and t.get("category") in WEEK_CATEGORIES and monday(t["date"]) == week)
 
     total = 0.0
     for t in live:
         if t["date"] > end:
             continue
         amount = float(t["amount_eur"])
-        if not t.get("week_budget") and t["kind"] == "expense" and t.get("category") in WEEK_CATEGORIES and monday(t["date"]) in fact_weeks:
+        if not _week_row(t) and t["kind"] == "expense" and t.get("category") in WEEK_CATEGORIES and monday(t["date"]) in fact_weeks:
             continue
-        if t.get("week_budget") and not _is_fact(t):
+        if t.get("entry_kind") == "week_budget" and not _is_fact(t):
             w = monday(t["date"])
             if w + dt.timedelta(days=6) < today:
                 continue

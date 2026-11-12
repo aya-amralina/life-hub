@@ -10,6 +10,8 @@ import { addDaysISO, formatDayMonth, todayBerlin } from '@/lib/dates'
 import { REVIEW_STEPS, STEP_LABEL, reviewWeek, type ReviewStep } from '@/lib/rules/review'
 import { useAllWeeks, useWeekRow } from '@/features/weeks/api'
 import { useReview, useSaveReview } from './api'
+import { useSaveActualBalances } from '@/features/money/api'
+import { parseEurInput } from '@/lib/format'
 import { AheadStep, BodyStep, MoneyStep, StudyStep, WorkStep } from './ReviewSteps'
 
 export type Answers = { body?: string; work?: string; skipped?: ReviewStep[] }
@@ -55,6 +57,7 @@ function Wizard({
   onClose: () => void
 }) {
   const save = useSaveReview()
+  const saveBalances = useSaveActualBalances()
   const toast = useToast()
   const weeks = useAllWeeks()
   const [step, setStep] = useState(0)
@@ -68,6 +71,14 @@ function Wizard({
 
   const persist = (extra: Partial<{ completed_at: string }> = {}, skipped = answers.skipped) => {
     const cleanBalances = Object.fromEntries(Object.entries(balances).filter(([, v]) => v.trim()))
+    // the real balances go to «Остатки» too — the one source for the reconciliation
+    const amounts = Object.fromEntries(
+      Object.entries(cleanBalances)
+        .map(([k, v]) => [k, parseEurInput(v)] as const)
+        .filter((x): x is readonly [string, number] => x[1] !== null)
+        .map(([k, c]) => [k, c / 100]),
+    )
+    if (Object.keys(amounts).length) saveBalances.mutate({ date: todayBerlin(), balances: amounts })
     save.mutate({
       weekId,
       patch: {

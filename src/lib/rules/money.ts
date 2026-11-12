@@ -12,8 +12,8 @@ export type TxLike = {
   is_planned: boolean
   confirmed_at: string | null
   cancelled_at?: string | null
-  /** «Неделя N: …» — planned spending of a week, not one debit (rule 18a). */
-  week_budget?: boolean
+  /** «Вид»: разовая · бюджет недели (planned spending of a week) · итог недели (the week's total, a fact) */
+  entry_kind?: string | null
   grp?: string | null
 }
 
@@ -81,6 +81,11 @@ export function moneyWeek(limits: readonly LimitLike[], txs: readonly TxLike[], 
   }
 }
 
+/** «бюджет недели» or «итог недели» — a row about a whole week, not one operation (rule 26). */
+export function isWeekRow(t: Pick<TxLike, 'entry_kind'>): boolean {
+  return t.entry_kind === 'week_budget' || t.entry_kind === 'week_total'
+}
+
 /** End of the budget (SPEC rule 1: «На счетах 31.12»). */
 export const BUDGET_END: ISODate = '2026-12-31'
 
@@ -99,7 +104,7 @@ export function signedCents(t: Pick<TxLike, 'kind' | 'amount_eur'>): number {
 function spentLifeInWeek(txs: readonly TxLike[], monday: ISODate): number {
   const sunday = addDaysISO(monday, 6)
   return txs
-    .filter((t) => t.kind === 'expense' && !t.week_budget && isFact(t) && isWeekCategory(t.category) && t.date >= monday && t.date <= sunday)
+    .filter((t) => t.kind === 'expense' && !isWeekRow(t) && isFact(t) && isWeekCategory(t.category) && t.date >= monday && t.date <= sunday)
     .reduce((s, t) => s + toCents(t.amount_eur), 0)
 }
 
@@ -112,13 +117,13 @@ function spentLifeInWeek(txs: readonly TxLike[], monday: ISODate): number {
  * weekly-category expenses of that week stay in the category stats (rule 2) but not in the balance.
  */
 export function balanceAt(txs: readonly TxLike[], date: ISODate, mode: 'fact' | 'plan', today: ISODate = date): number {
-  const factWeeks = new Set(txs.filter((t) => t.week_budget && isFact(t) && isInPlan(t)).map((t) => weekStartISO(t.date)))
+  const factWeeks = new Set(txs.filter((t) => t.entry_kind === 'week_total' && isFact(t) && isInPlan(t)).map((t) => weekStartISO(t.date)))
   let sum = 0
   for (const t of txs) {
     if (t.date > date || !isInPlan(t)) continue
     if (mode === 'fact' && !isFact(t)) continue
-    if (!t.week_budget && t.kind === 'expense' && isWeekCategory(t.category) && factWeeks.has(weekStartISO(t.date))) continue
-    if (t.week_budget && !isFact(t)) {
+    if (!isWeekRow(t) && t.kind === 'expense' && isWeekCategory(t.category) && factWeeks.has(weekStartISO(t.date))) continue
+    if (t.entry_kind === 'week_budget' && !isFact(t)) {
       const monday = weekStartISO(t.date)
       if (addDaysISO(monday, 6) < today) continue
       if (monday <= today) {
@@ -140,7 +145,7 @@ export type PlannedQuestion<T> = { tx: T; question: 'Пришло?' | 'Спис�
  */
 export function plannedQuestions<T extends TxLike & { id: string }>(txs: readonly T[], today: ISODate): PlannedQuestion<T>[] {
   return txs
-    .filter((t) => t.is_planned && t.confirmed_at === null && !t.cancelled_at && !t.week_budget && t.kind !== 'opening' && t.date <= today)
+    .filter((t) => t.is_planned && t.confirmed_at === null && !t.cancelled_at && !isWeekRow(t) && t.kind !== 'opening' && t.date <= today)
     .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
     .map((tx) => ({ tx, question: tx.kind === 'income' ? 'Пришло?' : 'Списалось?' }))
 }
@@ -219,7 +224,9 @@ export function reconcile(
     return /^-?\d+(\.\d{1,2})?$/.test(s) ? Math.round(Number(s) * 100) : null
   }
   for (const e of [...entries].sort((a, b) => b.date.localeCompare(a.date))) {
+    // accounts only: a pocket of a goal is already inside its account
     const amounts = Object.entries(e.balances)
+      .filter(([k]) => accounts.includes(k))
       .map(([k, v]) => [k, parse(v)] as const)
       .filter((x): x is readonly [string, number] => x[1] !== null)
     if (!amounts.length) continue
@@ -236,4 +243,54 @@ export function reconcile(
     }
   }
   return null
+}
+
+/** Rows of «Остатки» grouped by date for the reconciliation (accounts by name). */
+export function balancesByDate(rows: readonly { date: ISODate; account: string; amount_eur: number }[]): ActualBalances[] {
+  const by = new Map<ISODate, Record<string, number>>()
+  for (const r of rows) by.set(r.date, { ...(by.get(r.date) ?? {}), [r.account]: Number(r.amount_eur) })
+  return [...by.entries()].map(([date, balances]) => ({ date, balances }))
+}
+
+export type GoalLike = { id: string; goal_eur: number | null; goal_date: string | null }
+
+/**
+ * A goal (envelope type «цель»): now = the latest real balance of its pocket in «Остатки» (the one source), target,
+ * share and what is borrowed from it («заём из копилки», open).
+ */
+export function goalProgress(
+  goal: GoalLike,
+  balances: readonly { date: ISODate; envelope_id: string | null; amount_eur: number }[],
+  debts: readonly DebtLike[],
+  txs: readonly TxLike[] = [],
+) {
+  const latest = balances.filter((b) => b.envelope_id === goal.id).sort((a, b) => b.date.localeCompare(a.date))[0] ?? null
+  const targetCents = goal.goal_eur === null ? null : toCents(goal.goal_eur)
+  const nowCents = latest ? toCents(latest.amount_eur) : null
+  const borrowedCents = debts
+    .filter((d) => d.direction === 'from_pot' && d.pot_id === goal.id && d.status === 'open')
+    .reduce((s, d) => s + debtSummary(d, txs).leftCents, 0)
+  return {
+    nowCents,
+    asOf: latest?.date ?? null,
+    targetCents,
+    share: nowCents !== null && targetCents ? Math.min(1, nowCents / targetCents) : null,
+    due: goal.goal_date,
+    borrowedCents,
+  }
+}
+
+export type DebtLike = { id: string; direction: string; amount_eur: number; repaid_eur: number | null; status: string; pot_id: string | null; due_date: string | null }
+
+/** A debt: repaid = confirmed operations linked to it (debt_id) if there are any, else «Возвращено» of the table. */
+export function debtSummary(debt: DebtLike, txs: readonly (TxLike & { debt_id?: string | null })[]) {
+  const linked = txs.filter((t) => t.debt_id === debt.id && isFact(t))
+  const repaidCents = linked.length ? linked.reduce((s, t) => s + toCents(t.amount_eur), 0) : toCents(debt.repaid_eur ?? 0)
+  const amountCents = toCents(debt.amount_eur)
+  return { amountCents, repaidCents, leftCents: Math.max(0, amountCents - repaidCents), fromOperations: linked.length > 0 }
+}
+
+/** «Отложено» on «Конверты»: what is left in envelopes of type «конверт» (goals and their balances apart). */
+export function envelopesLeft(envelopes: readonly (EnvelopeLike & { type: string })[], txs: readonly TxLike[]): number {
+  return envelopes.filter((e) => e.type === 'envelope').reduce((s, e) => s + envelopeSummary(e, txs).leftCents, 0)
 }

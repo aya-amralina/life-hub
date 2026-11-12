@@ -16,8 +16,8 @@ from xl import DATA
 
 # Every user table, parents first (the restore goes in this order).
 TABLES = [
-    "weeks", "plan_stages", "activity_types", "envelopes", "people",
-    "items", "transactions", "week_limits", "daily_logs", "activities", "intake",
+    "weeks", "plan_stages", "activity_types", "envelopes", "debts", "people",
+    "items", "transactions", "actual_balances", "week_limits", "daily_logs", "activities", "intake",
     "strength_sets", "measurements", "notes", "wishlist", "reviews", "import_baseline",
 ]
 FORMAT = "life-hub-backup"

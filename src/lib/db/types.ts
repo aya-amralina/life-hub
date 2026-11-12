@@ -97,6 +97,53 @@ export type Database = {
         }
         Relationships: []
       }
+      actual_balances: {
+        Row: {
+          account: string
+          amount_eur: number
+          created_at: string
+          date: string
+          envelope_id: string | null
+          id: string
+          origin: string
+          source_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account: string
+          amount_eur: number
+          created_at?: string
+          date: string
+          envelope_id?: string | null
+          id?: string
+          origin?: string
+          source_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          account?: string
+          amount_eur?: number
+          created_at?: string
+          date?: string
+          envelope_id?: string | null
+          id?: string
+          origin?: string
+          source_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "actual_balances_envelope_id_fkey"
+            columns: ["envelope_id"]
+            isOneToOne: false
+            referencedRelation: "envelopes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_logs: {
         Row: {
           body_cream: boolean
@@ -160,10 +207,68 @@ export type Database = {
         }
         Relationships: []
       }
+      debts: {
+        Row: {
+          amount_eur: number
+          created_at: string
+          direction: string
+          due_date: string | null
+          id: string
+          note: string | null
+          pot_id: string | null
+          repaid_eur: number | null
+          source_id: string | null
+          status: string
+          updated_at: string
+          user_id: string
+          who: string
+        }
+        Insert: {
+          amount_eur: number
+          created_at?: string
+          direction: string
+          due_date?: string | null
+          id?: string
+          note?: string | null
+          pot_id?: string | null
+          repaid_eur?: number | null
+          source_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+          who: string
+        }
+        Update: {
+          amount_eur?: number
+          created_at?: string
+          direction?: string
+          due_date?: string | null
+          id?: string
+          note?: string | null
+          pot_id?: string | null
+          repaid_eur?: number | null
+          source_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+          who?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "debts_pot_id_fkey"
+            columns: ["pot_id"]
+            isOneToOne: false
+            referencedRelation: "envelopes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       envelopes: {
         Row: {
           archived: boolean
           created_at: string
+          goal_date: string | null
+          goal_eur: number | null
           id: string
           name: string
           note: string | null
@@ -177,6 +282,8 @@ export type Database = {
         Insert: {
           archived?: boolean
           created_at?: string
+          goal_date?: string | null
+          goal_eur?: number | null
           id?: string
           name: string
           note?: string | null
@@ -190,6 +297,8 @@ export type Database = {
         Update: {
           archived?: boolean
           created_at?: string
+          goal_date?: string | null
+          goal_eur?: number | null
           id?: string
           name?: string
           note?: string | null
@@ -671,6 +780,8 @@ export type Database = {
           confirmed_at: string | null
           created_at: string
           date: string
+          debt_id: string | null
+          entry_kind: string
           envelope_id: string | null
           grp: string | null
           id: string
@@ -681,7 +792,7 @@ export type Database = {
           title: string
           updated_at: string
           user_id: string
-          week_budget: boolean
+          week_no: number | null
         }
         Insert: {
           account?: string | null
@@ -691,6 +802,8 @@ export type Database = {
           confirmed_at?: string | null
           created_at?: string
           date: string
+          debt_id?: string | null
+          entry_kind?: string
           envelope_id?: string | null
           grp?: string | null
           id?: string
@@ -701,7 +814,7 @@ export type Database = {
           title: string
           updated_at?: string
           user_id?: string
-          week_budget?: boolean
+          week_no?: number | null
         }
         Update: {
           account?: string | null
@@ -711,6 +824,8 @@ export type Database = {
           confirmed_at?: string | null
           created_at?: string
           date?: string
+          debt_id?: string | null
+          entry_kind?: string
           envelope_id?: string | null
           grp?: string | null
           id?: string
@@ -721,9 +836,16 @@ export type Database = {
           title?: string
           updated_at?: string
           user_id?: string
-          week_budget?: boolean
+          week_no?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "transactions_debt_id_fkey"
+            columns: ["debt_id"]
+            isOneToOne: false
+            referencedRelation: "debts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "transactions_envelope_id_fkey"
             columns: ["envelope_id"]
@@ -869,7 +991,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      ping: { Args: never; Returns: number }
     }
     Enums: {
       [_ in never]: never

@@ -1,210 +1,364 @@
-"""Budget_Oct-Dec_2026.xlsx → transactions, weeks + week_limits, envelopes, notes (SPEC §6)."""
+"""Budget_Oct-Dec_2026.xlsx → transactions, weeks + week_limits, envelopes (envelope | goal), debts, actual_balances,
+notes — strictly by docs/EXCEL_FORMAT.md. A missing required column or a value outside its list stops the import
+with the sheet, the column and the rows; nothing is guessed from titles.
+"""
 from __future__ import annotations
 
 import datetime as dt
-import re
 from collections import Counter
 
 from model import Batch, noon, rows_list
-from xl import excel_date, number, parse_text_date, rows, stable_id, text
+from xl import excel_date, number, rows, text
 
+GROUPS = {"Старт", "Доход", "Обязательное", "Поездки и события", "Долги", "Жизнь", "Буфер"}
+ACCOUNTS = ["Revolut", "Sparkasse", "Наличные", "Казахстанская карта"]
 CATEGORIES = ["Продукты", "Кофейни и перекусы", "Выходы и еда вне дома", "Мелочи", "Шопинг", "Доставка"]
-GROUPS = {"Доход", "Обязательное", "Поездки и события", "Долги", "Жизнь", "Буфер"}
+STATUS = {"факт": "fact", "план": "plan"}
+KIND = {"разовая": "one_off", "бюджет недели": "week_budget", "итог недели": "week_total"}
+ENVELOPE_TYPE = {"конверт": "envelope", "цель": "goal"}
+DIRECTION = {"я должна": "i_owe", "мне должны": "owed_to_me", "заём из копилки": "from_pot", "заем из копилки": "from_pot"}
+DEBT_STATUS = {"открыт": "open", "закрыт": "closed"}
+
+SHEETS = {
+    "Статьи": ["ID", "Дата", "Группа", "Статья", "Сумма", "Знак", "Статус", "Вид"],
+    "Недели": ["№", "Начало", "Конец"],
+    "Конверты": ["ID", "Название", "Тип", "Заложено"],
+    "Долги": ["ID", "Кто", "Направление", "Сумма", "Статус"],
+    "Остатки": ["Дата", "Счёт", "Остаток"],
+    "Правила": ["Правило"],
+}
+
+
+def structure(wb) -> list[str]:
+    """Required sheets and columns of the format; an empty list means the file fits."""
+    problems = []
+    for name, required in SHEETS.items():
+        if name not in wb.sheetnames:
+            problems.append(f"бюджет: нет листа «{name}» (docs/EXCEL_FORMAT.md)")
+            continue
+        header = next(wb[name].iter_rows(min_row=1, max_row=1, values_only=True), ())
+        have = {str(h).strip().lower() for h in header if h is not None}
+        problems += [f"бюджет · {name}: нет обязательной колонки «{c}» в строке 1" for c in required if c.lower() not in have]
+    return problems
+
+
+class Sheet:
+    """Columns by header name (row 1); errors go to the batch with the row number."""
+
+    def __init__(self, wb, name: str, b: Batch):
+        self.name, self.b = name, b
+        self.ws = wb[name]
+        header = next(self.ws.iter_rows(min_row=1, max_row=1, values_only=True), ())
+        self.cols = {str(h).strip().lower(): j for j, h in enumerate(header) if h is not None and str(h).strip()}
+
+    def get(self, row, col: str):
+        j = self.cols.get(col.lower())
+        return row[j] if j is not None and j < len(row) else None
+
+    def error(self, n: int, col: str, message: str) -> None:
+        self.b.fatal.append(f"{self.name}, строка {n}, «{col}»: {message}")
+
+    def choice(self, n: int, col: str, row, allowed: dict[str, str], required: bool = True) -> str | None:
+        v = text(self.get(row, col))
+        if v is None:
+            if required:
+                self.error(n, col, "пусто")
+            return None
+        if v.lower() not in allowed:
+            self.error(n, col, f"«{v}» не из списка ({' · '.join(dict.fromkeys(allowed))})")
+            return None
+        return allowed[v.lower()]
+
+    def unique(self, n: int, sid: str, seen: set[str]) -> bool:
+        if sid in seen:
+            self.error(n, "ID", f"«{sid}» уже был выше — ID должен быть уникальным")
+            return False
+        seen.add(sid)
+        return True
+
+    def optional_date(self, n: int, col: str, row) -> dt.date | None:
+        raw = self.get(row, col)
+        if raw in (None, ""):
+            return None
+        d = excel_date(raw)
+        if not d:
+            self.error(n, col, "нужна дата")
+        return d
 
 
 def build(wb, b: Batch) -> None:
-    ops = _articles(wb["Статьи"], b)
-    _weeks(wb["Недели"], b)
-    _calendar(wb["Календарь"], b, ops)
-    _envelopes(wb["Конверты и копилки"], b)
-    _rules(wb["Правила"], b)
+    weeks = _weeks(Sheet(wb, "Недели", b), b)
+    envelopes = _envelopes(Sheet(wb, "Конверты", b), b)
+    debts = _debts(Sheet(wb, "Долги", b), b, envelopes)
+    _articles(Sheet(wb, "Статьи", b), b, weeks, envelopes, debts)
+    _balances(Sheet(wb, "Остатки", b), b, envelopes)
+    _rules(Sheet(wb, "Правила", b), b)
+    if "Календарь" in wb.sheetnames:
+        _calendar_archive(wb["Календарь"], b)
 
 
-def _articles(ws, b: Batch) -> list[tuple[int, dict]]:
-    ops: list[tuple[int, dict]] = []
-    skipped: list[int] = []
-    ended_weeks: list[int] = []
-    anchor = b.anchor or b.today
-    for n, r in rows(ws, 1):
-        sid, date, group, title, amount, sign, note = text(r[0]), excel_date(r[2]), text(r[3]), text(r[4]), number(r[5]), number(r[6]), text(r[9])
-        if not sid or not date or amount is None or not title:
-            skipped.append(n)  # footnotes under the table
+def _weeks(sh: Sheet, b: Batch) -> dict[int, dt.date]:
+    out: dict[int, dt.date] = {}
+    limits = 0
+    for n, r in rows(sh.ws, 1):
+        no, start = number(sh.get(r, "№")), excel_date(sh.get(r, "Начало"))
+        if no is None:
+            continue  # a footnote under the table
+        if not start:
+            sh.error(n, "Начало", "нужна дата")
             continue
-        if sid.upper() == "S0" or group == "Старт":
-            kind = "opening"
-        elif sign is not None and sign > 0:
-            kind = "income"
-        elif sign is not None and sign < 0:
-            kind = "expense"
-        else:
-            b.issues.append(f"Бюджет · Статьи, строка {n}: нет знака ±1")
+        if start.weekday() != 0:
+            sh.error(n, "Начало", f"{start:%d.%m} — не понедельник (недели строго пн–вс)")
             continue
-        # «Неделя N…» rows (group «Жизнь») are week rows (rule 26): «(факт)» — the week's confirmed total;
-        # otherwise a budget: planned, never auto-confirmed, no question.
-        week_budget = kind == "expense" and group == "Жизнь" and title.startswith("Неделя")
-        # only «Неделя N (факт)…» is the week's total; «Неделя 5: продукты (факт) и остаток недели» is still a budget
-        week_fact = week_budget and bool(re.match(r"^Неделя\s+\d+\s*\(факт\)", title))
-        if week_budget and not week_fact and date + dt.timedelta(days=6 - date.weekday()) < anchor:
-            # a week that ended before the first import: its budget became the week's fact (correctable in the app)
-            week_fact = True
-            title = re.sub(r"^(Неделя\s+\d+)\s*:", r"\1 (факт):", title, count=1)
-            if "(факт)" not in title:
-                title = re.sub(r"^(Неделя\s+\d+)", r"\1 (факт)", title, count=1)
-            ended_weeks.append(n)
-        planned = (week_budget and not week_fact) or (not week_budget and date > b.today)
-        row = {
-            "source_id": f"budget:{sid}",
-            "date": date.isoformat(),
-            "amount_eur": round(abs(amount), 2),
-            "kind": kind,
-            "grp": group if group in GROUPS else None,
-            "category": None,
-            "title": title,
-            "note": note,
-            "account": None,
-            "is_planned": planned,
-            "confirmed_at": None if planned else noon(date),
-            "week_budget": week_budget,
-        }
-        if group and group not in GROUPS and kind != "opening":
-            b.issues.append(f"Бюджет · Статьи, строка {n}: группа не из справочника — оставлю пустой")
-        b.add("transactions", row)
-        ops.append((n, row))
-
-    by_kind = Counter(o["kind"] for _, o in ops)
-    confirmed = [o for _, o in ops if not o["is_planned"]]
-    planned = [o for _, o in ops if o["is_planned"]]
-    weekly = [o for o in planned if o["week_budget"]]
-    facts = [o for o in confirmed if o["week_budget"]]
-    monday = b.today - dt.timedelta(days=b.today.weekday())
-    current = [o for o in weekly if monday <= dt.date.fromisoformat(o["date"]) <= monday + dt.timedelta(days=6)]
-    b.report.append(
-        f"Бюджет · Статьи: {len(ops)} операций (старт {by_kind['opening']}, доходы {by_kind['income']}, расходы {by_kind['expense']}); "
-        f"подтверждёнными — {len(confirmed)}, плановыми — {len(planned)}"
-    )
-    b.report.append(
-        f"  плановые: обычные {len(planned) - len(weekly)} (доходы {sum(o['kind'] == 'income' and not o['week_budget'] for o in planned)}, "
-        f"расходы {sum(o['kind'] == 'expense' and not o['week_budget'] for o in planned)}) — спросят «Пришло? / Списалось?» в свой день; "
-        f"бюджеты недель «Неделя N» {len(weekly)} — без вопроса (текущая неделя {len(current)})"
-    )
-    b.report.append(f"  итоги недель «Неделя N (факт)»: {len(facts)} — траты из приложения за эти недели в баланс не идут (правило 26)")
-    if ended_weeks:
-        b.report.append(f"  недели, закончившиеся до первого импорта ({anchor:%d.%m}), → «Неделя N (факт)» на сумму бюджета: строки {rows_list(ended_weeks)}")
-    if skipped:
-        b.report.append(f"  пропущены строки без ID/даты/суммы (сноски): {rows_list(skipped)}")
-    return ops
-
-
-def _weeks(ws, b: Batch) -> None:
-    header = [text(h) for h in next(ws.iter_rows(min_row=1, max_row=1, values_only=True))]
-    cat_cols = {c: header.index(c) for c in CATEGORIES if c in header}
-    missing = [c for c in CATEGORIES if c not in cat_cols]
-    if missing:
-        b.issues.append(f"Бюджет · Недели: нет колонок {', '.join(missing)}")
-    n_weeks = limits = 0
-    for n, r in rows(ws, 1):
-        no, start = number(r[0]), excel_date(r[2])
-        if no is None or not start:
-            continue
-        monday = start - dt.timedelta(days=start.weekday())
-        b.week(monday, budget_week_no=int(no), place_mode=text(r[5]))
-        n_weeks += 1
-        for cat, j in cat_cols.items():
-            v = number(r[j])
-            if v is None:
+        out[int(no)] = start
+        b.week(start, budget_week_no=int(no), place_mode=text(sh.get(r, "Где")))
+        for cat in CATEGORIES:
+            v = sh.get(r, cat)
+            if v in (None, ""):
                 continue
-            b.add("week_limits", {"source_id": f"budget:week{int(no)}:{cat}", "week": monday, "category": cat, "limit_eur": round(v, 2)})
+            amount = number(v)
+            if amount is None or amount < 0:
+                sh.error(n, cat, "нужно число ≥ 0")
+                continue
+            b.add("week_limits", {"source_id": f"budget:week{int(no)}:{cat}", "week": start, "category": cat, "limit_eur": round(amount, 2)})
             limits += 1
-    b.report.append(f"Бюджет · Недели: {n_weeks} недель (пн–вс), лимитов {limits}")
-
-
-def _calendar(ws, b: Batch, ops: list[tuple[int, dict]]) -> None:
-    matched, unmatched, actions, tasks = 0, [], [], []
-    archive = []
-    for n, r in rows(ws, 1):
-        archive.append("- " + " · ".join(str(v.strftime("%d.%m") if isinstance(v, (dt.date, dt.datetime)) else v).strip() for v in r[1:8] if v not in (None, "")))
-        date, what, amount, kind, account, todo = excel_date(r[2]), text(r[3]), number(r[4]), text(r[5]), text(r[6]), text(r[7])
-        if not date:
-            continue
-        for title, due in future_actions(todo, date, b.today, what):
-            # an action still ahead (e.g. «Отмени Uber One до 13.11») becomes a money task
-            b.add("items", {"source_id": f"budget:todo:{stable_id(due.isoformat(), title)}", "sphere": "money", "title": title, "status": "открыто", "due_date": due.isoformat(), "notes": todo, "done_at": None})
-            tasks.append(n)
-            b.private.append(f"Задача Денег из «Календаря», строка {n}: до {due:%d.%m} · {title}")
-        same_amount = [o for _, o in ops if amount is not None and abs(o["amount_eur"] - abs(amount)) < 0.005]
-        cands = [o for o in same_amount if o["date"] == date.isoformat()]
-        if not cands:  # «~15.11», ranges: the calendar date can differ by a few days
-            cands = sorted((o for o in same_amount if abs((dt.date.fromisoformat(o["date"]) - date).days) <= 7), key=lambda o: abs((dt.date.fromisoformat(o["date"]) - date).days))
-        if len(cands) > 1 and what:
-            cands = [o for o in cands if what.lower()[:6] in o["title"].lower()] or cands[:1]
-        if cands:
-            op = cands[0]
-            matched += 1
-            # the account is never guessed from a calendar match — only a «Счёт» column of «Статьи» sets it
-            if todo:
-                op["note"] = f"{op['note']}\n{todo}" if op["note"] else todo
-                actions.append(n)
-                b.private.append(f"Бюджет · Календарь, строка {n}: {date:%d.%m} · {what or ''} · что сделать: {todo}")
-        else:
-            unmatched.append(n)
-            b.private.append(f"Бюджет · Календарь, строка {n} (без пары в «Статьях»): {date:%d.%m} · {kind or ''} · {what or ''} · {amount if amount is not None else ''}")
-    b.add("notes", {"source_id": "budget:calendar", "sphere": "money", "title": "Календарь списаний (архив)", "body_md": "\n".join(archive), "pinned": False})
-    b.report.append(
-        f"Бюджет · Календарь: сопоставлено с «Статьями» {matched} («Что сделать» → в заметку операции — {len(actions)}; счёт не переносится), "
-        f"без пары {len(unmatched)}; весь лист ({len(archive)} строк) → заметка «Календарь списаний (архив)»; "
-        f"задач Денег (действие сегодня или позже) {len(tasks)}" + (f" — строки {rows_list(tasks)}" if tasks else "")
-    )
-
-
-ACTION = re.compile(r"(отмени|отменить|закр[оы]|переве|перекин|оплат|отда[йт]|верн|подай|подать|запиш|продли|позвони|напиши|купи|сними|жильцу|€\s*(?:—|→)\s*(?:в\s+)?[«A-ZА-Я])", re.I)
-DUE_IN_TEXT = re.compile(r"\bдо\s+(\d{1,2}\.\d{1,2})")
-
-
-def future_actions(todo: str | None, row_date: dt.date, today: dt.date, what: str | None) -> list[tuple[str, dt.date]]:
-    """Actions of «Что сделать» due today or later. A sentence with its own date («Отмени Uber One до 13.11») is a
-    task of its own; other action sentences of the row make one task named after the operation, due on the row's
-    date. Explanations («Не трогать», «ничего не списывается») are skipped."""
-    out: list[tuple[str, dt.date]] = []
-    row_actions = []
-    for sentence in re.split(r"(?<=[.!])\s+", todo or ""):
-        sentence = sentence.strip().rstrip(".")
-        if not sentence or not ACTION.search(sentence):
-            continue
-        m = DUE_IN_TEXT.search(sentence)
-        own = parse_text_date(m[1]) if m else None
-        if own:
-            if own.date >= today:
-                out.append((sentence[:140], own.date))
-        else:
-            row_actions.append(sentence)
-    if row_actions and row_date >= today:
-        out.append(((what or row_actions[0])[:140], row_date))
+    b.report.append(f"Бюджет · Недели: {len(out)} недель, лимитов {limits}")
     return out
 
 
-def _envelopes(ws, b: Batch) -> None:
-    kinds = {"Конверт": "envelope", "Копилка": "pot"}
-    n_ok, other = 0, []
-    for n, r in rows(ws, 1):
-        name, kind, amount, when, note = text(r[0]), text(r[1]), number(r[2]), text(r[3]), text(r[4])
+def _envelopes(sh: Sheet, b: Batch) -> dict[str, str]:
+    """ID → type («envelope» / «goal»)."""
+    out: dict[str, str] = {}
+    seen: set[str] = set()
+    for n, r in rows(sh.ws, 1):
+        sid = text(sh.get(r, "ID"))
+        if not sid or not sh.unique(n, sid, seen):
+            continue
+        name, kind = text(sh.get(r, "Название")), sh.choice(n, "Тип", r, ENVELOPE_TYPE)
+        planned, goal = number(sh.get(r, "Заложено")), number(sh.get(r, "Цель"))
+        due = sh.optional_date(n, "Срок", r)
         if not name:
+            sh.error(n, "Название", "пусто")
+        if planned is None or planned < 0:
+            sh.error(n, "Заложено", "нужно число ≥ 0")
+        if kind == "goal" and (goal is None or goal <= 0):
+            sh.error(n, "Цель", "у цели нужна сумма > 0")
+        if not (name and kind and planned is not None and planned >= 0):
             continue
-        if kind not in kinds:
-            other.append((n, kind))
-            continue
-        b.add("envelopes", {"source_id": f"budget:env:{name.lower()}", "name": name, "type": kinds[kind], "planned_eur": round(amount, 2) if amount is not None else None, "when_text": when, "note": note})
-        n_ok += 1
-    debts = [n for n, k in other if k == "Долг"]
-    rest = [n for n, k in other if k != "Долг"]
-    b.report.append(f"Бюджет · Конверты и копилки: {n_ok}" + (f"; «Долг» пропущено {len(debts)} (строки {rows_list(debts)})" if debts else "") + (f"; строки без типа (итоги/разделы) — {rows_list(rest)}" if rest else ""))
+        out[sid] = kind
+        b.add(
+            "envelopes",
+            {
+                "source_id": f"budget:env:{sid}",
+                "name": name,
+                "type": kind,
+                "planned_eur": round(planned, 2),
+                "when_text": text(sh.get(r, "Когда")),
+                "note": text(sh.get(r, "Заметка")),
+                "goal_eur": round(goal, 2) if kind == "goal" and goal else None,
+                "goal_date": due.isoformat() if kind == "goal" and due else None,
+                "archived": False,
+                "_excel_spent": number(sh.get(r, "Потрачено")),
+            },
+        )
+    kinds = Counter(out.values())
+    b.report.append(f"Бюджет · Конверты: конвертов {kinds['envelope']}, целей {kinds['goal']}")
+    return out
 
 
-def _rules(ws, b: Batch) -> None:
-    n_ok = 0
-    for n, r in rows(ws, 1):
-        no, rule, detail = r[0], text(r[1]), text(r[2])
+def _debts(sh: Sheet, b: Batch, envelopes: dict[str, str]) -> set[str]:
+    out: set[str] = set()
+    seen: set[str] = set()
+    statuses: Counter[str] = Counter()
+    for n, r in rows(sh.ws, 1):
+        sid = text(sh.get(r, "ID"))
+        if not sid or not sh.unique(n, sid, seen):
+            continue
+        who = text(sh.get(r, "Кто"))
+        direction = sh.choice(n, "Направление", r, DIRECTION)
+        status = sh.choice(n, "Статус", r, DEBT_STATUS)
+        amount = number(sh.get(r, "Сумма"))
+        pot = text(sh.get(r, "Копилка"))
+        repaid_raw = sh.get(r, "Возвращено")
+        repaid = number(repaid_raw) if repaid_raw not in (None, "") else None
+        due = sh.optional_date(n, "Срок", r)
+        if not who:
+            sh.error(n, "Кто", "пусто")
+        if amount is None or amount <= 0:
+            sh.error(n, "Сумма", "нужно число > 0")
+        if repaid_raw not in (None, "") and (repaid is None or repaid < 0):
+            sh.error(n, "Возвращено", "нужно число ≥ 0")
+        if direction == "from_pot" and not pot:
+            sh.error(n, "Копилка", "у «заём из копилки» нужен ID цели")
+        elif direction == "from_pot" and envelopes.get(pot) != "goal":
+            sh.error(n, "Копилка", f"«{pot}» — нет такой цели в «Конвертах»")
+        elif direction != "from_pot" and pot:
+            sh.error(n, "Копилка", "заполняется только для «заём из копилки»")
+        if not (who and direction and status and amount and amount > 0):
+            continue
+        out.add(sid)
+        statuses[status] += 1
+        b.add(
+            "debts",
+            {
+                "source_id": f"budget:debt:{sid}",
+                "who": who,
+                "direction": direction,
+                "amount_eur": round(amount, 2),
+                "repaid_eur": round(repaid, 2) if repaid is not None else None,
+                "due_date": due.isoformat() if due else None,
+                "status": status,
+                "pot_key": f"budget:env:{pot}" if direction == "from_pot" and pot else None,
+                "note": text(sh.get(r, "Заметка")),
+            },
+        )
+    b.report.append(f"Бюджет · Долги: {len(out)} (открытых {statuses['open']}, закрытых {statuses['closed']})")
+    return out
+
+
+def _articles(sh: Sheet, b: Batch, weeks: dict[int, dt.date], envelopes: dict[str, str], debts: set[str]) -> None:
+    seen: set[str] = set()
+    no_id: list[int] = []
+    ops: list[dict] = []
+    for n, r in rows(sh.ws, 1):
+        sid = text(sh.get(r, "ID"))
+        if not sid:
+            no_id.append(n)
+            continue
+        if not sh.unique(n, sid, seen):
+            continue
+        date, title = excel_date(sh.get(r, "Дата")), text(sh.get(r, "Статья"))
+        amount, sign = number(sh.get(r, "Сумма")), number(sh.get(r, "Знак"))
+        group = text(sh.get(r, "Группа"))
+        status = sh.choice(n, "Статус", r, STATUS)
+        kind_of = sh.choice(n, "Вид", r, KIND)
+        account = text(sh.get(r, "Счёт"))
+        env, debt = text(sh.get(r, "Конверт")), text(sh.get(r, "Долг"))
+        week_no = int(number(sh.get(r, "Неделя"))) if number(sh.get(r, "Неделя")) is not None else None
+        if not date:
+            sh.error(n, "Дата", "нужна дата")
+        if group not in GROUPS:
+            sh.error(n, "Группа", f"«{group or ''}» не из списка ({' · '.join(sorted(GROUPS))})")
+        if not title:
+            sh.error(n, "Статья", "пусто")
+        if amount is None or amount <= 0:
+            sh.error(n, "Сумма", "нужно число > 0")
+        if sign not in (1, -1, 0):
+            sh.error(n, "Знак", "только +1, -1 или 0")
+        if account and account not in ACCOUNTS:
+            sh.error(n, "Счёт", f"«{account}» не из списка ({' · '.join(ACCOUNTS)})")
+        if kind_of in ("week_budget", "week_total") and week_no is None:
+            sh.error(n, "Неделя", "для «бюджет недели» и «итог недели» нужен номер недели")
+        elif kind_of in ("week_budget", "week_total") and week_no not in weeks:
+            sh.error(n, "Неделя", f"недели {week_no} нет в листе «Недели»")
+        if kind_of == "week_budget" and status == "fact":
+            sh.error(n, "Вид", "«бюджет недели» бывает только со статусом «план»")
+        if kind_of == "week_total" and status == "plan":
+            sh.error(n, "Вид", "«итог недели» бывает только со статусом «факт»")
+        if group == "Старт" and sign != 1:
+            sh.error(n, "Знак", "у «Старт» знак +1")
+        if env and env not in envelopes:
+            sh.error(n, "Конверт", f"«{env}» — нет такого ID в «Конвертах»")
+        if debt and debt not in debts:
+            sh.error(n, "Долг", f"«{debt}» — нет такого ID в «Долгах»")
+        ok = date and title and amount and amount > 0 and sign in (1, -1, 0) and group in GROUPS and status and kind_of
+        if not ok or (account and account not in ACCOUNTS):
+            continue
+        kind = "opening" if group == "Старт" else {1: "income", -1: "expense", 0: "transfer"}[int(sign)]
+        row = {
+            "source_id": f"budget:{sid}",
+            "date": date.isoformat(),
+            "amount_eur": round(amount, 2),
+            "kind": kind,
+            "grp": None if group == "Старт" else group,
+            "category": None,
+            "title": title,
+            "note": text(sh.get(r, "Заметка")),
+            "account": account,
+            "is_planned": status == "plan",
+            "confirmed_at": noon(date) if status == "fact" else None,
+            "entry_kind": kind_of,
+            "week_no": week_no,
+            "envelope_key": f"budget:env:{env}" if env else None,
+            "debt_key": f"budget:debt:{debt}" if debt else None,
+        }
+        b.add("transactions", row)
+        ops.append(row)
+    facts = [o for o in ops if not o["is_planned"]]
+    by_kind = Counter(o["entry_kind"] for o in ops)
+    b.report.append(
+        f"Бюджет · Статьи: {len(ops)} операций — факт {len(facts)}, план {len(ops) - len(facts)}; разовых {by_kind['one_off']}, "
+        f"бюджетов недели {by_kind['week_budget']}, итогов недели {by_kind['week_total']}; со счётом {sum(1 for o in ops if o['account'])}, "
+        f"из конверта {sum(1 for o in ops if o['envelope_key'])}, по долгу {sum(1 for o in ops if o['debt_key'])}"
+    )
+    if no_id:
+        b.report.append(f"  строки без ID (сноски) пропущены: {rows_list(no_id)}")
+    # «Потрачено» of the table vs the operations — the app computes it from the operations
+    for e in b.rows.get("envelopes", []):
+        written = e.pop("_excel_spent", None)
+        if written is None:
+            continue
+        spent = sum(o["amount_eur"] for o in facts if o["envelope_key"] == e["source_id"] and o["kind"] == "expense")
+        if abs(spent - written) >= 0.01:
+            b.issues.append(
+                f"Конверты · {e['source_id'].removeprefix('budget:env:')}: «Потрачено» в таблице {written:.2f}, по операциям-фактам {spent:.2f} — приложение покажет второе"
+            )
+
+
+def _balances(sh: Sheet, b: Batch, envelopes: dict[str, str]) -> None:
+    seen: set[tuple[str, str]] = set()
+    count, latest = 0, None
+    for n, r in rows(sh.ws, 1):
+        date, account, amount = excel_date(sh.get(r, "Дата")), text(sh.get(r, "Счёт")), number(sh.get(r, "Остаток"))
+        known = account in ACCOUNTS or account in envelopes
+        if not date:
+            sh.error(n, "Дата", "нужна дата")
+        if not account:
+            sh.error(n, "Счёт", "пусто")
+        elif not known:
+            sh.error(n, "Счёт", f"«{account}» — не счёт ({' · '.join(ACCOUNTS)}) и не ID из «Конвертов»")
+        if amount is None or amount < 0:
+            sh.error(n, "Остаток", "нужно число ≥ 0")
+        if not (date and account and known and amount is not None and amount >= 0):
+            continue
+        key = (date.isoformat(), account)
+        if key in seen:
+            sh.error(n, "Счёт", f"{date:%d.%m} · {account} уже есть выше — одна строка на дату и счёт")
+            continue
+        seen.add(key)
+        count += 1
+        latest = max(latest or date, date)
+        b.add(
+            "actual_balances",
+            {
+                "source_id": f"budget:bal:{date.isoformat()}:{account}",
+                "date": date.isoformat(),
+                "account": account,
+                "envelope_key": f"budget:env:{account}" if account in envelopes else None,
+                "amount_eur": round(amount, 2),
+                "origin": "excel",
+            },
+        )
+    b.report.append(f"Бюджет · Остатки: {count} строк" + (f", последняя дата {latest:%d.%m}" if latest else ""))
+
+
+def _rules(sh: Sheet, b: Batch) -> None:
+    count = 0
+    for n, r in rows(sh.ws, 1):
+        rule = text(sh.get(r, "Правило"))
         if not rule:
             continue
-        b.add("notes", {"source_id": f"budget:rule:{no if no is not None else n}", "sphere": "money", "title": rule, "body_md": detail, "pinned": True})
-        n_ok += 1
-    b.report.append(f"Бюджет · Правила: {n_ok} закреплённых заметок")
+        no = sh.get(r, "№")
+        b.add("notes", {"source_id": f"budget:rule:{no if no is not None else n}", "sphere": "money", "title": rule, "body_md": text(sh.get(r, "Подробно")), "pinned": True})
+        count += 1
+    b.report.append(f"Бюджет · Правила: {count} закреплённых заметок")
+
+
+def _calendar_archive(ws, b: Batch) -> None:
+    lines = []
+    for _, r in rows(ws, 1):
+        cells = [v.strftime("%d.%m") if isinstance(v, (dt.date, dt.datetime)) else str(v).strip() for v in r if v not in (None, "")]
+        if cells:
+            lines.append("- " + " · ".join(cells))
+    b.add("notes", {"source_id": "budget:calendar", "sphere": "money", "title": "Календарь списаний (архив)", "body_md": "\n".join(lines), "pinned": False})
+    b.report.append(f"Бюджет · Календарь: архив-заметка ({len(lines)} строк); в операции ничего не переносится")

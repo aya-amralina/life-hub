@@ -24,6 +24,8 @@ class Batch:
     issues: list[str] = field(default_factory=list)
     questions: list[str] = field(default_factory=list)
     private: list[str] = field(default_factory=list)
+    # errors against docs/EXCEL_FORMAT.md: any of them stops the import (sheet, row, column, what is wrong)
+    fatal: list[str] = field(default_factory=list)
     # study week label «Н04» → Monday (from «План по неделям»)
     study_weeks: dict[str, dt.date] = field(default_factory=dict)
 

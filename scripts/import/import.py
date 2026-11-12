@@ -66,17 +66,22 @@ EXPECTED = {
 }
 
 TABLE_ORDER = [
-    "weeks", "week_limits", "envelopes", "transactions", "people", "items", "notes",
+    "weeks", "week_limits", "envelopes", "debts", "transactions", "actual_balances", "people", "items", "notes",
     "activity_types", "activities", "daily_logs", "strength_sets", "measurements", "plan_stages",
 ]
-THREE_WAY = ["transactions", "week_limits", "envelopes", "items", "notes", "people", "plan_stages"]
+THREE_WAY = ["transactions", "week_limits", "envelopes", "debts", "actual_balances", "items", "notes", "people", "plan_stages"]
 CONFLICT = {"week_limits": "user_id,week_id,category", "people": "user_id,name", "activity_types": "user_id,name", "measurements": "user_id,date", "weeks": "user_id,start_date"}
 WEEK_COLUMNS = ["start_date", "budget_week_no", "study_week", "glowup_week_no", "place_mode", "events", "capacity_base_h", "capacity_max_h"]
 DAILY_FIELDS = ["morning", "outside", "water", "care", "face_evening", "energy", "slump", "sleep_h", "mood", "note"]
-TABLE_RU = {"transactions": "операции", "week_limits": "лимиты недель", "envelopes": "конверты", "items": "пункты", "notes": "заметки", "people": "люди", "plan_stages": "этапы"}
+TABLE_RU = {
+    "transactions": "операции", "week_limits": "лимиты недель", "envelopes": "конверты и цели", "debts": "долги",
+    "actual_balances": "остатки", "items": "пункты", "notes": "заметки", "people": "люди", "plan_stages": "этапы",
+}
 
 
 def check_structure(kind: str, wb) -> list[str]:
+    if kind == "budget":
+        return src_budget.structure(wb)  # strictly docs/EXCEL_FORMAT.md
     problems = []
     for (sheet, hdr), cols in EXPECTED[kind].items():
         if sheet not in wb.sheetnames:
@@ -123,9 +128,11 @@ def load(today: dt.date, anchor: dt.date | None, folder=DATA, fallback=DATA) -> 
 
 
 COLUMNS = {
-    "transactions": "id,source_id,date,amount_eur,title,note,account,grp,kind,week_budget,is_planned,confirmed_at,cancelled_at,category",
+    "transactions": "id,source_id,date,amount_eur,title,note,account,grp,kind,entry_kind,week_no,envelope_id,debt_id,is_planned,confirmed_at,cancelled_at,category",
     "week_limits": "id,source_id,limit_eur,week_id,category",
-    "envelopes": "id,source_id,type,planned_eur,when_text,note,archived",
+    "envelopes": "id,source_id,name,type,planned_eur,when_text,note,goal_eur,goal_date,archived",
+    "debts": "id,source_id,who,direction,amount_eur,repaid_eur,due_date,status,pot_id,note",
+    "actual_balances": "id,source_id,date,account,envelope_id,amount_eur",
     "items": "*",
     "notes": "id,source_id,title,body_md,pinned",
     "people": "id,source_id,name,role",
@@ -149,7 +156,9 @@ class State:
         self.types = {r["name"]: r["id"] for r in rest.select("activity_types", "id,name", f)}
         self.activities = {(r["date"], r["type_id"]) for r in rest.select("activities", "date,type_id", f)}
         self.measure_days = {r["date"] for r in rest.select("measurements", "date", f)}
-        self.all_tx = rest.select("transactions", "source_id,date,amount_eur,kind,grp,category,week_budget,is_planned,confirmed_at,cancelled_at", f)
+        self.all_tx = rest.select("transactions", "source_id,date,amount_eur,kind,grp,category,entry_kind,is_planned,confirmed_at,cancelled_at", f)
+        # source keys of linked rows (envelopes incl. archived, debts) — links are compared by key
+        self.keys = {r["id"]: r["source_id"] for t in ("envelopes", "debts") for r in rest.select(t, "id,source_id", {**f, "source_id": "not.is.null"})}
         self.baseline: dict[str, dict[str, dict]] = {}
         for r in rest.select("import_baseline", "table_name,source_id,data,removed", f):
             self.baseline.setdefault(r["table_name"], {})[r["source_id"]] = upd.from_json({**r["data"], "removed": r["removed"]})
@@ -157,9 +166,10 @@ class State:
         self.first_import = dt.date.fromisoformat(created[0][:10]) if created else None
 
 
-def ctx_for(st: State, week_ids: dict[str, str] | None = None) -> dict:
+def ctx_for(st: State, week_ids: dict[str, str] | None = None, keys: dict[str, str] | None = None) -> dict:
     ids = {k: v["id"] for k, v in st.weeks.items()} | (week_ids or {})
-    return {"week_id": ids, "week_start": {v: k for k, v in ids.items()}}
+    key_of = {**st.keys, **(keys or {})}
+    return {"week_id": ids, "week_start": {v: k for k, v in ids.items()}, "key_of": key_of, "id_of": {v: k for k, v in key_of.items()}}
 
 
 def bootstrap_baseline(st: State, today: dt.date) -> tuple[dict[str, dict[str, dict]], str]:
@@ -177,9 +187,16 @@ def bootstrap_baseline(st: State, today: dt.date) -> tuple[dict[str, dict[str, d
     return {t: upd.baseline_records(t, ob.rows.get(t, []), ctx) for t in THREE_WAY}, f"базовая линия — файлы data/_old (импорт {anchor:%d.%m})"
 
 
+# kinds of rows the budget always makes — a key of these gone from Excel is cancelled even if none are left
+FAMILIES = {"transactions": frozenset({"budget"}), "envelopes": frozenset({"budget:env"}), "debts": frozenset({"budget:debt"})}
+
+
 def plan_changes(b: Batch, st: State, baseline: dict, excel_wins: set[str]) -> dict[str, list[upd.Change]]:
     ctx = ctx_for(st)
-    return {t: upd.diff(t, b.rows.get(t, []), baseline.get(t, {}), st.rows[t], ctx, excel_wins, b.today) for t in THREE_WAY}
+    return {
+        t: upd.diff(t, b.rows.get(t, []), baseline.get(t, {}), st.rows[t], ctx, excel_wins, b.today, FAMILIES.get(t, frozenset()))
+        for t in THREE_WAY
+    }
 
 
 def simulate_tx(st: State, b: Batch, changes: list[upd.Change]) -> list[dict]:
@@ -188,7 +205,7 @@ def simulate_tx(st: State, b: Batch, changes: list[upd.Change]) -> list[dict]:
     app = [dict(t) for t in st.all_tx if not t["source_id"]]
     for c in changes:
         if c.kind == "insert":
-            by_key[c.key] = dict(c.row)
+            by_key[c.key] = dict(c.row)  # type: ignore[arg-type]
         elif c.kind in ("update", "always", "remove"):
             by_key[c.key] = {**by_key.get(c.key, {}), **c.patch}
     return list(by_key.values()) + app
@@ -269,6 +286,10 @@ def write(b: Batch, rest: SupabaseRest, uid: str, st: State, changes: dict[str, 
             r["type_id"] = types.get(r.pop("type"))
             if not r["type_id"] or (r["date"], r["type_id"]) in st.activities:
                 return None
+        for k, col in upd.KEY_FIELDS.items():  # links by key → uuid (the parents are written first)
+            if k in r:
+                key = r.pop(k)
+                r[col] = ctx["id_of"].get(key) if key else None
         return r
 
     def insert_groups(t: str, rows: list[dict]) -> None:
@@ -289,6 +310,10 @@ def write(b: Batch, rest: SupabaseRest, uid: str, st: State, changes: dict[str, 
             continue
         if t in changes:
             cs = changes[t]
+            for c in cs:  # links in patches resolve against the parents written just before
+                for k, col in upd.KEY_FIELDS.items():
+                    if col in c.patch and c.patch[col] is None and c.row and c.row.get(k):
+                        c.patch[col] = ctx["id_of"].get(c.row[k])
             insert_groups(t, [p for p in (prep(t, c.row) for c in cs if c.kind == "insert") if p])
             for c in cs:
                 if c.kind in ("update", "always", "remove") and c.patch:
@@ -297,6 +322,10 @@ def write(b: Batch, rest: SupabaseRest, uid: str, st: State, changes: dict[str, 
                         w = patch.pop("week")
                         patch["week_id"] = week_id.get(w.isoformat()) if w else None
                     rest.patch(t, {"id": f"eq.{c.db_id}"}, patch)
+            if t in ("envelopes", "debts"):  # children of this run point to the rows just added
+                fresh = {r["id"]: r["source_id"] for r in rest.select(t, "id,source_id", {"user_id": f"eq.{uid}", "source_id": "not.is.null"})}
+                ctx["key_of"].update(fresh)
+                ctx["id_of"].update({v: k for k, v in fresh.items()})
             print(f"{TABLE_RU[t]}: добавлено {sum(c.kind == 'insert' for c in cs)}, обновлено {sum(c.kind in ('update', 'always') for c in cs)}, "
                   f"отменено/снято {sum(c.kind == 'remove' for c in cs)}, конфликтов оставлено {sum(c.kind == 'conflict' for c in cs)}")
         else:
@@ -379,6 +408,13 @@ def main() -> int:
         print("✗ Структура файлов изменилась — импорт остановлен:")
         for p in problems:
             print("  - " + p)
+        return 1
+    if b.fatal:
+        print(f"✗ Бюджет не по формату docs/EXCEL_FORMAT.md — импорт остановлен ({len(b.fatal)}):")
+        for p in b.fatal[:60]:
+            print("  - " + p)
+        if len(b.fatal) > 60:
+            print(f"  … и ещё {len(b.fatal) - 60}")
         return 1
 
     if any(st.baseline.values()):

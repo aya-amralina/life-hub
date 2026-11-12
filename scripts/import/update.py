@@ -25,15 +25,30 @@ CANCEL_WORDS = {"Verworfen", "снято", "Отменено"}
 # Per table: Excel-owned fields compared three-way, fields that just follow Excel, app state that counts as an app
 # change, what to do with a key that disappeared from Excel. Items get their fields per row (see item_fields).
 SPEC: dict[str, dict[str, Any]] = {
-    "transactions": {"fields": ["date", "amount_eur", "title", "note", "account", "grp", "kind"], "always": ["week_budget"], "state": ["confirmed", "cancelled"], "removed": "cancel"},
+    # «Статус» (confirmed) is shared now: Excel writes it, the app answers «Пришло? / Списалось?» — three-way like the rest
+    "transactions": {
+        "fields": ["date", "amount_eur", "title", "note", "account", "grp", "kind", "confirmed", "envelope_key", "debt_key"],
+        "always": ["entry_kind", "week_no"],
+        "state": ["cancelled"],
+        "removed": "cancel",
+    },
     "week_limits": {"fields": ["limit_eur"], "always": [], "state": [], "removed": "keep"},
-    "envelopes": {"fields": ["type", "planned_eur", "when_text", "note"], "always": [], "state": [], "removed": "archive"},
+    "envelopes": {"fields": ["name", "type", "planned_eur", "when_text", "note", "goal_eur", "goal_date"], "always": [], "state": [], "removed": "archive"},
+    "debts": {"fields": ["who", "direction", "amount_eur", "repaid_eur", "due_date", "status", "pot_key", "note"], "always": [], "state": [], "removed": "keep"},
+    "actual_balances": {"fields": ["amount_eur"], "always": ["envelope_key"], "state": [], "removed": "keep"},
     "items": {"fields": None, "always": [], "state": [], "removed": "take_off"},
     "notes": {"fields": [], "always": ["title", "body_md", "pinned"], "state": [], "removed": "keep"},
     "people": {"fields": [], "always": ["role"], "state": [], "removed": "keep"},
     "plan_stages": {"fields": ["start_date", "end_date", "targets", "habits", "care_items"], "always": [], "state": [], "removed": "keep"},
 }
 ITEM_META = {"source_id", "sphere", "sort_order", "created_at", "updated_at", "done_at", "user_id", "id"}
+# link fields of Excel rows → the uuid column of the base
+KEY_FIELDS = {"envelope_key": "envelope_id", "debt_key": "debt_id", "pot_key": "pot_id"}
+
+
+def family(key: str) -> str:
+    """«budget:env:E2» → «budget:env», «budget:N8» → «budget»: rows of one kind from one source."""
+    return key.rsplit(":", 1)[0]
 
 
 def item_fields(row: dict) -> list[str]:
@@ -51,9 +66,9 @@ def _norm(table: str, k: str, v: Any, ctx: dict) -> Any:
         return v
     if v in ("", None, []):
         return None
-    if k in ("amount_eur", "limit_eur", "planned_eur", "hours_est", "capacity_base_h", "capacity_max_h"):
+    if k in ("amount_eur", "limit_eur", "planned_eur", "hours_est", "capacity_base_h", "capacity_max_h", "goal_eur", "repaid_eur"):
         return round(float(v), 2)
-    if k in ("date", "due_date", "starts_on", "happens_on", "ready_by", "start_date", "end_date"):
+    if k in ("date", "due_date", "starts_on", "happens_on", "ready_by", "start_date", "end_date", "goal_date"):
         return str(v)[:10]
     if k in ("due_time", "happens_time"):
         return str(v)[:5]
@@ -80,6 +95,9 @@ def comparable(table: str, row: dict, fields: list[str], ctx: dict) -> dict:
             out[k] = bool(row.get("cancelled_at"))
         elif k == "week" and "week_id" in row:
             out[k] = ctx["week_start"].get(row["week_id"])
+        elif k in KEY_FIELDS and KEY_FIELDS[k] in row:
+            # a link compared by the stable key (budget:env:E2), not by the base's uuid
+            out[k] = ctx["key_of"].get(row[KEY_FIELDS[k]])
         else:
             out[k] = _norm(table, k, row.get(k), ctx)
     return out
@@ -103,7 +121,16 @@ def display_key(table: str, key: str) -> str:
     return key.removeprefix("budget:") if table == "transactions" else key
 
 
-def diff(table: str, new_rows: list[dict], old: dict[str, dict], base: dict[str, dict], ctx: dict, excel_wins: set[str], today: dt.date) -> list[Change]:
+def diff(
+    table: str,
+    new_rows: list[dict],
+    old: dict[str, dict],
+    base: dict[str, dict],
+    ctx: dict,
+    excel_wins: set[str],
+    today: dt.date,
+    families: frozenset[str] = frozenset(),
+) -> list[Change]:
     """old: baseline comparable records by key (from the last import); base: rows in the base by source_id."""
     spec = SPEC[table]
     changes: list[Change] = []
@@ -119,29 +146,38 @@ def diff(table: str, new_rows: list[dict], old: dict[str, dict], base: dict[str,
         fields = item_fields(row) if spec["fields"] is None else spec["fields"]
         e_new = comparable(table, row, fields, ctx)
         d = comparable(table, have, fields, ctx)
-        e_old = old.get(key, {}).get("fields") or d  # no baseline for this key: treat the base as the old Excel
-        always_patch = {k: row.get(k) for k in spec["always"] if _norm(table, k, row.get(k), ctx) != _norm(table, k, have.get(k), ctx)}
+        base_old = old.get(key)
+        if base_old is None:
+            e_old = d  # no baseline for this key: treat the base as the old Excel
+        else:
+            # a field the baseline does not know yet (added to the format later) — its old value is the base's
+            known = {**(base_old.get("state") or {}), **(base_old.get("fields") or {})}
+            e_old = {k: known[k] if k in known else d.get(k) for k in fields}
+        have_keys = comparable(table, have, spec["always"], ctx)
+        always_patch = {k: row.get(k) for k in spec["always"] if _norm(table, k, row.get(k), ctx) != have_keys.get(k)}
         # a field counts only where the base differs from the new Excel (already equal = nothing to do or decide)
         excel_changed = [k for k in fields if e_new.get(k) != e_old.get(k) and e_new.get(k) != d.get(k)]
         if not excel_changed:
             if always_patch:
-                changes.append(Change(table, key, "always", fields=list(always_patch), patch=always_patch | _extra(table, row, have, always_patch), db_id=have["id"], title=title))
+                changes.append(Change(table, key, "always", fields=list(always_patch), patch=_resolve(always_patch, ctx), row=row, db_id=have["id"], title=title))
             continue
         state_old = old.get(key, {}).get("state")
         state_new = comparable(table, have, spec["state"], ctx)
         app_changed = [k for k in fields if d.get(k) != e_old.get(k) and d.get(k) != e_new.get(k)] + (
             [k for k in spec["state"] if state_old is not None and state_new.get(k) != state_old.get(k)]
         )
-        patch = _patch(table, row, have, excel_changed, ctx, today, e_old) | always_patch
-        patch |= _extra(table, row, have, patch)
+        patch = _patch(table, row, have, excel_changed, ctx, today, e_old) | _resolve(always_patch, ctx)
         detail = "; ".join(f"{k}: было {e_old.get(k)!r} → в Excel {e_new.get(k)!r}, в базе {d.get(k, state_new.get(k))!r}" for k in sorted(set(excel_changed) | set(app_changed)))
         if app_changed and display_key(table, key) not in excel_wins and "all" not in excel_wins:
-            changes.append(Change(table, key, "conflict", fields=excel_changed, app_fields=app_changed, patch=patch, db_id=have["id"], title=title, detail=detail))
+            changes.append(Change(table, key, "conflict", fields=excel_changed, app_fields=app_changed, patch=patch, row=row, db_id=have["id"], title=title, detail=detail))
         else:
-            changes.append(Change(table, key, "update", fields=excel_changed, app_fields=app_changed, patch=patch, db_id=have["id"], title=title, detail=detail))
+            changes.append(Change(table, key, "update", fields=excel_changed, app_fields=app_changed, patch=patch, row=row, db_id=have["id"], title=title, detail=detail))
+    produced = {family(k) for k in seen} | set(families)  # kinds of rows this run is the source of
     for key in sorted(set(old) | set(base)):
         if key in seen or key not in base or old.get(key, {}).get("removed"):
             continue
+        if family(key) not in produced:
+            continue  # this run makes no rows of that kind (e.g. old money tasks of «Календарь») — leave them
         have = base[key]
         title = str(have.get("title") or have.get("name") or "")
         action = spec["removed"]
@@ -168,6 +204,12 @@ def _patch(table: str, row: dict, have: dict, changed: list[str], ctx: dict, tod
                     out["status"] = REOPEN_STATUS[sphere]
         elif k == "week":
             out["week_id"] = ctx["week_id"].get(row["week"].isoformat()) if row.get("week") else None
+        elif k == "confirmed":
+            done = bool(row.get("confirmed_at")) or not row.get("is_planned")
+            out["confirmed_at"] = row.get("confirmed_at") or noon(today) if done else None
+            out["is_planned"] = bool(row.get("is_planned"))
+        elif k in KEY_FIELDS:
+            out[KEY_FIELDS[k]] = ctx["id_of"].get(row[k]) if row.get(k) else None
         elif k == "targets":
             # Excel owns its target keys (a key gone from Excel goes away); the app's own keys stay
             old_keys = {a for a, _ in (e_old.get("targets") or ())}
@@ -181,11 +223,15 @@ def _patch(table: str, row: dict, have: dict, changed: list[str], ctx: dict, tod
     return out
 
 
-def _extra(table: str, row: dict, have: dict, patch: dict) -> dict:
-    """A week row that Excel now marks as the week's fact gets confirmed as such."""
-    if table == "transactions" and row.get("week_budget") and not row.get("is_planned") and have.get("is_planned") and not have.get("confirmed_at"):
-        return {"is_planned": False, "confirmed_at": row.get("confirmed_at")}
-    return {}
+def _resolve(patch: dict, ctx: dict) -> dict:
+    """Link keys of an «always» patch → uuid columns."""
+    out = {}
+    for k, v in patch.items():
+        if k in KEY_FIELDS:
+            out[KEY_FIELDS[k]] = ctx["id_of"].get(v) if v else None
+        else:
+            out[k] = v
+    return out
 
 
 def _removal(table: str, action: str, have: dict, today: dt.date) -> dict:

@@ -22,7 +22,9 @@ export async function login(page: Page) {
 // Child tables first (FKs).
 const TABLES = [
   'week_limits',
+  'actual_balances',
   'transactions',
+  'debts',
   'items',
   'daily_logs',
   'activities',

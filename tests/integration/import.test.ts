@@ -37,7 +37,7 @@ describe.skipIf(!ready)('import checks (SPEC §6)', () => {
       .reduce((s, r) => s + signedCents((r.data as Rec).fields as unknown as TxLike), 0)
     const { data, error } = await admin
       .from('transactions')
-      .select('date, amount_eur, kind, category, envelope_id, is_planned, confirmed_at, cancelled_at, week_budget, grp, source_id')
+      .select('date, amount_eur, kind, category, envelope_id, is_planned, confirmed_at, cancelled_at, entry_kind, grp, source_id')
       .eq('user_id', uid)
       .not('source_id', 'is', null)
     expect(error).toBeNull()

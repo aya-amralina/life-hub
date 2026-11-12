@@ -194,14 +194,14 @@ describe('months table', async () => {
 describe('rule 18a: week budgets («Неделя N»)', async () => {
   const { balanceAt, plannedQuestions } = await import('./money')
   const t = (id: string, date: string, kind: string, amount_eur: number, x: Record<string, unknown> = {}) => ({
-    id, date, kind, amount_eur, category: null, envelope_id: null, is_planned: false, confirmed_at: null, cancelled_at: null, grp: 'Жизнь', week_budget: false, ...x,
+    id, date, kind, amount_eur, category: null, envelope_id: null, is_planned: false, confirmed_at: null, cancelled_at: null, grp: 'Жизнь', entry_kind: 'one_off', ...x,
   })
   const today = '2026-11-11' // Wed of the week 09.11–15.11
   const txs = [
     t('o', '2026-10-13', 'opening', 1000, { grp: null }),
-    t('w4', '2026-11-02', 'expense', 100, { is_planned: true, week_budget: true }), // finished week
-    t('w5', '2026-11-09', 'expense', 100, { is_planned: true, week_budget: true }), // current week
-    t('w6', '2026-11-16', 'expense', 100, { is_planned: true, week_budget: true }), // later week
+    t('w4', '2026-11-02', 'expense', 100, { is_planned: true, entry_kind: 'week_budget' }), // finished week
+    t('w5', '2026-11-09', 'expense', 100, { is_planned: true, entry_kind: 'week_budget' }), // current week
+    t('w6', '2026-11-16', 'expense', 100, { is_planned: true, entry_kind: 'week_budget' }), // later week
     t('coffee', '2026-11-10', 'expense', 30, { confirmed_at: '2026-11-10T10:00:00Z', category: 'Кофейни и перекусы' }), // spent from the app
   ]
   it('never asks «Списалось?»', () => expect(plannedQuestions(txs, today)).toEqual([]))
@@ -225,11 +225,11 @@ describe('rule 18a: week budgets («Неделя N»)', async () => {
 describe('rule 26: a week with «Неделя N (факт)» — app expenses stay in categories, not in the balance', async () => {
   const { balanceAt, moneyWeek } = await import('./money')
   const t = (date: string, kind: string, amount_eur: number, x: Record<string, unknown> = {}) => ({
-    date, kind, amount_eur, category: null, envelope_id: null, is_planned: false, confirmed_at: null, cancelled_at: null, grp: 'Жизнь', week_budget: false, ...x,
+    date, kind, amount_eur, category: null, envelope_id: null, is_planned: false, confirmed_at: null, cancelled_at: null, grp: 'Жизнь', entry_kind: 'one_off', ...x,
   })
   const txs = [
     t('2026-10-13', 'opening', 1000, { grp: null }),
-    t('2026-11-02', 'expense', 120, { week_budget: true, confirmed_at: '2026-11-08T12:00:00Z' }), // «Неделя 4 (факт)»
+    t('2026-11-02', 'expense', 120, { entry_kind: 'week_total', confirmed_at: '2026-11-08T12:00:00Z' }), // «Неделя 4 (факт)»
     t('2026-11-03', 'expense', 30, { category: 'Продукты' }), // app expense inside that week
     t('2026-11-10', 'expense', 20, { category: 'Продукты' }), // app expense, week without a fact
   ]
@@ -269,5 +269,40 @@ describe('reconciliation: real balances vs the calculated balance', async () => 
   it('nothing entered — nothing to compare', () => {
     expect(reconcile([{ date: '2026-11-15', balances: { Revolut: '' } }], txs, accounts)).toBeNull()
     expect(reconcile([], txs, accounts)).toBeNull()
+  })
+})
+
+describe('goals, debts, envelopes left', async () => {
+  const { debtSummary, envelopesLeft, goalProgress, reconcile } = await import('./money')
+  const tx = (x: Record<string, unknown>) => ({ date: '2026-11-10', amount_eur: 0, kind: 'expense', category: null, envelope_id: null, is_planned: false, confirmed_at: null, ...x })
+  const pot = { id: 'E5', goal_eur: 1000, goal_date: '2027-03-31' }
+  const loan = { id: 'L2', direction: 'from_pot', amount_eur: 150, repaid_eur: 50, status: 'open', pot_id: 'E5', due_date: null }
+  it('goal now = the latest balance of its pocket; borrowed from it is shown', () => {
+    const g = goalProgress(
+      pot,
+      [
+        { date: '2026-11-01', envelope_id: 'E5', amount_eur: 300 },
+        { date: '2026-11-15', envelope_id: 'E5', amount_eur: 390 },
+        { date: '2026-11-20', envelope_id: 'E1', amount_eur: 50 },
+      ],
+      [loan],
+    )
+    expect(g).toMatchObject({ nowCents: 39000, asOf: '2026-11-15', targetCents: 100000, share: 0.39, borrowedCents: 10000 })
+    expect(goalProgress(pot, [], []).nowCents).toBeNull()
+  })
+  it('debt repaid: linked confirmed operations win over the table value', () => {
+    expect(debtSummary(loan, [])).toMatchObject({ repaidCents: 5000, leftCents: 10000, fromOperations: false })
+    expect(debtSummary(loan, [tx({ debt_id: 'L2', amount_eur: 70 }), tx({ debt_id: 'L2', amount_eur: 30, is_planned: true })])).toMatchObject({ repaidCents: 7000, leftCents: 8000, fromOperations: true })
+  })
+  it('«Отложено» counts only envelopes of type «конверт»', () => {
+    const envs = [
+      { id: 'E1', planned_eur: 200, type: 'envelope' },
+      { id: 'E5', planned_eur: 999, type: 'goal' },
+    ]
+    expect(envelopesLeft(envs, [tx({ envelope_id: 'E1', amount_eur: 80 })])).toBe(12000)
+  })
+  it('reconciliation sums accounts only, not pockets', () => {
+    const r = reconcile([{ date: '2026-11-15', balances: { Revolut: 500, E5: 390 } }], [tx({ kind: 'opening', amount_eur: 500, date: '2026-10-13' })], ['Revolut', 'Sparkasse'])
+    expect(r).toMatchObject({ actualCents: 50000, matches: true })
   })
 })

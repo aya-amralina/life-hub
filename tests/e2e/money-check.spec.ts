@@ -1,10 +1,10 @@
 import { expect, test } from '@playwright/test'
-import { NEEDS, berlinDate, berlinMonday, cleanupTestUser, live, login, testClient } from './helpers'
+import { NEEDS, berlinDate, cleanupTestUser, live, login, testClient } from './helpers'
 
 test.beforeEach(cleanupTestUser)
 test.afterAll(cleanupTestUser)
 
-test('Месяц: «сейчас» по факту, ждут подтверждения, убранные скрыты, сверка с остатками обзора; панель не закрывает контент', async ({ page }) => {
+test('Месяц: «сейчас» по факту, ждут подтверждения, убранные скрыты, сверка с «Остатками»; панель не закрывает контент', async ({ page }) => {
   test.skip(!live, NEEDS)
   const sb = await testClient()
   const ins = async (row: Record<string, unknown>) => expect((await sb.from('transactions').insert(row as never)).error).toBeNull()
@@ -12,8 +12,7 @@ test('Месяц: «сейчас» по факту, ждут подтвержд�
   await ins({ date: berlinDate(-2), amount_eur: 100, kind: 'expense', grp: 'Жизнь', title: 'Einkauf', confirmed_at: new Date().toISOString() })
   await ins({ date: berlinDate(), amount_eur: 50, kind: 'expense', grp: 'Обязательное', title: 'Abo e2e', is_planned: true })
   await ins({ date: berlinDate(), amount_eur: 70, kind: 'expense', grp: 'Буфер', title: 'Буфер e2e', is_planned: true, cancelled_at: new Date().toISOString() })
-  const week = (await sb.from('weeks').insert({ start_date: berlinMonday(0) }).select('id').single()).data!
-  expect((await sb.from('reviews').insert({ week_id: week.id, balances: { Revolut: '900' } })).error).toBeNull()
+  expect((await sb.from('actual_balances').insert({ date: berlinDate(), account: 'Revolut', amount_eur: 900 })).error).toBeNull()
   await sb.auth.signOut()
 
   await login(page)

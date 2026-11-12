@@ -28,6 +28,9 @@ const TABLES = [
   'measurements',
   'wishlist',
   'reviews',
+  'import_baseline',
+  'debts',
+  'actual_balances',
 ] as const
 
 async function adminFindUserId(email: string): Promise<string | undefined> {

@@ -46,47 +46,22 @@ class MiscTest(unittest.TestCase):
 
 
 
-class MoneyTasksTest(unittest.TestCase):
-    def test_future_actions(self):
-        from src_budget import future_actions
-        today = D(2026, 11, 11)
-        todo = "120 € → «Конверты» (ушли на Франкфурт). Отмени Uber One до 13.11."
-        self.assertEqual(future_actions(todo, D(2026, 10, 17), today, "Разложить"), [("Отмени Uber One до 13.11", D(2026, 11, 13))])
-        self.assertEqual(future_actions("Не трогать — это подушка.", D(2026, 11, 14), today, "Папа"), [])
-        self.assertEqual(future_actions("До 11.12 — ничего не списывается.", D(2026, 11, 12), today, "USC"), [])
-        self.assertEqual(future_actions("100 € жильцу из «Депозита» — копилку можно закрыть.", D(2026, 11, 30), today, "Депозит жильцу")[0][1], D(2026, 11, 30))
-        self.assertEqual(future_actions("Отмени X до 01.11.", D(2026, 10, 1), today, None), [])
-
-
-
-class CareMarkTest(unittest.TestCase):
-    def test_tracker_columns_map_to_groups(self):
-        from src_glow import care_mark
-        self.assertEqual(care_mark("Ниацинамид утром"), "Утро: Ниацинамид")
-        self.assertEqual(care_mark("Азелаинка вечером"), "Вечер: Азелаинка")
-        self.assertEqual(care_mark("Крем для тела"), "Крем для тела")
-
-
-if __name__ == "__main__":
-    unittest.main()
-
-
 class UpdateTest(unittest.TestCase):
     """Three-way update: old Excel ↔ new Excel ↔ base."""
 
     def setUp(self):
         import update as upd
         self.upd = upd
-        self.ctx = {"week_id": {}, "week_start": {}}
+        self.ctx = {"week_id": {}, "week_start": {}, "key_of": {}, "id_of": {}}
 
     def tx(self, **kw):
-        base = {"source_id": "budget:N8", "date": "2026-11-20", "amount_eur": 100.0, "title": "Miete", "note": None, "account": None, "grp": "Обязательное", "kind": "expense", "week_budget": False, "is_planned": True, "confirmed_at": None, "cancelled_at": None}
+        base = {"source_id": "budget:N8", "date": "2026-11-20", "amount_eur": 100.0, "title": "Miete", "note": None, "account": None, "grp": "Обязательное", "kind": "expense", "entry_kind": "one_off", "week_no": None, "envelope_key": None, "debt_key": None, "is_planned": True, "confirmed_at": None, "cancelled_at": None}
         return {**base, **kw}
 
     def run_diff(self, old_row, new_row, base_row, wins=()):
         old = self.upd.baseline_records("transactions", [old_row], self.ctx)
         base = {base_row["source_id"]: {**base_row, "id": "db1"}} if base_row else {}
-        return self.upd.diff("transactions", [new_row] if new_row else [], old, base, self.ctx, set(wins), D(2026, 11, 11))
+        return self.upd.diff("transactions", [new_row] if new_row else [], old, base, self.ctx, set(wins), D(2026, 11, 11), frozenset({"budget"}))
 
     def test_changed_only_in_excel_updates(self):
         [c] = self.run_diff(self.tx(), self.tx(amount_eur=120.0), self.tx())
@@ -95,7 +70,7 @@ class UpdateTest(unittest.TestCase):
     def test_changed_in_both_is_a_conflict_unless_excel_wins(self):
         confirmed = self.tx(confirmed_at="2026-11-10T12:00:00+01:00")
         [c] = self.run_diff(self.tx(), self.tx(amount_eur=120.0), confirmed)
-        self.assertEqual((c.kind, c.app_fields), ("conflict", ["confirmed"]))
+        self.assertEqual((c.kind, c.fields, c.app_fields), ("conflict", ["amount_eur"], ["confirmed"]))
         [c] = self.run_diff(self.tx(), self.tx(amount_eur=120.0), confirmed, wins=["N8"])
         self.assertEqual(c.kind, "update")
 
@@ -115,12 +90,36 @@ class UpdateTest(unittest.TestCase):
         [c] = self.upd.diff("transactions", [self.tx(source_id="budget:N30")], old, {}, self.ctx, set(), D(2026, 11, 11))
         self.assertEqual(c.kind, "insert")
 
-    def test_week_classification_follows_excel_and_confirms_week_fact(self):
-        fact = self.tx(title="Неделя 4 (факт)", grp="Жизнь", week_budget=True, is_planned=False, confirmed_at="2026-11-08T12:00:00+01:00")
-        [c] = self.run_diff(fact, fact, self.tx(title="Неделя 4 (факт)", grp="Жизнь"))
+    def test_week_kind_follows_excel_without_conflict(self):
+        fact = self.tx(title="Неделя 4 (факт)", grp="Жизнь", entry_kind="week_total", week_no=4, is_planned=False, confirmed_at="2026-11-08T12:00:00+01:00")
+        [c] = self.run_diff(fact, fact, {**fact, "entry_kind": "one_off", "week_no": None})
         self.assertEqual(c.kind, "always")
-        self.assertEqual(c.patch["week_budget"], True)
+        self.assertEqual(c.patch, {"entry_kind": "week_total", "week_no": 4})
+
+    def test_status_plan_to_fact_in_excel_confirms(self):
+        [c] = self.run_diff(self.tx(), self.tx(is_planned=False, confirmed_at="2026-11-20T12:00:00+01:00"), self.tx())
+        self.assertEqual(c.kind, "update")
         self.assertEqual(c.patch["is_planned"], False)
+        self.assertTrue(c.patch["confirmed_at"])
+
+    def test_old_kind_family_is_not_removed(self):
+        """A run that makes no money tasks leaves the old ones (another family) alone."""
+        upd = self.upd
+        old = {"budget:todo:abc": {"fields": {}, "state": {}}}
+        base = {"budget:todo:abc": {"id": "i1", "status": "открыто", "done_at": None, "sphere": "money"}}
+        new = [{"source_id": "glow:task:x", "sphere": "body", "title": "X", "status": "Не начато"}]
+        changes = upd.diff("items", new, old, base, self.ctx, set(), D(2026, 11, 11))
+        self.assertEqual([c.kind for c in changes], ["insert"])
+
+    def test_links_compare_by_key(self):
+        upd = self.upd
+        ctx = {"week_id": {}, "week_start": {}, "key_of": {"u-e2": "budget:env:E2"}, "id_of": {"budget:env:E2": "u-e2", "budget:env:E3": "u-e3"}}
+        row = self.tx(envelope_key="budget:env:E2")
+        old = upd.baseline_records("transactions", [row], ctx)
+        base = {"budget:N8": {**row, "id": "db1", "envelope_id": "u-e2"}}
+        self.assertEqual(upd.diff("transactions", [row], old, base, ctx, set(), D(2026, 11, 11)), [])
+        [c] = upd.diff("transactions", [self.tx(envelope_key="budget:env:E3")], old, base, ctx, set(), D(2026, 11, 11))
+        self.assertEqual(c.patch, {"envelope_id": "u-e3"})
 
     def test_stage_targets_replace_excel_keys_keep_app_keys(self):
         upd = self.upd

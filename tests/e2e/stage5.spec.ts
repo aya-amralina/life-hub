@@ -41,6 +41,7 @@ test('воскресный обзор: пять шагов, «Пропустит
   await expect(page.getByRole('navigation', { name: 'Разделы' })).toBeHidden() // full-screen, no tab bar
   await expect(page.getByRole('heading', { name: 'Деньги', level: 2 })).toBeVisible()
   await page.getByLabel('Импульсные траты — были?').fill('кофе по дороге')
+  await page.getByLabel('Остаток Revolut').fill('742,10')
   await page.getByRole('button', { name: /Дальше: Тело/ }).click()
   await expect(page.getByRole('heading', { name: 'Тело', level: 2 })).toBeVisible()
   await page.getByRole('button', { name: 'Пропустить шаг' }).click()
@@ -65,6 +66,8 @@ test('воскресный обзор: пять шагов, «Пропустит
   expect(data?.impulse_note).toBe('кофе по дороге')
   expect(data?.week_thought).toBe('Спокойно и по одному')
   expect((data?.answers as { skipped?: string[] }).skipped).toEqual(['body'])
+  const bal = await sb.from('actual_balances').select('account, amount_eur, origin')
+  expect(bal.data).toEqual([{ account: 'Revolut', amount_eur: 742.1, origin: 'review' }]) // the review writes to «Остатки»
   await sb.auth.signOut()
 })
 

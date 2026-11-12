@@ -59,7 +59,7 @@ export function useAddExpense() {
       // show it in the week at once (offline the refetch waits for the network)
       await qc.cancelQueries({ queryKey: moneyKeys.all })
       const monday = weekStart(tx.date)
-      const row = { envelope_id: null, note: null, source_id: null, cancelled_at: null, week_budget: false, user_id: '', created_at: '', updated_at: '', ...tx, kind: 'expense', grp: 'Жизнь', is_planned: false, confirmed_at: new Date().toISOString() } as Transaction
+      const row = { envelope_id: null, note: null, source_id: null, cancelled_at: null, entry_kind: 'one_off', week_no: null, debt_id: null, user_id: '', created_at: '', updated_at: '', ...tx, kind: 'expense', grp: 'Жизнь', is_planned: false, confirmed_at: new Date().toISOString() } as Transaction
       qc.setQueryData<Transaction[]>(moneyKeys.week(monday), (old) => (old ? [row, ...old] : [row]))
     },
     onSettled: () => qc.invalidateQueries({ queryKey: moneyKeys.all }),
@@ -170,4 +170,44 @@ export async function fetchWeekLimits(weekId: string): Promise<WeekLimit[]> {
   const { data, error } = await supabase.from('week_limits').select('*').eq('week_id', weekId)
   if (error) throw error
   return data
+}
+
+export type Debt = Tables<'debts'>
+export type ActualBalance = Tables<'actual_balances'>
+
+export function useDebts() {
+  return useQuery({
+    queryKey: [...moneyKeys.all, 'debts'] as const,
+    queryFn: async (): Promise<Debt[]> => {
+      const { data, error } = await supabase.from('debts').select('*').order('created_at')
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+/** «Остатки»: real balances — the one source for the reconciliation and for goals. */
+export function useActualBalances() {
+  return useQuery({
+    queryKey: [...moneyKeys.all, 'actual_balances'] as const,
+    queryFn: async (): Promise<ActualBalance[]> => {
+      const { data, error } = await supabase.from('actual_balances').select('*').order('date', { ascending: false }).limit(2000)
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+/** The Sunday review writes the balances it asks for into «Остатки» (one row per day and account). */
+export function useSaveActualBalances() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ date, balances }: { date: ISODate; balances: Record<string, number> }) => {
+      const rows = Object.entries(balances).map(([account, amount]) => ({ date, account, amount_eur: amount, origin: 'review' }))
+      if (!rows.length) return
+      const { error } = await supabase.from('actual_balances').upsert(rows, { onConflict: 'user_id,date,account' })
+      if (error) throw error
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: moneyKeys.all }),
+  })
 }

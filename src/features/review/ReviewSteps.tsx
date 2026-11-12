@@ -15,7 +15,7 @@ import { formatEur, formatHours, plural, toCents } from '@/lib/format'
 import { weekPoints, weekPointsTarget } from '@/lib/rules/activities'
 import { minimumDone, minimumSet, stageForDate, weekHabitShare } from '@/lib/rules/habits'
 import { isItemOpen, isStuck } from '@/lib/rules/items'
-import { upcomingPlanned } from '@/lib/rules/money'
+import { isWeekRow, upcomingPlanned } from '@/lib/rules/money'
 import { nextWeekAgenda, splitItem } from '@/lib/rules/review'
 import { LOAD_LABEL, isFixed, planRollover, plannedItems, rolloverCandidates, studyItemsOfWeek, weekCapacity, weekLoad } from '@/lib/rules/study'
 import { nachhaken, statusAltDays } from '@/lib/rules/work'
@@ -379,7 +379,7 @@ export function AheadStep({ monday, thought, onThought }: { monday: ISODate; tho
   const load = weekLoad(plannedItems(studyItemsOfWeek(all, monday, week?.id ?? null)), weekCapacity(week))
   const agenda = nextWeekAgenda(all, monday)
   const sunday = addDaysISO(monday, 6)
-  const money = upcomingPlanned(txs.data ?? [], addDaysISO(monday, -1)).filter((t) => t.date <= sunday && !t.week_budget)
+  const money = upcomingPlanned(txs.data ?? [], addDaysISO(monday, -1)).filter((t) => t.date <= sunday && !isWeekRow(t))
   const newStage = (stages.data ?? []).find((s) => s.sphere === 'body' && s.start_date >= monday && s.start_date <= sunday)
   return (
     <>

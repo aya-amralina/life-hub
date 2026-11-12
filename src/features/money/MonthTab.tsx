@@ -11,12 +11,11 @@ import { formatEur, toCents } from '@/lib/format'
 import { balanceLine } from '@/lib/rules/charts'
 import { XYChart } from '@/components/charts/Chart'
 import { ChartLegend } from '@/components/charts/chartParts'
-import { BUDGET_END, balanceAt, isFact, monthsTable, plannedQuestions, reconcile, signedCents, upcomingPlanned } from '@/lib/rules/money'
+import { BUDGET_END, balanceAt, balancesByDate, isFact, isWeekRow, monthsTable, plannedQuestions, reconcile, signedCents, upcomingPlanned } from '@/lib/rules/money'
 import { ACCOUNTS } from '@/lib/constants'
 import { Chip } from '@/components/ui/Chip'
-import { useEnteredBalances } from '@/features/review/api'
 import { joinRu } from '@/lib/format'
-import { useAllTransactions, useUpdateTransaction, type Transaction } from './api'
+import { useActualBalances, useAllTransactions, useUpdateTransaction, type Transaction } from './api'
 
 type Filter = 'plan' | 'fact'
 
@@ -39,7 +38,7 @@ export function MonthTab() {
   const [month, setMonth] = useState(today.slice(0, 7))
   const [filter, setFilter] = useState<Filter[]>([])
   const [showRemoved, setShowRemoved] = useState(false)
-  const entered = useEnteredBalances()
+  const actual = useActualBalances()
 
   if (txs.isPending) return <SkeletonCard />
   const all = txs.data ?? []
@@ -53,11 +52,7 @@ export function MonthTab() {
   const pending = plannedQuestions(all, today)
   const pendingCents = pending.reduce((s, q) => s + signedCents(q.tx), 0)
   // real balances from the Sunday review against the calculated balance on that day
-  const check = reconcile(
-    (entered.data ?? []).map((r) => ({ date: todayBerlin(new Date(r.updated_at)), balances: (r.balances ?? {}) as Record<string, string> })),
-    all,
-    ACCOUNTS,
-  )
+  const check = reconcile(balancesByDate(actual.data ?? []), all, ACCOUNTS)
   const inMonth = all.filter((t) => t.date.startsWith(month) && t.kind !== 'opening')
   const removed = inMonth.filter((t) => t.cancelled_at)
   const ops = inMonth
@@ -106,7 +101,7 @@ export function MonthTab() {
         />
         <p className="m-0 text-cap text-ink2 tabular-nums">
           {check === null
-            ? 'Реальных остатков пока нет — внеси их в воскресном обзоре, сравню с расчётом.'
+            ? 'Реальных остатков пока нет — внеси их в воскресном обзоре или в листе «Остатки», сравню с расчётом.'
             : `Остатки на ${formatDayMonth(check.date)}: ${formatEur(check.actualCents, { whole: true })}, по расчёту ${formatEur(check.calculatedCents, { whole: true })} — ${
                 check.matches ? 'сходится' : `расхождение ${check.diffCents > 0 ? '+' : '−'}${formatEur(Math.abs(check.diffCents))}`
               }.${check.missing.length ? ` Не внесены: ${check.missing.join(', ')}.` : ''}`}
@@ -221,11 +216,11 @@ function OperationRow({ t, today, onConfirm }: { t: Transaction; today: ISODate;
           {t.title}
         </span>
         <span className="block text-cap text-ink2">
-          {[muted ? 'убрано из плана' : t.week_budget && planned ? 'бюджет недели' : planned ? 'план' : 'факт', t.category, t.account].filter(Boolean).join(' · ')}
+          {[muted ? 'убрано из плана' : t.entry_kind === 'week_budget' ? 'бюджет недели' : t.entry_kind === 'week_total' ? 'итог недели' : planned ? 'план' : 'факт', t.category, t.account].filter(Boolean).join(' · ')}
         </span>
       </span>
       {!muted && <span className="text-base tabular-nums">{signed(t)}</span>}
-      {planned && !t.week_budget && t.date <= today && (
+      {planned && !isWeekRow(t) && t.date <= today && (
         <button type="button" onClick={onConfirm} className="h-11 flex-none rounded-xl border border-line2 px-3 text-cap font-semibold active:bg-sub">
           Подтвердить
         </button>
