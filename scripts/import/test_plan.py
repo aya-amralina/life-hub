@@ -58,6 +58,15 @@ class MoneyTasksTest(unittest.TestCase):
         self.assertEqual(future_actions("Отмени X до 01.11.", D(2026, 10, 1), today, None), [])
 
 
+
+class CareMarkTest(unittest.TestCase):
+    def test_tracker_columns_map_to_groups(self):
+        from src_glow import care_mark
+        self.assertEqual(care_mark("Ниацинамид утром"), "Утро: Ниацинамид")
+        self.assertEqual(care_mark("Азелаинка вечером"), "Вечер: Азелаинка")
+        self.assertEqual(care_mark("Крем для тела"), "Крем для тела")
+
+
 if __name__ == "__main__":
     unittest.main()
 

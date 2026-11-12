@@ -84,6 +84,15 @@ def _weeks_and_stages(ws, b: Batch, care: list[str]) -> None:
 LEGACY_CARE = {"Вечер: лицо"}  # the former select column (Ретиноид / Азелаинка / Пропуск) → daily_logs.face_evening
 
 
+def care_mark(header: str) -> str:
+    """A tracker column as the app's mark: «Ниацинамид утром» → «Утро: Ниацинамид» (the morning group), «… вечером» →
+    «Вечер: …»; other columns («Крем для тела») — by name."""
+    for suffix, group in ((" утром", "Утро"), (" вечером", "Вечер")):
+        if header.endswith(suffix):
+            return f"{group}: {header[: -len(suffix)].strip()}"
+    return header
+
+
 def care_columns(ws) -> list[tuple[int, str]]:
     """Columns of the «Уход» group in «Трекер» (row 4 groups, row 5 names): everything from «Уход» up to the next group."""
     groups = next(ws.iter_rows(min_row=4, max_row=4, values_only=True))
@@ -126,7 +135,7 @@ def _tracker(ws, b: Batch, types: list[str]) -> None:
             "morning": is_check(r[4]),
             "outside": is_check(r[5]),
             "water": is_check(r[6]),
-            "care": [name for j, name in care_cols if name not in LEGACY_CARE and is_check(r[j])],
+            "care": [care_mark(name) for j, name in care_cols if name not in LEGACY_CARE and is_check(r[j])],
             "face_evening": next((text(r[j]) for j, name in care_cols if name in LEGACY_CARE), None),
             "energy": int(number(r[12])) if number(r[12]) else None,
             "slump": True if text(r[13]) == "Да" else False if text(r[13]) == "Нет" else None,

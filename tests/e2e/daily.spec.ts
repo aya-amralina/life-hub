@@ -29,6 +29,15 @@ test('день отмечается: привычка в 1 тап, энерги�
   await expect(sheet).toBeHidden()
   await expect(page.getByText('скор дня 6')).toBeVisible()
 
+  // «Уход»: a group keeps one choice, a plain item toggles
+  const evening = page.getByRole('group', { name: 'Вечер' })
+  await evening.getByRole('button', { name: 'Азелаинка' }).click()
+  await evening.getByRole('button', { name: 'Ниацинамид' }).click()
+  await expect(evening.getByRole('button', { name: 'Ниацинамид' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(evening.getByRole('button', { name: 'Азелаинка' })).toHaveAttribute('aria-pressed', 'false')
+  await page.getByRole('button', { name: 'Крем для тела' }).click()
+  await expect(page.getByText('2 из 3')).toBeVisible()
+
   // Reload = fresh data from the server
   await page.reload()
   await expect(page.getByRole('checkbox', { name: /Утренний старт/ })).toHaveAttribute('aria-checked', 'true')

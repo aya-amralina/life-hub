@@ -95,7 +95,7 @@ measurements     date, waist_cm, hips_cm, thigh_cm, arm_cm, weight_kg (null),
 notes            sphere, title, body_md, pinned
 reviews          week_id, answers jsonb, balances jsonb, impulse_note, week_thought, completed_at
 plan_stages      sphere, name, start_date, end_date, habits text[],
-                 minimum_habits text[] (набор режима «минимум»), care_items text[] (уход на «Отметке дня»),
+                 minimum_habits text[] (набор режима «минимум»), care_items text[] (уход на «Отметке дня»: пункт или группа с выбором «Вечер: Ниацинамид | Азелаинка»),
                  targets jsonb
 import_baseline  table_name, source_id, data jsonb, removed — что взял прошлый импорт (для обновления)
 ```

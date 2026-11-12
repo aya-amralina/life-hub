@@ -6,7 +6,7 @@ import { Chip } from '@/components/ui/Chip'
 import { SkeletonCard } from '@/components/ui/Feedback'
 import { formatDayMonth } from '@/lib/dates'
 import { weekPointsTarget } from '@/lib/rules/activities'
-import { careItems } from '@/lib/rules/care'
+import { careItems, careTitle, parseCare } from '@/lib/rules/care'
 import { activeHabits, minimumSet, type HabitKey } from '@/lib/rules/habits'
 import { bodyDataKeys, useWrite } from '@/features/body/activityApi'
 import { useStages, type Stage } from '@/features/body/api'
@@ -35,7 +35,7 @@ function StageRow({ stage }: { stage: Stage }) {
   const habits = activeHabits(stage)
   const [target, setTarget] = useState(String(weekPointsTarget(stage) ?? ''))
   const [newCare, setNewCare] = useState('')
-  const care = careItems(stage)
+  const care = careItems(stage).map((e) => e.raw)
   const saveCare = (next: string[]) => write.update.mutate({ id: stage.id, patch: { care_items: next } })
 
   const toggle = (k: HabitKey) => {
@@ -71,10 +71,10 @@ function StageRow({ stage }: { stage: Stage }) {
       <ul className="m-0 flex list-none flex-col p-0" aria-label={`Уход этапа ${stage.name}`}>
         {care.map((item) => (
           <li key={item} className="flex min-h-11 items-center gap-2 text-base">
-            <span className="min-w-0 flex-1">{item}</span>
+            <span className="min-w-0 flex-1">{careTitle(parseCare(item))}</span>
             <IconButton
               shape="square"
-              label={`Убрать «${item}»`}
+              label={`Убрать «${careTitle(parseCare(item))}»`}
               className="border-transparent text-ink3"
               disabled={care.length === 1}
               onClick={() => saveCare(care.filter((x) => x !== item))}
@@ -84,6 +84,7 @@ function StageRow({ stage }: { stage: Stage }) {
           </li>
         ))}
       </ul>
+      <p className="m-0 text-cap text-ink2">Выбор из вариантов — через двоеточие и черту: «Вечер: Ниацинамид | Азелаинка».</p>
       <form
         className="flex gap-2"
         onSubmit={(e) => {
@@ -97,7 +98,7 @@ function StageRow({ stage }: { stage: Stage }) {
         <input
           value={newCare}
           onChange={(e) => setNewCare(e.target.value)}
-          placeholder="Новое средство или шаг"
+          placeholder="Крем для тела или Утро: SPF | Стик"
           aria-label={`Новый пункт ухода этапа ${stage.name}`}
           className="h-11 min-w-0 flex-1 rounded-xl border border-line2 bg-card px-3 text-base text-ink"
         />

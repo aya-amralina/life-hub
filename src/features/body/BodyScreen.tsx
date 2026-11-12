@@ -13,7 +13,7 @@ import { CalendarLink } from '@/components/layout/CalendarLink'
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
 import { addDaysISO, formatDayMonth, formatRelativeDay, formatWeekdayDate, todayBerlin, weekStart, type ISODate } from '@/lib/dates'
 import { activityPoints, dayPoints, weekPoints, weekPointsTarget } from '@/lib/rules/activities'
-import { careDone, careItems, toggleCare } from '@/lib/rules/care'
+import { careChoice, careDone, careItems, toggleCare } from '@/lib/rules/care'
 import { activeHabits, minimumSet, stageForDate, weekHabitShare } from '@/lib/rules/habits'
 import { isItemOpen, isUpcoming } from '@/lib/rules/items'
 import { plural } from '@/lib/format'
@@ -191,20 +191,38 @@ function CareCard({ date }: { date: ISODate }) {
   const save = useSaveDailyLog(date)
   const { stage } = useStageFor(date)
   if (log.isPending) return <SkeletonCard />
-  const items = careItems(stage)
+  const entries = careItems(stage)
   const marked = log.data?.care ?? []
+  const plain = entries.filter((e) => !e.options)
+  const groups = entries.filter((e) => e.options)
+  // a past «Вечер: лицо» mark is shown only when no evening group holds it
   const face = log.data?.face_evening ?? null
+  const faceShown = face && !groups.some((g) => careChoice(marked, g) === face)
   return (
     <Card>
-      <CardHeader title="Уход" dotClass="bg-body" context={`${careDone(marked, items)} из ${items.length}`} />
-      <div className="flex flex-wrap gap-2">
-        {items.map((item) => (
-          <Chip key={item} selected={marked.includes(item)} onClick={() => save.mutate({ care: toggleCare(marked, item) })}>
-            {item}
-          </Chip>
-        ))}
-      </div>
-      {face && <p className="m-0 text-cap text-ink2">Вечер: лицо — {face} (старая отметка)</p>}
+      <CardHeader title="Уход" dotClass="bg-body" context={`${careDone(marked, entries)} из ${entries.length}`} />
+      {groups.map((g) => (
+        <fieldset key={g.raw} className="m-0 flex flex-col gap-2 border-0 p-0">
+          <legend className="mb-2 text-cap text-ink2">{g.label}</legend>
+          <div className="flex flex-wrap gap-2">
+            {g.options!.map((o) => (
+              <Chip key={o} selected={careChoice(marked, g) === o} onClick={() => save.mutate({ care: toggleCare(marked, g, o) })}>
+                {o}
+              </Chip>
+            ))}
+          </div>
+        </fieldset>
+      ))}
+      {plain.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {plain.map((e) => (
+            <Chip key={e.raw} selected={marked.includes(e.label)} onClick={() => save.mutate({ care: toggleCare(marked, e) })}>
+              {e.label}
+            </Chip>
+          ))}
+        </div>
+      )}
+      {faceShown && <p className="m-0 text-cap text-ink2">Вечер: лицо — {face} (старая отметка)</p>}
     </Card>
   )
 }
