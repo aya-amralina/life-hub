@@ -56,7 +56,7 @@ function WellbeingCard() {
         ]}
         bars={[{ key: 'sleep', name: 'Сон', color: 'body', axis: 'right', unit: ' ч' }]}
         yLeft={{ domain: [1, 10], ticks: [1, 5, 10] }}
-        yRight={{ domain: [0, 10], ticks: [0, 5, 10], unit: ' ч' }}
+        yRight={{ domain: [0, 12], ticks: [0, 6, 12], unit: ' ч' }}
         bands={bands}
         todayKey={period === 'day' ? today : undefined}
       />

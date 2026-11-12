@@ -6,7 +6,8 @@ import { hourBerlin, todayBerlin, type ISODate } from '@/lib/dates'
 import { useDailyLog, useSaveDailyLog } from './api'
 
 const ONE_TO_TEN = Array.from({ length: 10 }, (_, i) => ({ value: i + 1 }))
-const SLEEP = [5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5].map((v) => ({ value: v, label: String(v).replace('.', ',') }))
+// 5 … 12 h in half-hour steps
+const SLEEP = Array.from({ length: 15 }, (_, i) => 5 + i / 2).map((v) => ({ value: v, label: String(v).replace('.', ',') }))
 const SLUMP = [
   { value: 'yes', label: 'Да' },
   { value: 'no', label: 'Нет' },
