@@ -73,7 +73,7 @@ export function QuestionCard({
           <button
             type="button"
             onClick={() => setStep('amount')}
-            aria-label="Поправить сумму"
+            aria-label={`${formatEur(amount.cents, { whole: true })} — поправить сумму`}
             className="flex h-11 flex-none items-center gap-1 rounded-xl px-2 text-title font-semibold tabular-nums active:bg-sub"
           >
             {formatEur(amount.cents, { whole: true })}

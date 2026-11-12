@@ -79,7 +79,7 @@ public/                      # иконки PWA, шрифт Onest (woff2, self-h
   grant select, insert, update, delete on table public.<t> to service_role;  -- secret key (import), bypasses RLS
   call private.add_owner_policies('public.<t>');  -- 4 политики + триггер updated_at
   ```
-  `anon` (publishable key без входа) — никаких прав, ни на таблицы, ни на функции. Правило проверяет `tests/unit/migrations.test.ts`.
+  `anon` (publishable key без входа) — никаких прав, ни на таблицы, ни на функции. Единственное исключение — `execute` на `public.ping()` (`select 1`, keep-alive). Правило проверяет `tests/unit/migrations.test.ts`.
 - Миграции: новая миграция на каждое изменение схемы, старые не редактируем после `db push`.
 - Имена: компоненты `PascalCase.tsx`, остальное `camelCase.ts`; без default export, кроме страниц для lazy-роутов.
 
@@ -144,3 +144,6 @@ GitHub (приватный `life-hub`, `main` = прод) → Vercel Hobby (пр
 - 2026-11-11: воскресный обзор — `/review`, неделя по `reviewWeek` (сб/вс — текущая, иначе прошлая), без таб-бара; ответы в `reviews.answers` (`body`, `work`, `skipped`), `balances`, `impulse_note`, `week_thought`, `completed_at`.
 - 2026-11-11: офлайн — `app/offlineQueue.ts` (IndexedDB, порядок сохраняется, ошибки сервера не ставятся в очередь), id новых строк создаются на клиенте; мутации `networkMode: 'always'`; кэш чтения — `app/queryCache.ts` (dehydrate/hydrate, 7 дней). Через очередь идут отметки дня, пункты, траты, вопросы о деньгах, таблицы Тела, хотелки.
 - 2026-11-12: уход — пункт («Крем для тела») или группа с одним выбором («Утро: Ниацинамид | Глиняный стик»); отметка дня — «Утро: Ниацинамид». Миграция 0008 ставит этот список этапам и переносит старые отметки («Ниацинамид утром», «Вечер: лицо» = Ниацинамид/Азелаинка) в группы; в «Трекере» колонка «X утром» → «Утро: X».
+- 2026-11-12: keep-alive — миграция 0009 `public.ping()` (`select 1`, execute для anon и authenticated, таблиц не читает) и `.github/workflows/keepalive.yml` (ежедневно, падает, если ответ не 1); секреты `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` в GitHub.
+- 2026-11-12: финальная проверка — Lighthouse 11 на прод-сборке (PWA, Accessibility, Best Practices — 100; Performance 80 на `/login` под медленным 4G) и `tests/e2e/a11y.spec.ts` (axe WCAG 2.1 AA + зоны ≥ 44 px на всех экранах, светлая и тёмная). Найдено и исправлено: сегменты 40 → 44 px (П8 в DESIGN.md), имя кнопки суммы, роль сетки (`group`).
+- 2026-11-12: напоминание «Скачать бэкап (JSON)» в шаге «Неделя вперёд», если экспорта не было больше 7 дней; дата последнего экспорта — на устройстве (localStorage).

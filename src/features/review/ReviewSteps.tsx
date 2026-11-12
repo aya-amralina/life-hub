@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
-import { Plus } from 'lucide-react'
+import { DatabaseBackup, Plus } from 'lucide-react'
+import { IconTile } from '@/components/ui/IconTile'
+import { backupAgeDays, backupDue } from '@/lib/backup'
+import { downloadBackup, lastExport } from '@/features/settings/backupApi'
 import { useToast } from '@/app/toastContext'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
@@ -427,7 +430,48 @@ export function AheadStep({ monday, thought, onThought }: { monday: ISODate; tho
           </ul>
         </Card>
       )}
+      <BackupReminder />
       <Note label="Мысль на неделю" value={thought} onChange={onThought} placeholder="Одна фраза — что важно не потерять" />
     </>
+  )
+}
+
+/** Free Supabase keeps no backups: the review reminds to download one when the last export is older than 7 days. */
+function BackupReminder() {
+  const toast = useToast()
+  const [last, setLast] = useState(lastExport)
+  const [busy, setBusy] = useState(false)
+  const [now] = useState(() => new Date())
+  if (!backupDue(last, now)) return null
+  const days = backupAgeDays(last, now)
+  return (
+    <section className="flex flex-col gap-3 rounded-2xl border border-line bg-card p-4" aria-label="Бэкап">
+      <div className="flex items-center gap-3">
+        <IconTile icon={DatabaseBackup} sphere="personal" />
+        <div className="min-w-0 flex-1">
+          <div className="text-base font-semibold">Скачать бэкап (JSON)</div>
+          <div className="text-cap text-ink2">
+            {days === null ? 'С этого телефона бэкапа ещё не было.' : `Последний — ${days} ${plural(days, ['день', 'дня', 'дней'])} назад.`} Все данные только в базе — копия на
+            всякий случай.
+          </div>
+        </div>
+      </div>
+      <Button
+        variant="secondary"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true)
+          void downloadBackup()
+            .then((rows) => {
+              toast({ text: `Бэкап готов · ${rows} строк` })
+              setLast(lastExport())
+            })
+            .catch(() => toast({ text: 'Не получилось — проверь сеть и попробуй ещё раз' }))
+            .finally(() => setBusy(false))
+        }}
+      >
+        {busy ? 'Собираю…' : 'Скачать бэкап'}
+      </Button>
+    </section>
   )
 }

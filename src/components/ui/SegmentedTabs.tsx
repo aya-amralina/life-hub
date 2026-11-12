@@ -2,19 +2,17 @@ import { cn } from './cn'
 
 export type Segment<T extends string> = { value: T; label: string; disabled?: boolean }
 
-/** Segmented control: 4px inset on subtle fill, active segment lifted onto card. */
+/** Segmented control: 4px inset on subtle fill, active segment lifted onto card. Segments are 44px (tap zones ≥ 44, П8). */
 export function SegmentedTabs<T extends string>({
   segments,
   value,
   onChange,
-  compact = false,
   className,
   label,
 }: {
   segments: readonly Segment<T>[]
   value: T
   onChange: (v: T) => void
-  compact?: boolean
   className?: string
   label?: string
 }) {
@@ -32,7 +30,7 @@ export function SegmentedTabs<T extends string>({
             onClick={() => onChange(s.value)}
             className={cn(
               'flex min-w-0 flex-1 items-center justify-center truncate rounded-lg px-2 text-base',
-              compact ? 'h-9' : 'h-10',
+              'h-11',
               active ? 'bg-card font-semibold text-ink shadow-seg' : 'text-ink2 disabled:text-dis',
             )}
           >

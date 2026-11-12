@@ -53,6 +53,14 @@ describe.skipIf(!ready)('live: Supabase keys, privileges, test user', () => {
     }
   })
 
+  it('keep-alive: ping() answers 1 to the publishable key without a session — and only it', async () => {
+    const res = await fetch(`${url}/rest/v1/rpc/ping`, { method: 'POST', headers: { apikey: publishable!, 'Content-Type': 'application/json' }, body: '{}' })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toBe(1)
+    const sb = createClient(url!, publishable!, noSession)
+    expect((await sb.from('items').select('id').limit(1)).error?.code).toBe('42501')
+  })
+
   it('signups are disabled', async () => {
     const res = await fetch(`${url}/auth/v1/settings`, { headers: { apikey: publishable! } })
     expect(res.status).toBe(200)

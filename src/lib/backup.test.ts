@@ -41,3 +41,14 @@ describe('backup', () => {
     expect(csv.slice(1).split('\r\n')).toEqual(['id;title;people;amount_eur', '1;"Miete; Nov";"[""A"",""B""]";650', '2;"Sag ""hi""";;', ''])
   })
 })
+
+describe('backup reminder', async () => {
+  const { backupDue } = await import('./backup')
+  const now = new Date('2026-11-15T10:00:00Z')
+  it('due after more than 7 days or without any export', () => {
+    expect(backupDue(null, now)).toBe(true)
+    expect(backupDue('2026-11-07T09:00:00Z', now)).toBe(true)
+    expect(backupDue('2026-11-09T10:00:00Z', now)).toBe(false)
+    expect(backupDue('garbage', now)).toBe(true)
+  })
+})

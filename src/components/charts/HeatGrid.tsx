@@ -55,7 +55,8 @@ export function HeatGrid({
           </div>
         )}
         <div
-          role="grid"
+          role="group"
+          data-heatgrid=""
           aria-label={label}
           className="grid gap-[3px] overflow-x-auto"
           style={{
@@ -70,7 +71,7 @@ export function HeatGrid({
               <button
                 key={c.key}
                 type="button"
-                aria-label={c.tip}
+                aria-label={c.label ? `${c.label} · ${c.tip}` : c.tip}
                 aria-pressed={picked === c.key}
                 onClick={() => setPicked(picked === c.key ? null : c.key)}
                 className={cn(

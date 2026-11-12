@@ -49,6 +49,12 @@ test('воскресный обзор: пять шагов, «Пропустит
   await page.getByRole('button', { name: /Дальше: Работа/ }).click()
   await page.getByRole('button', { name: /Дальше: Вперёд/ }).click()
   await expect(page.getByRole('heading', { name: 'Неделя вперёд' })).toBeVisible()
+  // no export from this device yet → the last step reminds to download a backup
+  const reminder = page.getByRole('region', { name: 'Бэкап' })
+  await expect(reminder.getByText('Скачать бэкап (JSON)')).toBeVisible()
+  const [file] = await Promise.all([page.waitForEvent('download'), reminder.getByRole('button', { name: 'Скачать бэкап' }).click()])
+  expect(file.suggestedFilename()).toMatch(/^lifehub-export-.*\.json$/)
+  await expect(reminder).toBeHidden()
   await page.getByLabel('Мысль на неделю').fill('Спокойно и по одному')
   await page.getByRole('button', { name: 'Завершить обзор' }).click()
   await expect(page.getByText('Обзор недели готов. Хорошей недели!')).toBeVisible()

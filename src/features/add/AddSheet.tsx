@@ -45,7 +45,7 @@ export function AddSheet({
       open={open}
       onClose={close}
       label="Добавить"
-      header={<SegmentedTabs segments={MODES} value={mode} onChange={onMode} compact label="Что добавить" />}
+      header={<SegmentedTabs segments={MODES} value={mode} onChange={onMode} label="Что добавить" />}
     >
       {mode === 'expense' && <ExpenseForm onDone={close} />}
       {mode === 'item' && <ItemForm key={date ?? 'today'} onDone={close} initialSphere={sphere} initialDate={date} />}

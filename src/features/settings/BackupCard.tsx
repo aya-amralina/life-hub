@@ -8,7 +8,7 @@ import { Card, CardHeader } from '@/components/ui/Card'
 import { Chip } from '@/components/ui/Chip'
 import { BACKUP_TABLES, TABLE_LABEL, parseBackup, restorePlan, toCsv, type Backup, type BackupTable, type RestoreLine } from '@/lib/backup'
 import { todayBerlin } from '@/lib/dates'
-import { existingIds, exportAll, exportTable, restore, saveFile } from './backupApi'
+import { downloadBackup, existingIds, exportTable, restore, saveFile } from './backupApi'
 
 /** Настройки → Данные: export JSON (everything) and CSV (a table), restore from JSON with a preview. */
 export function BackupCard() {
@@ -34,9 +34,7 @@ export function BackupCard() {
 
   const exportJson = () =>
     run('json', async () => {
-      const backup = await exportAll()
-      const rows = Object.values(backup.tables).reduce((s, r) => s + (r?.length ?? 0), 0)
-      await saveFile(`lifehub-export-${todayBerlin()}.json`, 'application/json', JSON.stringify(backup))
+      const rows = await downloadBackup()
       toast({ text: `Экспорт готов · ${rows} строк` })
     })
 

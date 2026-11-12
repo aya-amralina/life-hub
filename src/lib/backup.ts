@@ -104,3 +104,19 @@ export function toCsv(rows: readonly Record<string, unknown>[]): string {
   const lines = [cols.join(';'), ...rows.map((r) => cols.map((c) => cell(r[c])).join(';'))]
   return '﻿' + lines.join('\r\n') + '\r\n'
 }
+
+export const BACKUP_EVERY_DAYS = 7
+
+/** The review reminds to download a backup when the last export is older than 7 days (or there was none). */
+export function backupDue(lastExport: string | null, now: Date): boolean {
+  if (!lastExport) return true
+  const t = new Date(lastExport).getTime()
+  return Number.isNaN(t) || now.getTime() - t > BACKUP_EVERY_DAYS * 86_400_000
+}
+
+/** Whole days since the last export (null if none). */
+export function backupAgeDays(lastExport: string | null, now: Date): number | null {
+  if (!lastExport) return null
+  const t = new Date(lastExport).getTime()
+  return Number.isNaN(t) ? null : Math.floor((now.getTime() - t) / 86_400_000)
+}

@@ -48,11 +48,11 @@ test('графики: Тело → Графики и тепловая карта
   await expect(page.getByText('Мало данных', { exact: false }).first()).toBeVisible() // reps/activity are empty
   await page.getByRole('tab', { name: 'Неделя' }).click()
   await expect(page.getByText('средние за неделю')).toBeVisible()
-  await expect(page.getByRole('grid', { name: 'Календарь привычек' })).toBeVisible()
+  await expect(page.getByRole('group', { name: 'Календарь привычек' })).toBeVisible()
 
   await tab(page, 'Учёба')
   await page.getByRole('tab', { name: 'Предметы' }).click()
-  const heat = page.getByRole('grid', { name: 'Загрузка по неделям' })
+  const heat = page.getByRole('group', { name: 'Загрузка по неделям' })
   await heat.getByRole('button', { name: /Н04/ }).click()
   await expect(page.getByText('Н04 · 30 ч из 27 · нужен Do/Sa ½ · сейчас')).toBeVisible()
 })

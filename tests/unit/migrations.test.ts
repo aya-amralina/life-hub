@@ -28,7 +28,12 @@ describe('migrations: explicit access for every public table', () => {
     expect(sql).toContain(`call private.add_owner_policies('public.${t}');`)
   })
 
-  it('never grants anything to anon or public', () => {
-    expect(sql).not.toMatch(/grant [^;]* to [^;]*\b(anon|public)\b/)
+  it('never grants anything to anon or public — except execute on the keep-alive ping()', () => {
+    const grants = [...sql.matchAll(/grant [^;]* to [^;]*\b(anon|public)\b[^;]*;/g)].map((m) => m[0].replace(/\s+/g, ' '))
+    expect(grants).toEqual(['grant execute on function public.ping() to anon, authenticated;'])
+  })
+
+  it('ping() reads no table', () => {
+    expect(sql).toMatch(/create or replace function public\.ping\(\)[\s\S]*?as \$\$ select 1 \$\$;/)
   })
 })

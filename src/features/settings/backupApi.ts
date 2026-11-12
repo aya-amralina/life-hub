@@ -82,3 +82,27 @@ export async function saveFile(name: string, type: string, content: string) {
   a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
+
+const LAST_EXPORT = 'lifehub.lastExport'
+
+/** When this device last exported a JSON backup (a per-device convenience; null if unknown). */
+export function lastExport(): string | null {
+  try {
+    return localStorage.getItem(LAST_EXPORT)
+  } catch {
+    return null
+  }
+}
+
+/** Export everything and save the file; remembers the time for the review reminder. Returns the row count. */
+export async function downloadBackup(): Promise<number> {
+  const backup = await exportAll()
+  const rows = Object.values(backup.tables).reduce((s, r) => s + (r?.length ?? 0), 0)
+  await saveFile(`lifehub-export-${backup.exported_at.slice(0, 10)}.json`, 'application/json', JSON.stringify(backup))
+  try {
+    localStorage.setItem(LAST_EXPORT, backup.exported_at)
+  } catch {
+    // storage blocked — the reminder just shows again
+  }
+  return rows
+}
