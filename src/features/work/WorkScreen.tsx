@@ -305,7 +305,7 @@ function PeopleTab() {
       </Card>
       <Card>
         <CardHeader title="Люди" context={names.length ? `${names.length}` : undefined} />
-        {names.length === 0 && <p className="m-0 text-cap text-ink2">Список придёт из «Legende» при импорте. Можно добавить и сейчас.</p>}
+        {names.length === 0 && <p className="m-0 text-cap text-ink2">Списка пока нет. Добавь первое имя.</p>}
         <ul className="m-0 flex list-none flex-col p-0">
           {(people.data ?? []).map((p) => {
             const open = work.filter((i) => i.people.includes(p.name) || (i.waiting_on ?? '').includes(p.name)).filter((i) => i.status !== 'Erledigt' && i.status !== 'Verworfen').length

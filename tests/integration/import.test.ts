@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { describe, expect, it } from 'vitest'
 import { todayBerlin } from '../../src/lib/dates'
-import { balanceAt, signedCents, type TxLike } from '../../src/lib/rules/money'
+import { balanceAt, type TxLike } from '../../src/lib/rules/money'
 import { supabaseConfigured } from '../testUser'
 
 // SPEC §6 checks after the import, on the REAL user's base (LIFEHUB_EMAIL). Read-only with the secret key
@@ -11,8 +11,7 @@ const secret = process.env.SUPABASE_SECRET_KEY
 const email = process.env.LIFEHUB_EMAIL
 const ready = supabaseConfigured() && Boolean(secret && email)
 
-// Control numbers from the Excel files (SPEC §6). The balance comes from the stored baseline — the Excel of the
-// last import run — so the check follows Excel updates (1788,14 € at the first import).
+// Control numbers from the Excel files (SPEC §6) — what the one-time import brought in.
 const WORK_TASKS = 31 // non-empty rows of «Dev Aufgaben»
 const CHECKLIST_ITEMS = 254 // rows of «Чеклист» (without the 2 instruction rows)
 const H04_HOURS = 27.5
@@ -27,28 +26,19 @@ async function setup() {
 }
 
 describe.skipIf(!ready)('import checks (SPEC §6)', () => {
-  it('balance on 31.12.2026 of the imported operations = the last imported Excel (and the app forecast)', async () => {
+  // Until 12.11.2026 this compared the balance of the imported operations with the last imported Excel. The app is
+  // the source now (operations are created and edited in it), so the two legitimately differ: only the shape is checked.
+  it('operations are there: one start row, a finite plan to 31.12', async () => {
     const { admin, uid } = await setup()
-    const base = await admin.from('import_baseline').select('data, removed').eq('user_id', uid).eq('table_name', 'transactions')
-    expect(base.error).toBeNull()
-    type Rec = { fields: { date: string; amount_eur: number; kind: string } }
-    const BALANCE_END_CENTS = (base.data ?? [])
-      .filter((r) => !r.removed && (r.data as Rec).fields.date <= '2026-12-31')
-      .reduce((s, r) => s + signedCents((r.data as Rec).fields as unknown as TxLike), 0)
     const { data, error } = await admin
       .from('transactions')
-      .select('date, amount_eur, kind, category, envelope_id, is_planned, confirmed_at, cancelled_at, entry_kind, grp, source_id')
+      .select('date, amount_eur, kind, category, envelope_id, is_planned, confirmed_at, cancelled_at, entry_kind, grp')
       .eq('user_id', uid)
-      .not('source_id', 'is', null)
     expect(error).toBeNull()
-    const txs = data as (TxLike & { source_id: string })[]
+    const txs = data as TxLike[]
     expect(txs.length).toBeGreaterThan(0)
-    // as in the «Обзор» sheet: every imported operation with its sign
-    const excel = txs.filter((t) => !t.cancelled_at && t.date <= '2026-12-31').reduce((s, t) => s + signedCents(t), 0)
-    expect(excel).toBe(BALANCE_END_CENTS)
-    // as the app shows it in the import week (rule 26: the current week costs its budget when nothing is spent yet)
-    if (todayBerlin() <= '2026-11-15') expect(balanceAt(txs, '2026-12-31', 'plan', todayBerlin())).toBe(BALANCE_END_CENTS)
-    expect(BALANCE_END_CENTS).not.toBe(0)
+    expect(txs.filter((t) => t.kind === 'opening' && !t.cancelled_at)).toHaveLength(1)
+    expect(Number.isFinite(balanceAt(txs, '2026-12-31', 'plan', todayBerlin()))).toBe(true)
   })
 
   it('work tasks = non-empty rows of «Dev Aufgaben»', async () => {

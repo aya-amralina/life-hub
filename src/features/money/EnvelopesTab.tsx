@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus } from 'lucide-react'
+import { Pencil, Plus } from 'lucide-react'
 import { useToast } from '@/app/toastContext'
 import { BottomSheet } from '@/components/ui/BottomSheet'
 import { Button } from '@/components/ui/Button'
@@ -12,7 +12,8 @@ import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { formatDayMonth, formatWeekdayDate, todayBerlin } from '@/lib/dates'
 import { formatEur, parseEurInput, plural } from '@/lib/format'
 import { debtSummary, envelopeSummary, envelopesLeft, goalProgress } from '@/lib/rules/money'
-import { useActualBalances, useAllTransactions, useCreateEnvelope, useDebts, useEnvelopes, useSaveGoalBalance, type Debt, type Envelope } from './api'
+import { DebtSheet } from './DebtSheet'
+import { useActualBalances, useAllTransactions, useCreateEnvelope, useDebts, useEnvelopes, useSaveGoalBalance, useUpdateEnvelope, type Debt, type Envelope } from './api'
 
 const field = 'h-12 w-full rounded-xl border border-line2 bg-card px-4 text-base text-ink outline-none focus:border-ink2'
 const DIRECTION: Record<string, string> = { i_owe: 'я должна', owed_to_me: 'мне должны', from_pot: 'заём из копилки' }
@@ -29,6 +30,9 @@ export function EnvelopesTab() {
   const debts = useDebts()
   const balances = useActualBalances()
   const [adding, setAdding] = useState(false)
+  const [editingEnv, setEditingEnv] = useState<Envelope | null>(null)
+  // the debt sheet: null — closed, 'new' — a new debt, else the one being edited
+  const [debtEdit, setDebtEdit] = useState<Debt | 'new' | null>(null)
   const [closedOpen, setClosedOpen] = useState(false)
   if (envelopes.isPending || txs.isPending || debts.isPending || balances.isPending) return <SkeletonCard />
   const all = envelopes.data ?? []
@@ -61,11 +65,11 @@ export function EnvelopesTab() {
             </div>
           )}
           {envs.map((e) => (
-            <EnvelopeCard key={e.id} e={e} s={envelopeSummary(e, tx)} />
+            <EnvelopeCard key={e.id} e={e} s={envelopeSummary(e, tx)} onEdit={() => setEditingEnv(e)} />
           ))}
           {goals.length > 0 && <h2 className="m-0 pt-2 text-title font-semibold">Цели</h2>}
           {goals.map((g) => (
-            <GoalCard key={g.id} g={g} p={goalProgress(g, balances.data ?? [], debtList, tx)} loans={open.filter((d) => d.direction === 'from_pot' && d.pot_id === g.id)} />
+            <GoalCard key={g.id} g={g} p={goalProgress(g, balances.data ?? [], debtList, tx)} loans={open.filter((d) => d.direction === 'from_pot' && d.pot_id === g.id)} onEdit={() => setEditingEnv(g)} />
           ))}
           <Button variant="secondary" onClick={() => setAdding(true)} icon={<Plus size={20} strokeWidth={1.75} aria-hidden="true" />}>
             Новый конверт или цель
@@ -73,30 +77,44 @@ export function EnvelopesTab() {
         </>
       )}
 
-      {debtList.length > 0 && (
-        <Card>
-          <CardHeader title="Долги" dotClass="bg-money" context={open.length ? `открыто ${open.length}` : 'всё закрыто'} />
-          {open.map((d) => (
-            <DebtRow key={d.id} d={d} s={debtSummary(d, tx)} pot={all.find((e) => e.id === d.pot_id)?.name} />
-          ))}
-          {closed.length > 0 && (
-            <>
-              <GroupHeader title="Закрытые" count={closed.length} open={closedOpen} onToggle={() => setClosedOpen(!closedOpen)} />
-              {closedOpen && closed.map((d) => <DebtRow key={d.id} d={d} s={debtSummary(d, tx)} pot={all.find((e) => e.id === d.pot_id)?.name} muted />)}
-            </>
-          )}
-        </Card>
-      )}
-      <EnvelopeSheet open={adding} onClose={() => setAdding(false)} />
+      <Card>
+        <CardHeader title="Долги" dotClass="bg-money" context={debtList.length === 0 ? undefined : open.length ? `открыто ${open.length}` : 'всё закрыто'} />
+        {debtList.length === 0 && <p className="m-0 text-cap text-ink2">Долгов нет. Сюда — депозит, который вернёшь, деньги, которые ждёшь, и заём из своей копилки.</p>}
+        {open.map((d) => (
+          <DebtRow key={d.id} d={d} s={debtSummary(d, tx)} pot={all.find((e) => e.id === d.pot_id)?.name} onEdit={() => setDebtEdit(d)} />
+        ))}
+        {closed.length > 0 && (
+          <>
+            <GroupHeader title="Закрытые" count={closed.length} open={closedOpen} onToggle={() => setClosedOpen(!closedOpen)} />
+            {closedOpen && closed.map((d) => <DebtRow key={d.id} d={d} s={debtSummary(d, tx)} pot={all.find((e) => e.id === d.pot_id)?.name} muted onEdit={() => setDebtEdit(d)} />)}
+          </>
+        )}
+        <Button variant="secondary" className="h-11 self-start" onClick={() => setDebtEdit('new')} icon={<Plus size={16} strokeWidth={1.75} aria-hidden="true" />}>
+          Долг
+        </Button>
+      </Card>
+      <DebtSheet open={debtEdit !== null} onClose={() => setDebtEdit(null)} debt={debtEdit === 'new' ? null : debtEdit} goals={goals} />
+      <EnvelopeSheet open={editingEnv !== null} onClose={() => setEditingEnv(null)} env={editingEnv} />
+      <EnvelopeSheet open={adding} onClose={() => setAdding(false)} env={null} />
     </>
   )
 }
 
-function EnvelopeCard({ e, s }: { e: Envelope; s: ReturnType<typeof envelopeSummary> }) {
+/** The name of an envelope / goal / debt as a button that opens its sheet. */
+function EditName({ name, onEdit, muted = false }: { name: string; onEdit: () => void; muted?: boolean }) {
+  return (
+    <button type="button" onClick={onEdit} aria-label={`${name} — изменить`} className={`-my-2 flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left text-base [overflow-wrap:anywhere] ${muted ? 'text-ink3' : 'font-semibold'}`}>
+      {name}
+      <Pencil size={14} strokeWidth={1.75} aria-hidden="true" className="flex-none text-ink3" />
+    </button>
+  )
+}
+
+function EnvelopeCard({ e, s, onEdit }: { e: Envelope; s: ReturnType<typeof envelopeSummary>; onEdit: () => void }) {
   return (
     <Card>
       <div className="flex items-baseline gap-2">
-        <span className="min-w-0 flex-1 text-base font-semibold [overflow-wrap:anywhere]">{e.name}</span>
+        <EditName name={e.name} onEdit={onEdit} />
         <span className="text-cap text-ink2 tabular-nums">
           осталось <span className="font-semibold text-ink">{eur(s.leftCents)}</span>
         </span>
@@ -108,7 +126,7 @@ function EnvelopeCard({ e, s }: { e: Envelope; s: ReturnType<typeof envelopeSumm
   )
 }
 
-function GoalCard({ g, p, loans }: { g: Envelope; p: ReturnType<typeof goalProgress>; loans: Debt[] }) {
+function GoalCard({ g, p, loans, onEdit }: { g: Envelope; p: ReturnType<typeof goalProgress>; loans: Debt[]; onEdit: () => void }) {
   const today = todayBerlin()
   const late = p.due !== null && p.due < today && (p.share ?? 0) < 1
   const save = useSaveGoalBalance()
@@ -119,7 +137,7 @@ function GoalCard({ g, p, loans }: { g: Envelope; p: ReturnType<typeof goalProgr
   return (
     <Card>
       <div className="flex items-baseline gap-2">
-        <span className="min-w-0 flex-1 text-base font-semibold [overflow-wrap:anywhere]">{g.name}</span>
+        <EditName name={g.name} onEdit={onEdit} />
         {p.targetCents !== null && (
           <span className="text-cap text-ink2 tabular-nums">
             {p.nowCents !== null ? <span className="font-semibold text-ink">{eur(p.nowCents)}</span> : '—'} из {eur(p.targetCents)}
@@ -163,13 +181,13 @@ function GoalCard({ g, p, loans }: { g: Envelope; p: ReturnType<typeof goalProgr
   )
 }
 
-function DebtRow({ d, s, pot, muted = false }: { d: Debt; s: ReturnType<typeof debtSummary>; pot?: string; muted?: boolean }) {
+function DebtRow({ d, s, pot, muted = false, onEdit }: { d: Debt; s: ReturnType<typeof debtSummary>; pot?: string; muted?: boolean; onEdit: () => void }) {
   const today = todayBerlin()
   const late = !muted && d.due_date !== null && d.due_date < today && s.leftCents > 0
   return (
     <div className="flex flex-col gap-1 border-t border-line pt-3 first-of-type:border-t-0">
-      <div className="flex items-baseline gap-2">
-        <span className={`min-w-0 flex-1 text-base [overflow-wrap:anywhere] ${muted ? 'text-ink3' : ''}`}>{d.who}</span>
+      <div className="flex items-center gap-2">
+        <EditName name={d.who} onEdit={onEdit} muted={muted} />
         <span className="text-base font-semibold tabular-nums">{muted ? eur(s.amountCents) : eur(s.leftCents)}</span>
       </div>
       <div className="flex flex-wrap items-center gap-2 text-cap text-ink2 tabular-nums">
@@ -184,79 +202,93 @@ function DebtRow({ d, s, pot, muted = false }: { d: Debt; s: ReturnType<typeof d
   )
 }
 
-function EnvelopeSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [name, setName] = useState('')
-  const [amount, setAmount] = useState('')
-  const [when, setWhen] = useState('')
-  const [goal, setGoal] = useState('')
-  const [due, setDue] = useState('')
-  const [type, setType] = useState<'envelope' | 'goal'>('envelope')
+function EnvelopeSheet({ open, onClose, env }: { open: boolean; onClose: () => void; env: Envelope | null }) {
+  return (
+    <BottomSheet open={open} onClose={onClose} label={env ? env.name : 'Новый конверт или цель'}>
+      {open && <EnvelopeForm key={env?.id ?? 'new'} env={env} onClose={onClose} />}
+    </BottomSheet>
+  )
+}
+
+const amountText = (v: number | null) => (v === null || Number(v) === 0 ? '' : String(Number(v)).replace('.', ','))
+
+function EnvelopeForm({ env, onClose }: { env: Envelope | null; onClose: () => void }) {
+  const [name, setName] = useState(env?.name ?? '')
+  const [amount, setAmount] = useState(amountText(env?.planned_eur ?? null))
+  const [when, setWhen] = useState(env?.when_text ?? '')
+  const [goal, setGoal] = useState(amountText(env?.goal_eur ?? null))
+  const [due, setDue] = useState(env?.goal_date ?? '')
+  const [type, setType] = useState<'envelope' | 'goal'>(env?.type === 'goal' ? 'goal' : 'envelope')
   const create = useCreateEnvelope()
+  const update = useUpdateEnvelope()
   const toast = useToast()
   const cents = parseEurInput(amount)
   const goalCents = parseEurInput(goal)
   const valid = name.trim() && (amount === '' || cents !== null) && (type === 'envelope' || (goalCents !== null && goalCents > 0))
   return (
-    <BottomSheet open={open} onClose={onClose} label={type === 'goal' ? 'Новая цель' : 'Новый конверт'}>
-      <form
-        className="flex flex-col gap-4"
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (!valid) return
-          create.mutate(
-            {
-              name: name.trim(),
-              type,
-              planned_eur: cents === null ? null : cents / 100,
-              when_text: when.trim() || null,
-              goal_eur: type === 'goal' && goalCents ? goalCents / 100 : null,
-              goal_date: type === 'goal' && due ? due : null,
-            },
-            {
-              onSuccess: () => {
-                toast({ text: type === 'goal' ? `Цель «${name.trim()}» заведена` : `Конверт «${name.trim()}» готов` })
-                setName('')
-                setAmount('')
-                setWhen('')
-                setGoal('')
-                setDue('')
-                onClose()
-              },
-            },
-          )
-        }}
-      >
-        <SegmentedTabs
-          label="Вид"
-          segments={[
-            { value: 'envelope', label: 'Конверт' },
-            { value: 'goal', label: 'Цель' },
-          ]}
-          value={type}
-          onChange={setType}
-        />
-        <p className="m-0 text-cap text-ink2">
-          {type === 'goal' ? 'Копишь к сумме. Сколько уже накоплено, приложение берёт из «Остатков» — внеси остаток кармашка в воскресном обзоре или в таблице.' : 'Деньги отложены на трату и не входят в лимит недели.'}
-        </p>
-        <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="На что" aria-label="Название" className={field} />
-        {type === 'goal' ? (
-          <>
-            <input value={goal} onChange={(e) => setGoal(e.target.value)} inputMode="decimal" placeholder="Цель, €" aria-label="Цель" className={field} />
-            <label className="flex flex-col gap-2">
-              <span className="text-cap text-ink2">Срок, если есть</span>
-              <input type="date" value={due} onChange={(e) => setDue(e.target.value)} aria-label="Срок" className={field} />
-            </label>
-          </>
-        ) : (
-          <>
-            <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="Сколько заложить, €" aria-label="Сумма" className={field} />
-            <input value={when} onChange={(e) => setWhen(e.target.value)} placeholder="Когда, например «до 20.12»" aria-label="Когда" className={field} />
-          </>
-        )}
-        <Button type="submit" disabled={!valid || create.isPending}>
-          Сохранить
+    <form
+      className="flex flex-col gap-4"
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (!valid) return
+        const values = {
+          name: name.trim(),
+          type,
+          planned_eur: cents === null ? null : cents / 100,
+          when_text: when.trim() || null,
+          goal_eur: type === 'goal' && goalCents ? goalCents / 100 : null,
+          goal_date: type === 'goal' && due ? due : null,
+        }
+        const done = () => {
+          toast({ text: env ? `«${name.trim()}» — сохранено` : type === 'goal' ? `Цель «${name.trim()}» заведена` : `Конверт «${name.trim()}» готов` })
+          onClose()
+        }
+        if (env) update.mutate({ id: env.id, patch: values }, { onSuccess: done })
+        else create.mutate(values, { onSuccess: done })
+      }}
+    >
+      <SegmentedTabs
+        label="Вид"
+        segments={[
+          { value: 'envelope', label: 'Конверт' },
+          { value: 'goal', label: 'Цель' },
+        ]}
+        value={type}
+        onChange={setType}
+      />
+      <p className="m-0 text-cap text-ink2">
+        {type === 'goal' ? 'Копишь к сумме. Сколько уже накоплено, считается по остатку кармашка — внеси его кнопкой «Внести остаток».' : 'Деньги отложены на трату и не входят в лимит недели.'}
+      </p>
+      <input autoFocus={!env} value={name} onChange={(e) => setName(e.target.value)} placeholder="На что" aria-label="Название" className={field} />
+      {type === 'goal' ? (
+        <>
+          <input value={goal} onChange={(e) => setGoal(e.target.value)} inputMode="decimal" placeholder="Цель, €" aria-label="Цель" className={field} />
+          <label className="flex flex-col gap-2">
+            <span className="text-cap text-ink2">Срок, если есть</span>
+            <input type="date" value={due} onChange={(e) => setDue(e.target.value)} aria-label="Срок" className={field} />
+          </label>
+        </>
+      ) : (
+        <>
+          <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="Сколько заложить, €" aria-label="Сумма" className={field} />
+          <input value={when} onChange={(e) => setWhen(e.target.value)} placeholder="Когда, например «до 20.12»" aria-label="Когда" className={field} />
+        </>
+      )}
+      <Button type="submit" disabled={!valid || create.isPending || update.isPending}>
+        Сохранить
+      </Button>
+      {env && (
+        <Button
+          variant="quiet"
+          onClick={() => {
+            update.mutate({ id: env.id, patch: { archived: true } })
+            toast({ text: `«${env.name}» — в архиве`, actionLabel: 'Вернуть', onAction: () => update.mutate({ id: env.id, patch: { archived: false } }) })
+            onClose()
+          }}
+        >
+          Убрать в архив
         </Button>
-      </form>
-    </BottomSheet>
+      )}
+    </form>
   )
 }

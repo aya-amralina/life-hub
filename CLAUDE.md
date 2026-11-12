@@ -27,12 +27,12 @@ npm run lint           # eslint
 npm test               # vitest run (unit, без сети)
 npm run test:e2e       # playwright; входит только под тестовым пользователем (LIFEHUB_TEST_EMAIL, LIFEHUB_TEST_PASSWORD)
 npm run test:integration # живые тесты против Supabase под тестовым пользователем (ключи, права, RLS, изоляция), нужен .env.local
-npm run test:import    # проверки импорта против базы (раздел 6 SPEC), нужен SUPABASE_SECRET_KEY
+npm run test:import    # проверки перенесённых данных против базы (раздел 6 SPEC), нужен SUPABASE_SECRET_KEY
 npm run check:keys     # Python: формат ключей, доступ secret/publishable, регистрация выключена
 npm run db:push        # supabase db push --remote — применить миграции к проекту (CLI 3.x по умолчанию целится в локальную базу)
 npm run db:types       # сгенерировать src/lib/db/types.ts из схемы
 python3 scripts/import/import.py --dry-run   # сводка импорта без записи
-python3 scripts/import/import.py             # импорт (идемпотентный, по source_id)
+python3 scripts/import/import.py --excel-is-source  # запись из Excel — только по явному решению: данные ведутся в приложении
 python3 -m unittest discover scripts/import  # тесты парсеров импорта
 ```
 Готовность этапа: `npm run lint && npm test && npm run build` зелёные → коммит.
@@ -94,6 +94,7 @@ public/                      # иконки PWA, шрифт Onest (woff2, self-h
 - Форма входа: `autocomplete="username"` у e-mail и `autocomplete="current-password"` у пароля, `name`/`id` у полей — чтобы менеджер паролей iPhone подставлял данные. Пароль не логируем и не храним (кроме тестового пользователя: `LIFEHUB_TEST_PASSWORD` в `.env.local`).
 
 ## Правки data/*.xlsx (разрешены Ае, 12.11.2026)
+С 12.11.2026 Excel — архив: данные ведутся в приложении, править таблицы незачем. Правила ниже — на случай разовой правки архива.
 1. Если рядом лежит `~$…`-файл (книга открыта в Excel) — остановиться и сказать Ае.
 2. Сначала копия в `data/_old/<имя>-ГГГГ-ММ-ДД-ЧЧММ.xlsx`.
 3. Менять только ячейки ввода; формулы, оформление, проверку значений и условное форматирование не трогать. Правка — точечно в XML ячейки внутри xlsx (openpyxl при сохранении теряет кэш формул и часть оформления).
@@ -163,3 +164,4 @@ GitHub (приватный `life-hub`, `main` = прод) → Vercel Hobby (пр
 - 2026-11-12: «Горит» — сделанные сегодня в свёрнутой группе «Сделано · N» (`GroupHeader`, по умолчанию закрыта, `inert` в закрытом виде). Кофе — `daily_logs.coffee_cups` (миграция 0013): null — не отмечено, 0 — без кофе; в «Вечере» «Нет / Да» + счётчик; график «Кофе» в Тело → Графики (`coffeeSeries`, `coffeeWeek`, 0 — `minPointSize`), среднее в обзоре.
 - 2026-11-12: UX-проход (SPEC, «Уточнения UX»): «Сегодня» по времени суток (`rules/day.ts`: `isEvening`, «Вечер» свёрнут до 18:00, с 18:00 наверху с итогом дня), сон — счётчик в карточке привычек (`Stepper`, `stepSleep`, `lastBefore`), вопросы стопкой (`QuestionStack`, проп `only` у трёх компонентов вопросов), «Траты недели» — `weekSpendings`, удаление свайпом, «Внести остаток» у цели, «Сделано» в предметах Учёбы, `StatusBadge plain`, минус U+2212 в `formatEur`.
 - 2026-11-12: `app/queryCache.ts` — `VERSION` формы кэша; поднимать при миграции, добавляющей колонку, на которую опираются экраны.
+- 2026-11-12: уход от Excel — источник всех сфер, включая бюджет, — приложение. Добавлено: операция целиком (`OperationSheet`, `rules/operation.ts`), долги (`DebtSheet`), правка и архив конверта / цели. `import.py` без `--dry-run` пишет только с `--excel-is-source`; проверка «баланс = Excel» в `test:import` снята. Горизонт бюджета — по-прежнему `BUDGET_END` 31.12.2026: новый период заводится в приложении отдельной задачей.

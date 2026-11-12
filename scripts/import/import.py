@@ -398,7 +398,14 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true", help="только сводка, без записи")
     ap.add_argument("--today", help="дата запуска YYYY-MM-DD (по умолчанию сегодня, Берлин)")
     ap.add_argument("--excel-wins", default="", help="ключи конфликтов, где взять Excel (N8,D15) или all")
+    ap.add_argument("--excel-is-source", action="store_true", help="записать, хотя данные с 12.11.2026 ведутся в приложении")
     args = ap.parse_args()
+    # Since 12.11.2026 the app is the source of every sphere, the budget included: Excel files are an archive.
+    # A write from them is an explicit decision, not a habit — the check (--dry-run) stays free.
+    if not args.dry_run and not args.excel_is_source:
+        print("✗ Данные ведутся в приложении (решение 12.11.2026): Excel — архив, запись из него выключена.")
+        print("  Посмотреть расхождения: npm run import:check. Записать всё равно: добавить --excel-is-source.")
+        return 1
     today = dt.date.fromisoformat(args.today) if args.today else dt.datetime.now(dt.timezone(dt.timedelta(hours=1))).date()
     excel_wins = {k.strip() for k in args.excel_wins.split(",") if k.strip()}
 

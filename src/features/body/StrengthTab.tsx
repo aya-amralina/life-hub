@@ -27,7 +27,7 @@ export function StrengthTab() {
       {days.length === 0 ? (
         <section className="flex flex-col gap-1 rounded-2xl border border-dashed border-line2 p-4">
           <div className="text-base font-semibold">Журнал пока пустой</div>
-          <p className="m-0 text-cap text-ink2">Записи из листа «Сила» придут при импорте. Новую тренировку можно записать сразу.</p>
+          <p className="m-0 text-cap text-ink2">Записей пока нет. Первую тренировку можно записать сразу.</p>
         </section>
       ) : (
         days.slice(0, 20).map((d) => {

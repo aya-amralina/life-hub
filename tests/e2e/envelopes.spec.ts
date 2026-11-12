@@ -35,3 +35,45 @@ test('Конверты: «Отложено» только по конверта�
   await page.getByRole('button', { name: /Закрытые/ }).click()
   await expect(page.getByText('Сестра')).toBeVisible()
 })
+
+test('без Excel: плановая операция, её правка и долг заводятся в приложении', async ({ page }) => {
+  test.skip(!live, NEEDS)
+  const sb = await testClient()
+  expect((await sb.from('transactions').insert({ date: '2026-10-13', amount_eur: 1000, kind: 'opening', title: 'Старт', confirmed_at: new Date().toISOString() })).error).toBeNull()
+  await sb.auth.signOut()
+
+  await login(page)
+  await page.goto('/money')
+  await page.getByRole('tab', { name: 'Месяц' }).click()
+
+  // a planned expense for today: it joins the plan and asks «Списалось?»
+  await page.getByRole('button', { name: 'Операция', exact: true }).click()
+  const sheet = page.getByRole('dialog', { name: 'Новая операция' })
+  await sheet.getByLabel('Название').fill('Miete e2e')
+  await sheet.getByLabel('Сумма').fill('650')
+  await sheet.getByRole('button', { name: 'Sparkasse' }).click()
+  await sheet.getByRole('button', { name: 'Сохранить' }).click()
+  await expect(page.getByText(/Ждут подтверждения: Miete e2e/)).toBeVisible()
+  await expect(page.getByText(/план на 31\.12 — 350\s€/)).toBeVisible()
+
+  // edit: another sum and status «факт» — it moves into «сейчас»
+  await page.getByRole('button', { name: /Miete e2e/ }).click()
+  const edit = page.getByRole('dialog', { name: 'Операция' })
+  await edit.getByLabel('Сумма').fill('600')
+  await edit.getByRole('tab', { name: 'Факт' }).click()
+  await edit.getByRole('button', { name: 'Сохранить' }).click()
+  await expect(page.getByText(/Ждут подтверждения/)).toBeHidden()
+  await expect(page.getByText(/план на 31\.12 — 400\s€/)).toBeVisible()
+
+  // a debt
+  await page.getByRole('tab', { name: 'Конверты' }).click()
+  await page.getByRole('button', { name: 'Долг', exact: true }).click()
+  const debt = page.getByRole('dialog', { name: 'Новый долг' })
+  await debt.getByLabel('Кто').fill('Жилец e2e')
+  await debt.getByLabel('Сумма долга').fill('100')
+  await debt.getByRole('button', { name: 'Сохранить' }).click()
+  await expect(page.getByText('открыто 1')).toBeVisible()
+  await page.getByRole('button', { name: 'Жилец e2e — изменить' }).click()
+  await page.getByRole('dialog', { name: 'Долг' }).getByRole('button', { name: 'Закрыть долг' }).click()
+  await expect(page.getByText('всё закрыто')).toBeVisible()
+})

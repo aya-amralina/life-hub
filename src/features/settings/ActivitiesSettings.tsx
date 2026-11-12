@@ -33,7 +33,7 @@ export function ActivitiesSettings() {
     <Card>
       <CardHeader title="Активности" context={list.length ? `${list.length}` : undefined} />
       <p className="m-0 text-cap text-ink2">Очки за 10 минут: лёгкая — 1, средняя — 2, интенсивная — 3. Можно поправить у каждого типа.</p>
-      {list.length === 0 && <p className="m-0 text-cap text-ink2">Типов пока нет. Стартовый список придёт из глоу-ап трекера при импорте.</p>}
+      {list.length === 0 && <p className="m-0 text-cap text-ink2">Типов пока нет. Добавь первый.</p>}
       <ul className="m-0 flex list-none flex-col p-0">
         {list.map((t, i) => (
           <li key={t.id} className="flex min-h-14 items-center gap-2 border-t border-line first:border-t-0">

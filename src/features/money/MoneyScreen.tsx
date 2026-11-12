@@ -90,7 +90,7 @@ function WeekTab() {
       ) : !summary.hasLimits ? (
         <EmptyState title="Лимиты недели не заданы">
           <span className="flex flex-col items-start gap-3">
-            После импорта они придут из Excel. Можно задать и сейчас.
+            Задай их — и неделя начнёт считаться.
             <Button variant="secondary" onClick={() => setEditLimits(true)}>
               Задать лимиты
             </Button>

@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { ChevronRight, Plus } from 'lucide-react'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
+import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { EmptyState, SkeletonCard } from '@/components/ui/Feedback'
 import { FilterChips } from '@/components/ui/FilterChips'
@@ -16,6 +18,7 @@ import { ACCOUNTS } from '@/lib/constants'
 import { Chip } from '@/components/ui/Chip'
 import { joinRu } from '@/lib/format'
 import { useActualBalances, useAllTransactions, useUpdateTransaction, type Transaction } from './api'
+import { OperationSheet } from './OperationSheet'
 
 type Filter = 'plan' | 'fact'
 
@@ -39,11 +42,25 @@ export function MonthTab() {
   const [filter, setFilter] = useState<Filter[]>([])
   const [showRemoved, setShowRemoved] = useState(false)
   const actual = useActualBalances()
+  // the operation sheet: null — closed, 'new' — a new operation, else the one being edited
+  const [editing, setEditing] = useState<Transaction | 'new' | null>(null)
 
   if (txs.isPending) return <SkeletonCard />
   const all = txs.data ?? []
   if (!all.length) {
-    return <EmptyState title="Операций пока нет">Они придут из «Статей» бюджета при импорте. Траты через «+» появятся здесь сразу.</EmptyState>
+    return (
+      <>
+        <EmptyState title="Операций пока нет">
+          <span className="flex flex-col items-start gap-3">
+            Заведи первую — ожидаемый доход, аренду, поездку. Траты через «+» появятся здесь сами.
+            <Button variant="secondary" onClick={() => setEditing('new')}>
+              Новая операция
+            </Button>
+          </span>
+        </EmptyState>
+        <OperationSheet open={editing !== null} onClose={() => setEditing(null)} tx={null} />
+      </>
+    )
   }
 
   // «сейчас» = start + operations with status «факт»; planned ones with a past date only wait for an answer
@@ -101,7 +118,7 @@ export function MonthTab() {
         />
         <p className="m-0 text-cap text-ink2 tabular-nums">
           {check === null
-            ? 'Реальных остатков пока нет — внеси их в воскресном обзоре или в листе «Остатки», сравню с расчётом.'
+            ? 'Реальных остатков пока нет — внеси их в воскресном обзоре, сравню с расчётом.'
             : `Остатки на ${formatDayMonth(check.date)}: ${formatEur(check.actualCents, { whole: true })}, по расчёту ${formatEur(check.calculatedCents, { whole: true })} — ${
                 check.matches ? 'сходится' : `расхождение ${check.diffCents > 0 ? '+' : '−'}${formatEur(Math.abs(check.diffCents))}`
               }.${check.missing.length ? ` Не внесены: ${check.missing.join(', ')}.` : ''}`}
@@ -146,6 +163,9 @@ export function MonthTab() {
           Показать убранные · {removed.length}
         </Chip>
       )}
+      <Button variant="secondary" icon={<Plus size={20} strokeWidth={1.75} className="text-money" aria-hidden="true" />} onClick={() => setEditing('new')}>
+        Операция
+      </Button>
       <Card>
         <CardHeader title="Операции" context={`${ops.length}`} />
         {ops.length === 0 ? (
@@ -153,7 +173,7 @@ export function MonthTab() {
         ) : (
           <ul className="m-0 flex list-none flex-col p-0">
             {ops.map((t) => (
-              <OperationRow key={t.id} t={t} today={today} onConfirm={() => update.mutate({ id: t.id, patch: { confirmed_at: new Date().toISOString() } })} />
+              <OperationRow key={t.id} t={t} today={today} onOpen={() => setEditing(t)} onConfirm={() => update.mutate({ id: t.id, patch: { confirmed_at: new Date().toISOString() } })} />
             ))}
           </ul>
         )}
@@ -187,6 +207,7 @@ export function MonthTab() {
           </table>
         </Card>
       )}
+      <OperationSheet open={editing !== null} onClose={() => setEditing(null)} tx={editing === 'new' ? null : editing} />
     </>
   )
 }
@@ -205,21 +226,25 @@ function niceTicks(values: number[]): number[] | undefined {
   return ticks
 }
 
-function OperationRow({ t, today, onConfirm }: { t: Transaction; today: ISODate; onConfirm: () => void }) {
+function OperationRow({ t, today, onConfirm, onOpen }: { t: Transaction; today: ISODate; onConfirm: () => void; onOpen: () => void }) {
   const planned = !isFact(t) && !t.cancelled_at
   const muted = Boolean(t.cancelled_at)
   return (
-    <li className="flex min-h-12 items-center gap-3 border-t border-line py-1 first:border-t-0">
-      <span className="w-10 flex-none text-cap text-ink2 tabular-nums">{formatDayMonth(t.date)}</span>
-      <span className="min-w-0 flex-1">
-        <span lang="de" className={cn('block text-base [overflow-wrap:anywhere]', muted && 'text-ink3 line-through')}>
-          {t.title}
+    <li className="flex min-h-12 items-center gap-2 border-t border-line py-1 first:border-t-0">
+      {/* the row opens the operation: everything about it can be changed there */}
+      <button type="button" onClick={onOpen} className="flex min-h-11 min-w-0 flex-1 items-center gap-3 text-left active:bg-sub">
+        <span className="w-10 flex-none text-cap text-ink2 tabular-nums">{formatDayMonth(t.date)}</span>
+        <span className="min-w-0 flex-1">
+          <span lang="de" className={cn('block text-base [overflow-wrap:anywhere]', muted && 'text-ink3 line-through')}>
+            {t.title}
+          </span>
+          <span className="block text-cap text-ink2">
+            {[muted ? 'убрано из плана' : t.entry_kind === 'week_budget' ? 'бюджет недели' : t.entry_kind === 'week_total' ? 'итог недели' : planned ? 'план' : 'факт', t.category, t.account].filter(Boolean).join(' · ')}
+          </span>
         </span>
-        <span className="block text-cap text-ink2">
-          {[muted ? 'убрано из плана' : t.entry_kind === 'week_budget' ? 'бюджет недели' : t.entry_kind === 'week_total' ? 'итог недели' : planned ? 'план' : 'факт', t.category, t.account].filter(Boolean).join(' · ')}
-        </span>
-      </span>
-      {!muted && <span className="text-base tabular-nums">{signed(t)}</span>}
+        {!muted && <span className="text-base tabular-nums">{signed(t)}</span>}
+        {!(planned && !isWeekRow(t) && t.date <= today) && <ChevronRight size={16} strokeWidth={1.75} aria-hidden="true" className="flex-none text-ink3" />}
+      </button>
       {planned && !isWeekRow(t) && t.date <= today && (
         <button type="button" onClick={onConfirm} className="h-11 flex-none rounded-xl border border-line2 px-3 text-cap font-semibold active:bg-sub">
           Подтвердить

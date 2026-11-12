@@ -321,7 +321,7 @@ function StageCard() {
   const list = stages.data ?? []
   const next = list.find((s) => s.sphere === 'body' && s.start_date > today)
   if (!list.length) {
-    return <EmptyState title="Этапов пока нет">Они придут из глоу-ап трекера на этапе импорта. А пока считаются все три привычки, минимум — вода и 10 минут на улице.</EmptyState>
+    return <EmptyState title="Этапов пока нет">Их заводят в настройках. А пока считаются все три привычки, минимум — вода и 10 минут на улице.</EmptyState>
   }
   return (
     <>

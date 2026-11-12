@@ -226,3 +226,54 @@ export function useSaveActualBalances() {
     onSettled: () => qc.invalidateQueries({ queryKey: moneyKeys.all }),
   })
 }
+
+/** A new operation made in the app (planned or fact). The id is made here, so it works through the offline queue. */
+export function useCreateTransaction() {
+  const qc = useQueryClient()
+  const allKey = [...moneyKeys.all, 'tx', 'all'] as const
+  return useMutation({
+    mutationFn: async (tx: TablesInsert<'transactions'> & { id: string }) => {
+      await write({ table: 'transactions', action: 'insert', values: tx })
+    },
+    onMutate: async (tx) => {
+      await qc.cancelQueries({ queryKey: moneyKeys.all })
+      const row = { envelope_id: null, note: null, source_id: null, cancelled_at: null, confirmed_at: null, category: null, account: null, grp: null, is_planned: false, entry_kind: 'one_off', week_no: null, debt_id: null, user_id: '', created_at: '', updated_at: '', ...tx } as Transaction
+      qc.setQueryData<Transaction[]>(allKey, (old) => (old ? [...old, row].sort((a, b) => a.date.localeCompare(b.date)) : [row]))
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: moneyKeys.all }),
+  })
+}
+
+export function useUpdateEnvelope() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, patch }: { id: string; patch: TablesUpdate<'envelopes'> }) => {
+      const { error } = await supabase.from('envelopes').update(patch).eq('id', id)
+      if (error) throw error
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: moneyKeys.all }),
+  })
+}
+
+/** Debts are kept in the app: create, change (incl. close / reopen), delete. */
+export function useSaveDebt() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, values }: { id: string | null; values: TablesUpdate<'debts'> & Partial<TablesInsert<'debts'>> }) => {
+      const { error } = id ? await supabase.from('debts').update(values).eq('id', id) : await supabase.from('debts').insert(values as TablesInsert<'debts'>)
+      if (error) throw error
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: moneyKeys.all }),
+  })
+}
+
+export function useDeleteDebt() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('debts').delete().eq('id', id)
+      if (error) throw error
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: moneyKeys.all }),
+  })
+}

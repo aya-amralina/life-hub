@@ -21,7 +21,7 @@ export function StagesSettings() {
     <Card>
       <CardHeader title="Этапы глоу-апа" context={list.length ? `${list.length}` : undefined} />
       {list.length === 0 ? (
-        <p className="m-0 text-cap text-ink2">Этапы придут из глоу-ап трекера при импорте. До тех пор минимум — {minimumPhrase(minimumSet(null))}.</p>
+        <p className="m-0 text-cap text-ink2">Этапов пока нет. До тех пор минимум — {minimumPhrase(minimumSet(null))}.</p>
       ) : (
         list.map((s) => <StageRow key={s.id} stage={s} />)
       )}
