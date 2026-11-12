@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { CalendarClock, Check, Hourglass, Pause, Plus } from 'lucide-react'
 import { useToast } from '@/app/toastContext'
@@ -14,6 +14,9 @@ import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { CalendarLink } from '@/components/layout/CalendarLink'
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
+import { useView } from '@/components/layout/useView'
+import { ViewToggle } from '@/components/layout/ViewToggle'
+import { useWideLayout } from '@/app/layoutContext'
 import { ERFOLG_TYPE, WORK_STALLED, WORK_STATUSES } from '@/lib/constants'
 import { enoughForMonths, erfolgeByMonth, statusCounts } from '@/lib/rules/charts'
 import { ChartCard } from '@/components/charts/ChartCard'
@@ -40,11 +43,37 @@ type Tab = (typeof TABS)[number]['value']
 
 const field = 'h-12 w-full rounded-xl border border-line2 bg-card px-4 text-base text-ink outline-none focus:border-ink2'
 
+// the table and its logic load only when it is opened (laptop)
+const WorkTable = lazy(() => import('./WorkTable').then((m) => ({ default: m.WorkTable })))
+
 export function WorkScreen() {
   const [tab, setTab] = useState<Tab>('board')
+  const [view, setView, desktop] = useView('work')
+  useWideLayout(view === 'table')
+  const header = (
+    <ScreenHeader
+      title="Работа"
+      right={
+        <div className="flex items-center gap-2">
+          {desktop && <ViewToggle view={view} onChange={setView} />}
+          <CalendarLink sphere="work" />
+        </div>
+      }
+    />
+  )
+  if (view === 'table') {
+    return (
+      <>
+        {header}
+        <Suspense fallback={<SkeletonCard />}>
+          <WorkTable />
+        </Suspense>
+      </>
+    )
+  }
   return (
     <>
-      <ScreenHeader title="Работа" right={<CalendarLink sphere="work" />} />
+      {header}
       <SegmentedTabs label="Раздел" segments={TABS} value={tab} onChange={setTab} />
       {tab === 'board' && <BoardTab />}
       {tab === 'people' && <PeopleTab />}

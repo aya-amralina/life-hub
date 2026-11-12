@@ -4,6 +4,8 @@ import { flush, usePendingChanges } from '@/app/offlineQueue'
 import { useToast } from '@/app/toastContext'
 import { Navigate, Outlet, useLocation } from 'react-router'
 import { AddSheetContext, type AddMode, type OpenAdd } from '@/app/addSheetContext'
+import { WideContext } from '@/app/layoutContext'
+import { cn } from '@/components/ui/cn'
 import { useAuth } from '@/app/authContext'
 import { useOnline } from '@/app/online'
 import { Fab } from '@/components/ui/Fab'
@@ -58,6 +60,8 @@ function Shell({
   online: boolean
 }) {
   useRollover()
+  // the table view takes the full width (laptop); every other screen keeps the 560px column
+  const [wide, setWide] = useState(false)
   const pending = usePendingChanges()
   const qc = useQueryClient()
   const toast = useToast()
@@ -82,8 +86,10 @@ function Shell({
 
   return (
     <AddSheetContext.Provider value={openAdd}>
+      <WideContext.Provider value={setWide}>
       <main
-        className="pt-safe mx-auto flex max-w-[560px] flex-col gap-4 px-4 print:!pb-0"
+        // from 1024 px the tab bar is a rail on the left (96px): the column is centred in what is left
+        className={cn('pt-safe mx-auto flex flex-col gap-4 px-4 print:!pb-0', !focus && 'lg:pl-[112px]', wide ? 'max-w-none lg:pr-6' : 'max-w-[560px] lg:max-w-[672px]')}
         // above the tab bar (its measured height) and the «+» (56 + gaps); nothing extra in print
         style={{ paddingBottom: focus ? 'max(8px, env(safe-area-inset-bottom))' : 'calc(var(--nav-h) + 96px)' }}
       >
@@ -110,6 +116,7 @@ function Shell({
         sphere={adding?.sphere ?? 'personal'}
         date={adding?.date}
       />
+      </WideContext.Provider>
     </AddSheetContext.Provider>
   )
 }

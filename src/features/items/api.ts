@@ -143,18 +143,25 @@ export function useDeleteItem() {
   })
 }
 
-/** Several patches at once (rollover, moving a group of items). */
+/** Several patches at once (rollover, moving a group, bulk actions of the table) — through the offline queue, in order. */
 export async function patchItems(patches: readonly { id: string; patch: TablesUpdate<'items'> }[]) {
-  for (const { id, patch } of patches) {
-    const { error } = await supabase.from('items').update(patch).eq('id', id)
-    if (error) throw error
-  }
+  for (const { id, patch } of patches) await write({ table: 'items', action: 'update', id, values: patch })
 }
 
+/** Optimistic: the whole batch shows at once and rolls back together on a server error. */
 export function usePatchItems() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: patchItems,
+    onMutate: async (patches) => {
+      await qc.cancelQueries({ queryKey: itemKeys.all })
+      const prev = qc.getQueryData<Item[]>(itemKeys.all)
+      const byId = new Map(patches.map((p) => [p.id, p.patch]))
+      const now = new Date().toISOString()
+      qc.setQueryData<Item[]>(itemKeys.all, (old) => old?.map((i) => (byId.has(i.id) ? ({ ...i, ...byId.get(i.id), updated_at: now } as Item) : i)))
+      return { prev }
+    },
+    onError: (_e, _v, ctx) => ctx?.prev && qc.setQueryData(itemKeys.all, ctx.prev),
     onSettled: () => qc.invalidateQueries({ queryKey: itemKeys.all }),
   })
 }

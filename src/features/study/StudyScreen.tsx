@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ArrowRightLeft, CalendarClock, ChevronDown, CircleCheck, CircleHelp, CircleDashed, Redo2, TriangleAlert } from 'lucide-react'
 import { useToast } from '@/app/toastContext'
@@ -15,6 +15,9 @@ import { Swipeable } from '@/components/ui/Swipeable'
 import { WeekSwitcher } from '@/components/ui/WeekSwitcher'
 import { CalendarLink } from '@/components/layout/CalendarLink'
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
+import { useView } from '@/components/layout/useView'
+import { ViewToggle } from '@/components/layout/ViewToggle'
+import { useWideLayout } from '@/app/layoutContext'
 import { addDaysISO, formatWeekdayDate, todayBerlin, weekStart, type ISODate } from '@/lib/dates'
 import { formatHours, plural } from '@/lib/format'
 import { countdown, deadlineChip, historyChips, isItemDone, isItemOpen, isUpcoming } from '@/lib/rules/items'
@@ -38,11 +41,37 @@ const TABS = [
 ] as const
 type Tab = (typeof TABS)[number]['value']
 
+// the table and its logic load only when it is opened (laptop)
+const StudyTable = lazy(() => import('./StudyTable').then((m) => ({ default: m.StudyTable })))
+
 export function StudyScreen() {
   const [tab, setTab] = useState<Tab>('week')
+  const [view, setView, desktop] = useView('study')
+  useWideLayout(view === 'table')
+  const header = (
+    <ScreenHeader
+      title="Учёба"
+      right={
+        <div className="flex items-center gap-2">
+          {desktop && <ViewToggle view={view} onChange={setView} />}
+          <CalendarLink sphere="study" />
+        </div>
+      }
+    />
+  )
+  if (view === 'table') {
+    return (
+      <>
+        {header}
+        <Suspense fallback={<SkeletonCard />}>
+          <StudyTable />
+        </Suspense>
+      </>
+    )
+  }
   return (
     <>
-      <ScreenHeader title="Учёба" right={<CalendarLink sphere="study" />} />
+      {header}
       <SegmentedTabs label="Раздел" segments={TABS} value={tab} onChange={setTab} />
       <ItemQuestions sphere="study" />
       {tab === 'week' && <WeekTab />}
