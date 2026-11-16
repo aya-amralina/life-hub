@@ -102,6 +102,10 @@ def key_headers(key: str) -> dict[str, str]:
 Opener = Callable[[urllib.request.Request], Any]
 
 
+# Rows asked per request; the cloud project returns at most max_rows (1000) — maybe fewer.
+PAGE_SIZE = 1000
+
+
 class SupabaseRest:
     def __init__(self, url: str, key: str, opener: Opener | None = None):
         self.url = url.rstrip("/")
@@ -162,16 +166,28 @@ class SupabaseRest:
         return int(total) if total.isdigit() else 0
 
     def select(self, table: str, columns: str, filters: dict[str, str] | None = None) -> list[dict[str, Any]]:
-        """All rows (paged by 1000) — for the importer's own bookkeeping, never printed."""
+        """All rows, page by page — for the importer's own bookkeeping, never printed.
+
+        The next page starts after the rows actually received (the server's max_rows may cap a page below
+        PAGE_SIZE) and the loop stops on an empty page. The order always ends in `id`, so the pages are stable
+        (imported rows share created_at). A caller's own `limit` is a single request.
+        """
+        f = dict(filters or {})
+        if "limit" in f:
+            _, data, _ = self.request("GET", f"/rest/v1/{table}", query={"select": columns, **f})
+            return data or []
+        parts = [p for p in f.pop("order", "").split(",") if p]
+        if "id" not in {p.split(".")[0] for p in parts}:
+            parts.append("id.asc")
         out: list[dict[str, Any]] = []
         offset = 0
         while True:
-            query = {"select": columns, "limit": "1000", "offset": str(offset), **(filters or {})}
+            query = {"select": columns, **f, "order": ",".join(parts), "limit": str(PAGE_SIZE), "offset": str(offset)}
             _, data, _ = self.request("GET", f"/rest/v1/{table}", query=query)
-            out.extend(data or [])
-            if not data or len(data) < 1000:
+            if not data:
                 return out
-            offset += 1000
+            out.extend(data)
+            offset += len(data)
 
     def insert(
         self,

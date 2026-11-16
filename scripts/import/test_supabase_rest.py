@@ -2,6 +2,7 @@ import io
 import json
 import unittest
 import urllib.error
+import urllib.parse
 
 from supabase_rest import ConfigError, SupabaseError, SupabaseRest, config_from_env, key_headers, parse_env
 
@@ -102,6 +103,26 @@ class RestTest(unittest.TestCase):
     def test_count_from_content_range(self):
         rec = Recorder([FakeResponse(b"", headers={"Content-Range": "0-0/254"})])
         self.assertEqual(SupabaseRest(URL, SECRET, rec).count("items"), 254)
+
+    def test_select_pages_by_rows_received_with_stable_order(self):
+        # PAGE_SIZE is 1000, the server caps pages at 500 (max_rows below it): nothing may be cut short
+        page = lambda n, start: FakeResponse(json.dumps([{"id": f"r{start + i}"} for i in range(n)]).encode())
+        rec = Recorder([page(500, 0), page(500, 500), page(200, 1000), FakeResponse(b"[]")])
+        rows = SupabaseRest(URL, SECRET, rec).select("transactions", "id", {"user_id": "eq.u1", "order": "created_at.asc"})
+        self.assertEqual(len(rows), 1200)
+        self.assertEqual(rows[-1]["id"], "r1199")
+        queries = [urllib.parse.parse_qs(urllib.parse.urlsplit(r.full_url).query) for r in rec.requests]
+        self.assertEqual([q["offset"][0] for q in queries], ["0", "500", "1000", "1200"])
+        self.assertEqual({q["limit"][0] for q in queries}, {"1000"})
+        self.assertEqual({q["order"][0] for q in queries}, {"created_at.asc,id.asc"})
+
+    def test_select_default_order_and_own_limit(self):
+        rec = Recorder([FakeResponse(b"[]")])
+        SupabaseRest(URL, SECRET, rec).select("weeks", "id")
+        self.assertIn("order=id.asc", rec.requests[0].full_url)
+        rec = Recorder([FakeResponse(b'[{"created_at": "x"}]')])
+        rows = SupabaseRest(URL, SECRET, rec).select("transactions", "created_at", {"order": "created_at.asc", "limit": "1"})
+        self.assertEqual((len(rows), len(rec.requests)), (1, 1))
 
     def test_find_user_id(self):
         body = json.dumps({"users": [{"id": "u1", "email": "Me@Example.com"}]}).encode()

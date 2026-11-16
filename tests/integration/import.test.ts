@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { describe, expect, it } from 'vitest'
 import { todayBerlin } from '../../src/lib/dates'
+import { fetchAllPages } from '../../src/lib/paging'
 import { balanceAt, type TxLike } from '../../src/lib/rules/money'
 import { supabaseConfigured } from '../testUser'
 
@@ -30,12 +31,16 @@ describe.skipIf(!ready)('import checks (SPEC §6)', () => {
   // the source now (operations are created and edited in it), so the two legitimately differ: only the shape is checked.
   it('operations are there: one start row, a finite plan to 31.12', async () => {
     const { admin, uid } = await setup()
-    const { data, error } = await admin
-      .from('transactions')
-      .select('date, amount_eur, kind, category, envelope_id, is_planned, confirmed_at, cancelled_at, entry_kind, grp')
-      .eq('user_id', uid)
-    expect(error).toBeNull()
-    const txs = data as TxLike[]
+    // paged: more than max_rows (1000) operations must not be cut short
+    const txs: TxLike[] = await fetchAllPages((from, to) =>
+      admin
+        .from('transactions')
+        .select('id, date, amount_eur, kind, category, envelope_id, is_planned, confirmed_at, cancelled_at, entry_kind, grp')
+        .eq('user_id', uid)
+        .order('date')
+        .order('id')
+        .range(from, to),
+    )
     expect(txs.length).toBeGreaterThan(0)
     expect(txs.filter((t) => t.kind === 'opening' && !t.cancelled_at)).toHaveLength(1)
     expect(Number.isFinite(balanceAt(txs, '2026-12-31', 'plan', todayBerlin()))).toBe(true)

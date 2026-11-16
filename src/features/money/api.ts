@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { write } from '@/app/offlineQueue'
 import { supabase } from '@/lib/supabase'
+import { fetchAllPages } from '@/lib/paging'
 import type { Tables, TablesInsert, TablesUpdate } from '@/lib/db/types'
 import { addDaysISO, weekStart, type ISODate } from '@/lib/dates'
 import type { WeekCategory } from '@/lib/constants'
@@ -109,14 +110,13 @@ export function useSaveLimits() {
 
 export type Envelope = Tables<'envelopes'>
 
-/** All operations (a few hundred): balance, forecast, months, questions. */
+/** All operations: balance, forecast, months, questions. */
 export function useAllTransactions() {
   return useQuery({
     queryKey: [...moneyKeys.all, 'tx', 'all'] as const,
     queryFn: async (): Promise<Transaction[]> => {
-      const { data, error } = await supabase.from('transactions').select('*').order('date').order('created_at').limit(5000)
-      if (error) throw error
-      return data
+      // paged: the cloud returns at most max_rows (1000) rows per request; (date, id) keeps the pages stable
+      return fetchAllPages((from, to) => supabase.from('transactions').select('*').order('date').order('id').range(from, to))
     },
   })
 }

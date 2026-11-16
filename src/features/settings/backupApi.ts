@@ -1,18 +1,17 @@
 import { supabase } from '@/lib/supabase'
+import { fetchAllPages } from '@/lib/paging'
 import { BACKUP_FORMAT, BACKUP_TABLES, BACKUP_VERSION, restoreRow, type Backup, type BackupTable, type Row } from '@/lib/backup'
 
 async function allRows(table: BackupTable): Promise<Row[]> {
-  const out: Row[] = []
-  for (let from = 0; ; from += 1000) {
-    const { data, error } = await supabase
+  // (created_at, id): imported rows share created_at, so id keeps the pages stable
+  return fetchAllPages((from, to) =>
+    supabase
       .from(table as 'items')
       .select('*')
       .order('created_at')
-      .range(from, from + 999)
-    if (error) throw error
-    out.push(...(data as unknown as Row[]))
-    if (data.length < 1000) return out
-  }
+      .order('id')
+      .range(from, to),
+  ) as unknown as Promise<Row[]>
 }
 
 /** Everything of the signed-in user (RLS: own rows only), in the backup format. */
@@ -30,16 +29,14 @@ export async function exportTable(table: BackupTable): Promise<Row[]> {
 export async function existingIds(tables: readonly BackupTable[]): Promise<Partial<Record<BackupTable, Set<string>>>> {
   const out: Partial<Record<BackupTable, Set<string>>> = {}
   for (const t of tables) {
-    const ids = new Set<string>()
-    for (let from = 0; ; from += 1000) {
-      const { data, error } = await supabase
+    const rows = await fetchAllPages((from, to) =>
+      supabase
         .from(t as 'items')
         .select('id')
-        .range(from, from + 999)
-      if (error) throw error
-      data.forEach((r) => ids.add(r.id))
-      if (data.length < 1000) break
-    }
+        .order('id')
+        .range(from, to),
+    )
+    const ids = new Set(rows.map((r) => r.id))
     out[t] = ids
   }
   return out
