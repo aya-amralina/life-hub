@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { NEEDS, cleanupTestUser, live, login, tab } from './helpers'
+import { NEEDS, cleanupTestUser, live, login, plus, tab } from './helpers'
 
 test.beforeAll(cleanupTestUser)
 test.afterAll(cleanupTestUser)
@@ -19,7 +19,7 @@ test('день отмечается: привычка в 1 тап, энерги�
 
   // «Движение»: several activities a day, score = minutes / 10 × points (средняя — 2)
   await tab(page, 'Тело')
-  await page.getByRole('button', { name: 'Активность', exact: true }).click()
+  await plus(page) // «+» on Тело → День is a new activity on the day shown
   const sheet = page.getByRole('dialog', { name: 'Активность' })
   await sheet.getByLabel('Новый тип').fill('Прогулка')
   await sheet.getByRole('button', { name: 'Добавить тип' }).click()

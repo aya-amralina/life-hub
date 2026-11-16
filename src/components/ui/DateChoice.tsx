@@ -11,6 +11,7 @@ export function DateChoice({
   options,
   today,
   min,
+  none,
 }: {
   label: string
   value: ISODate | null
@@ -18,12 +19,19 @@ export function DateChoice({
   options: readonly ISODate[]
   today: ISODate
   min?: ISODate
+  /** a first chip for «no date» (e.g. «Без срока»), selected when value is null */
+  none?: { label: string; onSelect: () => void }
 }) {
   const custom = value !== null && !options.includes(value)
   return (
     <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
       <legend className="mb-2 text-cap text-ink2">{label}</legend>
       <div className="flex flex-wrap gap-2">
+        {none && (
+          <Chip selected={value === null} onClick={none.onSelect}>
+            {none.label}
+          </Chip>
+        )}
         {options.map((d) => (
           <Chip key={d} selected={value === d} onClick={() => onChange(d)}>
             {dayChipLabel(d, today)}

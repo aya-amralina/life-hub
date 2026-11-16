@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Pencil, Plus } from 'lucide-react'
+import { HandCoins, Pencil, PiggyBank, Plus } from 'lucide-react'
+import { useAddAction } from '@/app/addSheetContext'
 import { useToast } from '@/app/toastContext'
 import { BottomSheet } from '@/components/ui/BottomSheet'
 import { Button } from '@/components/ui/Button'
@@ -7,6 +8,7 @@ import { Card, CardHeader } from '@/components/ui/Card'
 import { SkeletonCard } from '@/components/ui/Feedback'
 import { GroupHeader } from '@/components/ui/GroupHeader'
 import { MetaChip } from '@/components/ui/MetaChip'
+import { PickSheet } from '@/components/ui/PickSheet'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { formatDayMonth, formatWeekdayDate, todayBerlin } from '@/lib/dates'
@@ -34,6 +36,8 @@ export function EnvelopesTab() {
   // the debt sheet: null — closed, 'new' — a new debt, else the one being edited
   const [debtEdit, setDebtEdit] = useState<Debt | 'new' | null>(null)
   const [closedOpen, setClosedOpen] = useState(false)
+  const [picking, setPicking] = useState(false)
+  useAddAction(() => setPicking(true))
   if (envelopes.isPending || txs.isPending || debts.isPending || balances.isPending) return <SkeletonCard />
   const all = envelopes.data ?? []
   const tx = txs.data ?? []
@@ -71,9 +75,6 @@ export function EnvelopesTab() {
           {goals.map((g) => (
             <GoalCard key={g.id} g={g} p={goalProgress(g, balances.data ?? [], debtList, tx)} loans={open.filter((d) => d.direction === 'from_pot' && d.pot_id === g.id)} onEdit={() => setEditingEnv(g)} />
           ))}
-          <Button variant="secondary" onClick={() => setAdding(true)} icon={<Plus size={20} strokeWidth={1.75} aria-hidden="true" />}>
-            Новый конверт или цель
-          </Button>
         </>
       )}
 
@@ -89,13 +90,19 @@ export function EnvelopesTab() {
             {closedOpen && closed.map((d) => <DebtRow key={d.id} d={d} s={debtSummary(d, tx)} pot={all.find((e) => e.id === d.pot_id)?.name} muted onEdit={() => setDebtEdit(d)} />)}
           </>
         )}
-        <Button variant="secondary" className="h-11 self-start" onClick={() => setDebtEdit('new')} icon={<Plus size={16} strokeWidth={1.75} aria-hidden="true" />}>
-          Долг
-        </Button>
       </Card>
       <DebtSheet open={debtEdit !== null} onClose={() => setDebtEdit(null)} debt={debtEdit === 'new' ? null : debtEdit} goals={goals} />
       <EnvelopeSheet open={editingEnv !== null} onClose={() => setEditingEnv(null)} env={editingEnv} />
       <EnvelopeSheet open={adding} onClose={() => setAdding(false)} env={null} />
+      <PickSheet
+        open={picking}
+        onClose={() => setPicking(false)}
+        label="Добавить"
+        options={[
+          { label: 'Конверт или цель', hint: 'отложить на трату или копить', icon: PiggyBank, sphere: 'money', onPick: () => setAdding(true) },
+          { label: 'Долг', hint: 'я должна, мне должны, заём из копилки', icon: HandCoins, sphere: 'money', onPick: () => setDebtEdit('new') },
+        ]}
+      />
     </>
   )
 }

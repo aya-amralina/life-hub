@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { NEEDS, berlinDate, cleanupTestUser, live, login, testClient } from './helpers'
+import { NEEDS, berlinDate, cleanupTestUser, live, login, more, testClient } from './helpers'
 
 test.beforeEach(cleanupTestUser)
 test.afterAll(cleanupTestUser)
@@ -17,7 +17,7 @@ test('Месяц: «сейчас» по факту, ждут подтвержд�
 
   await login(page)
   await page.goto('/money')
-  await page.getByRole('tab', { name: 'Месяц' }).click()
+  await more(page, 'Месяц')
   await expect(page.getByText('900 €').first()).toBeVisible() // 1000 − 100: the planned 50 is not in «сейчас»
   await expect(page.getByText('Ждут подтверждения: Abo e2e · −50 €')).toBeVisible()
   await expect(page.getByText(/по расчёту 900\s€ — сходится/)).toBeVisible()

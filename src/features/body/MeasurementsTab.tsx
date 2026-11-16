@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus } from 'lucide-react'
+import { useAddAction } from '@/app/addSheetContext'
 import { useToast } from '@/app/toastContext'
 import { BottomSheet } from '@/components/ui/BottomSheet'
 import { Button } from '@/components/ui/Button'
@@ -24,13 +24,11 @@ const num = (v: number | null) => (v === null ? '—' : String(v).replace('.', '
 export function MeasurementsTab() {
   const list = useMeasurements()
   const [adding, setAdding] = useState(false)
+  useAddAction(() => setAdding(true))
   if (list.isPending) return <SkeletonCard />
   const rows = list.data ?? []
   return (
     <>
-      <Button onClick={() => setAdding(true)} icon={<Plus size={20} strokeWidth={1.75} aria-hidden="true" />}>
-        Новый замер
-      </Button>
       {rows.length === 0 ? (
         <section className="flex flex-col gap-1 rounded-2xl border border-dashed border-line2 p-4">
           <div className="text-base font-semibold">Замеров пока нет</div>

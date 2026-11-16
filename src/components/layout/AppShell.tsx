@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { flush, usePendingChanges } from '@/app/offlineQueue'
 import { useToast } from '@/app/toastContext'
 import { Navigate, Outlet, useLocation } from 'react-router'
-import { AddSheetContext, type AddMode, type OpenAdd } from '@/app/addSheetContext'
+import { AddActionContext, AddSheetContext, type AddForm, type OpenAdd } from '@/app/addSheetContext'
 import { WideContext } from '@/app/layoutContext'
 import { cn } from '@/components/ui/cn'
 import { useAuth } from '@/app/authContext'
@@ -14,22 +14,25 @@ import { TabBar } from '@/components/ui/TabBar'
 import type { Sphere } from '@/lib/constants'
 import { plural } from '@/lib/format'
 import { AddSheet } from '@/features/add/AddSheet'
+import { addFormFor, ownsAddAction } from '@/features/add/addTarget'
 import { useRollover } from '@/features/study/useRollover'
 
 const SPHERE_BY_PATH: Record<string, Sphere> = { money: 'money', work: 'work', study: 'study', body: 'body' }
 const sphereForPath = (path: string): Sphere => SPHERE_BY_PATH[path.split('/')[1] ?? ''] ?? 'personal'
 
+type Adding = { form: AddForm; sphere: Sphere; date?: string; picked: boolean }
+
 /** Authenticated frame: 16px gutters, 560px column, tab bar and «+» on every screen. */
 export function AppShell() {
   const { session, loading } = useAuth()
   const online = useOnline()
-  const [adding, setAdding] = useState<{ mode: AddMode; sphere: Sphere; date?: string } | null>(null)
+  const [adding, setAdding] = useState<Adding | null>(null)
 
   // Read the path at tap time: router navigations are transitions, so render-time location can still
   // be the previous screen when «+» is tapped right after switching tabs.
-  const openAdd = useCallback<OpenAdd>((mode, opts) => {
-    const routeSphere = sphereForPath(window.location.pathname)
-    setAdding({ mode: mode ?? (routeSphere === 'money' ? 'expense' : 'item'), sphere: opts?.sphere ?? routeSphere, date: opts?.date })
+  const openAdd = useCallback<OpenAdd>((form, opts) => {
+    const path = window.location.pathname
+    setAdding({ form: form ?? addFormFor(path), sphere: opts?.sphere ?? sphereForPath(path), date: opts?.date, picked: false })
   }, [])
   const close = useCallback(() => setAdding(null), [])
 
@@ -53,8 +56,8 @@ function Shell({
   close,
   online,
 }: {
-  adding: { mode: AddMode; sphere: Sphere; date?: string } | null
-  setAdding: Dispatch<SetStateAction<{ mode: AddMode; sphere: Sphere; date?: string } | null>>
+  adding: Adding | null
+  setAdding: Dispatch<SetStateAction<Adding | null>>
   openAdd: OpenAdd
   close: () => void
   online: boolean
@@ -81,11 +84,33 @@ function Shell({
       document.removeEventListener('visibilitychange', onVisible)
     }
   }, [qc, toast])
+  // «+» adds what is on screen: the screen's own action (useAddAction), registered for its path.
+  // Right after a tab switch the new screen may not have registered yet — wait for it a moment.
+  const action = useRef<{ path: string; run: () => void } | null>(null)
+  const register = useCallback((path: string, run: () => void) => {
+    const entry = { path, run }
+    action.current = entry
+    return () => {
+      if (action.current === entry) action.current = null
+    }
+  }, [])
+  const tapPlus = useCallback(() => {
+    const started = Date.now()
+    const attempt = () => {
+      const path = window.location.pathname
+      const own = action.current
+      if (own && own.path === path) return own.run()
+      if (ownsAddAction(path) && Date.now() - started < 600) return void setTimeout(attempt, 30)
+      openAdd()
+    }
+    attempt()
+  }, [openAdd])
   // the Sunday review is full-screen: no tab bar, no «+» (design 7)
   const focus = useLocation().pathname.startsWith('/review')
 
   return (
     <AddSheetContext.Provider value={openAdd}>
+      <AddActionContext.Provider value={register}>
       <WideContext.Provider value={setWide}>
       <main
         // from 1024 px the tab bar is a rail on the left (96px): the column is centred in what is left
@@ -106,17 +131,20 @@ function Shell({
         )}
         <Outlet />
       </main>
-      {!focus && <Fab onClick={() => openAdd()} />}
+      {!focus && <Fab onClick={tapPlus} />}
       {!focus && <TabBar />}
       <AddSheet
         open={adding !== null}
         onClose={close}
-        mode={adding?.mode ?? 'item'}
-        onMode={(mode) => setAdding((a) => (a ? { ...a, mode } : a))}
+        form={adding?.form ?? 'choose'}
+        picked={adding?.picked ?? false}
+        onPick={(form) => setAdding((a) => (a ? { ...a, form, picked: true } : a))}
+        onBack={() => setAdding((a) => (a ? { ...a, form: 'choose', picked: false } : a))}
         sphere={adding?.sphere ?? 'personal'}
         date={adding?.date}
       />
       </WideContext.Provider>
+      </AddActionContext.Provider>
     </AddSheetContext.Provider>
   )
 }

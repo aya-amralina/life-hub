@@ -1,14 +1,26 @@
 import { useState } from 'react'
 import { ChevronDown, Pin } from 'lucide-react'
+import { useAddAction, useOpenAdd } from '@/app/addSheetContext'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { EmptyState, SkeletonCard } from '@/components/ui/Feedback'
 import type { Sphere } from '@/lib/constants'
 import { useNotes } from './api'
 
-/** Notes of a sphere: pinned first, three visible, the rest behind «Ещё N». Hidden when empty. */
-export function NotesCard({ sphere }: { sphere: Sphere }) {
+/** «Ещё → Заметки» of a sphere: all its notes; «+» writes a new one into this sphere. */
+export function NotesSection({ sphere }: { sphere: Sphere }) {
   const notes = useNotes(sphere)
-  const [all, setAll] = useState(false)
+  const openAdd = useOpenAdd()
+  useAddAction(() => openAdd('note', { sphere }))
+  if (notes.isPending) return <SkeletonCard />
+  if (!notes.data?.length) return <EmptyState title="Заметок пока нет">Новую — через «+». Первая строка станет заголовком.</EmptyState>
+  return <NotesCard sphere={sphere} showAll />
+}
+
+/** Notes of a sphere: pinned first, three visible, the rest behind «Ещё N». Hidden when empty. */
+export function NotesCard({ sphere, showAll = false }: { sphere: Sphere; showAll?: boolean }) {
+  const notes = useNotes(sphere)
+  const [all, setAll] = useState(showAll)
   const [open, setOpen] = useState<string | null>(null)
   const list = notes.data ?? []
   if (!list.length) return null

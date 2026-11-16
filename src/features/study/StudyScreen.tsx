@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from 'react'
-import { useNavigate } from 'react-router'
-import { ArrowRightLeft, CalendarClock, ChevronDown, CircleCheck, CircleHelp, CircleDashed, Redo2, TriangleAlert } from 'lucide-react'
+import { Navigate, useNavigate, useParams } from 'react-router'
+import { ArrowRightLeft, CalendarClock, CalendarDays, Library, NotebookPen, ChevronDown, CircleCheck, CircleHelp, CircleDashed, Redo2, TriangleAlert } from 'lucide-react'
+import { useAddAction, useOpenAdd } from '@/app/addSheetContext'
 import { useToast } from '@/app/toastContext'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
@@ -10,10 +11,10 @@ import { GroupHeader } from '@/components/ui/GroupHeader'
 import { IconTile } from '@/components/ui/IconTile'
 import { MetaChips } from '@/components/ui/MetaChip'
 import { ProgressBar } from '@/components/ui/ProgressBar'
-import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { Swipeable } from '@/components/ui/Swipeable'
 import { WeekSwitcher } from '@/components/ui/WeekSwitcher'
 import { CalendarLink } from '@/components/layout/CalendarLink'
+import { MoreList, SectionHeader, type MoreLink } from '@/components/layout/MoreList'
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
 import { useView } from '@/components/layout/useView'
 import { ViewToggle } from '@/components/layout/ViewToggle'
@@ -25,7 +26,7 @@ import { studyHeatmap } from '@/lib/rules/charts'
 import { isFixed, plannedItems, rolloverCandidates } from '@/lib/rules/study'
 import { ChartCard } from '@/components/charts/ChartCard'
 import { HeatGrid } from '@/components/charts/HeatGrid'
-import { NotesCard } from '@/features/notes/NotesCard'
+import { NotesSection } from '@/features/notes/NotesCard'
 import { useItems, useUpdateItem, type Item } from '@/features/items/api'
 import { ItemQuestions } from '@/features/items/ItemQuestions'
 import { useAllWeeks, useWeekRow, type Week } from '@/features/weeks/api'
@@ -34,52 +35,69 @@ import { StudyHours } from './StudyHours'
 import { useStudyWeek } from './useStudyWeek'
 import { weekLabel } from './weekLabel'
 
-const TABS = [
-  { value: 'week', label: 'Неделя' },
-  { value: 'subjects', label: 'Предметы' },
-  { value: 'tests', label: 'Тесты' },
-] as const
-type Tab = (typeof TABS)[number]['value']
-
 // the table and its logic load only when it is opened (laptop)
 const StudyTable = lazy(() => import('./StudyTable').then((m) => ({ default: m.StudyTable })))
 
+const BACK = '/study'
+const SECTIONS = { subjects: 'Предметы', tests: 'Тесты и дедлайны', notes: 'Заметки' } as const
+type Section = keyof typeof SECTIONS
+
+const MORE: readonly MoreLink[] = [
+  { to: '/study/subjects', label: 'Предметы', icon: Library, hint: 'часы и загрузка' },
+  { to: '/study/tests', label: 'Тесты и дедлайны', icon: CalendarDays },
+  { to: '/study/notes', label: 'Заметки', icon: NotebookPen },
+]
+
+/** Учёба: the week on the main view; subjects, tests and notes one tap deeper. */
 export function StudyScreen() {
-  const [tab, setTab] = useState<Tab>('week')
+  const section = useParams()['*'] ?? ''
   const [view, setView, desktop] = useView('study')
-  useWideLayout(view === 'table')
-  const header = (
-    <ScreenHeader
-      title="Учёба"
-      right={
-        <div className="flex items-center gap-2">
-          {desktop && <ViewToggle view={view} onChange={setView} />}
-          <CalendarLink sphere="study" />
-        </div>
-      }
-    />
-  )
-  if (view === 'table') {
+  const table = section === '' && view === 'table'
+  useWideLayout(table)
+  const openAdd = useOpenAdd()
+  if (section !== '') {
+    if (!(section in SECTIONS)) return <Navigate to={BACK} replace />
+    const s = section as Section
     return (
       <>
-        {header}
-        <Suspense fallback={<SkeletonCard />}>
-          <StudyTable />
-        </Suspense>
+        <SectionHeader title={SECTIONS[s]} back={BACK} sphere="Учёба" right={s === 'tests' ? <CalendarLink sphere="study" /> : undefined} />
+        {s !== 'notes' && <AddStudy onAdd={() => openAdd('study')} />}
+        {s === 'subjects' && <SubjectsTab />}
+        {s === 'tests' && <TestsTab />}
+        {s === 'notes' && <NotesSection sphere="study" />}
       </>
     )
   }
   return (
     <>
-      {header}
-      <SegmentedTabs label="Раздел" segments={TABS} value={tab} onChange={setTab} />
-      <ItemQuestions sphere="study" />
-      {tab === 'week' && <WeekTab />}
-      {tab === 'subjects' && <SubjectsTab />}
-      {tab === 'tests' && <TestsTab />}
-      <NotesCard sphere="study" />
+      <ScreenHeader
+        title="Учёба"
+        right={
+          <div className="flex items-center gap-2">
+            {desktop && <ViewToggle view={view} onChange={setView} />}
+            <CalendarLink sphere="study" />
+          </div>
+        }
+      />
+      {table ? (
+        <Suspense fallback={<SkeletonCard />}>
+          <StudyTable />
+        </Suspense>
+      ) : (
+        <>
+          <ItemQuestions sphere="study" />
+          <WeekTab />
+          <MoreList links={MORE} />
+        </>
+      )}
     </>
   )
+}
+
+/** Registers «+» of a section (renders nothing). */
+function AddStudy({ onAdd }: { onAdd: () => void }) {
+  useAddAction(onAdd)
+  return null
 }
 
 function WeekTab() {
@@ -90,6 +108,8 @@ function WeekTab() {
   const weeks = useAllWeeks()
   const [moving, setMoving] = useState(false)
   const [soonOpen, setSoonOpen] = useState(false)
+  const openAdd = useOpenAdd()
+  useAddAction(() => openAdd('study'))
   const waiting = monday === thisMonday ? rolloverCandidates(all, weeks.data ?? [], thisMonday) : []
 
   const active = items.filter((i) => !isUpcoming(i, today))
@@ -110,7 +130,7 @@ function WeekTab() {
         <SkeletonCard />
       ) : items.length === 0 ? (
         <EmptyState title={`План на ${weekLabel(monday, weeks.data ?? [])} пока пустой`}>
-          {`База — ${formatHours(load.base)}. Пункты можно добавить через «+» — они встанут по сроку.`}
+          {`База — ${formatHours(load.base)}. Пункты — через «+».`}
         </EmptyState>
       ) : (
         <>

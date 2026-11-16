@@ -393,7 +393,7 @@ function DaySheet({
           icon={<Plus size={20} strokeWidth={1.75} aria-hidden="true" />}
           onClick={() => {
             onClose()
-            openAdd('item', { date: day })
+            openAdd('choose', { date: day })
           }}
         >
           Пункт на этот день

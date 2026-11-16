@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
-import { NEEDS, cleanupTestUser, live, login, tab, testClient } from './helpers'
+import { NEEDS, cleanupTestUser, live, login, more, plus, tab, testClient } from './helpers'
 
 test.beforeEach(cleanupTestUser)
 test.afterAll(cleanupTestUser)
@@ -85,10 +85,12 @@ test('хотелка: ждёт 48 часов, потом «Всё ещё нуж�
   await expect(card).toBeHidden()
 
   await tab(page, 'Деньги')
-  await page.getByRole('tab', { name: 'Хотелки' }).click()
-  await page.getByLabel('Что хочется').fill('Buch e2e')
-  await page.getByLabel('Цена').fill('20')
-  await page.getByRole('button', { name: 'Отложить на 48 часов' }).click()
+  await more(page, 'Хотелки')
+  await plus(page)
+  const wish = page.getByRole('dialog', { name: 'Новая хотелка' })
+  await wish.getByLabel('Что хочется').fill('Buch e2e')
+  await wish.getByLabel('Цена').fill('20')
+  await wish.getByRole('button', { name: 'Отложить на 48 часов' }).click()
   await expect(page.getByText('ещё 48 часов')).toBeVisible()
   await expect(page.getByText('не потрачено 79 €')).toBeVisible()
 })

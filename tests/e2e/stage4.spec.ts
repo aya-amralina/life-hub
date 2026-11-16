@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { NEEDS, berlinDate, berlinMonday, cleanupTestUser, live, login, tab, testClient } from './helpers'
+import { NEEDS, berlinDate, berlinMonday, cleanupTestUser, live, login, more, tab, testClient } from './helpers'
 
 test.beforeEach(cleanupTestUser)
 test.afterAll(cleanupTestUser)
@@ -19,7 +19,11 @@ test('календарь: пункт на день в месяце и в лис�
   await expect(sheet.getByText('Kalender e2e')).toBeVisible()
   await expect(sheet.getByText('15:00')).toBeVisible()
   await sheet.getByRole('button', { name: 'Пункт на этот день' }).click()
-  const add = page.getByRole('dialog', { name: 'Добавить' })
+  // the chooser offers only what can stand on a day (no expense, no note)
+  const choose = page.getByRole('dialog', { name: 'Добавить' })
+  await expect(choose.getByRole('button', { name: /^Трата/ })).toHaveCount(0)
+  await choose.getByRole('button', { name: /^Дело/ }).click()
+  const add = page.getByRole('dialog', { name: 'Новое дело' })
   await add.getByLabel('Что сделать').fill('Termin e2e')
   await add.getByRole('button', { name: 'Сохранить' }).click()
   await expect(add).toBeHidden()
@@ -43,7 +47,7 @@ test('графики: Тело → Графики и тепловая карта
 
   await login(page)
   await tab(page, 'Тело')
-  await page.getByRole('tab', { name: 'Графики' }).click()
+  await more(page, 'Графики')
   await expect(page.getByRole('figure', { name: 'Настроение, энергия и сон' })).toBeVisible()
   await expect(page.getByText('Мало данных', { exact: false }).first()).toBeVisible() // reps/activity are empty
   await page.getByRole('tab', { name: 'Неделя' }).first().click() // «Самочувствие»; «Кофе» has its own period
@@ -52,7 +56,7 @@ test('графики: Тело → Графики и тепловая карта
   await expect(page.getByRole('group', { name: 'Календарь привычек' })).toBeVisible()
 
   await tab(page, 'Учёба')
-  await page.getByRole('tab', { name: 'Предметы' }).click()
+  await more(page, 'Предметы')
   const heat = page.getByRole('group', { name: 'Загрузка по неделям' })
   await heat.getByRole('button', { name: /Н04/ }).click()
   await expect(page.getByText('Н04 · 30 ч из 27 · нужен Do/Sa ½ · сейчас')).toBeVisible()

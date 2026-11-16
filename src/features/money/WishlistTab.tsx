@@ -1,63 +1,37 @@
 import { useState } from 'react'
-import { Hourglass, Plus } from 'lucide-react'
+import { Hourglass } from 'lucide-react'
+import { useAddAction } from '@/app/addSheetContext'
 import { useToast } from '@/app/toastContext'
+import { BottomSheet } from '@/components/ui/BottomSheet'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
-import { SkeletonCard } from '@/components/ui/Feedback'
+import { EmptyState, SkeletonCard } from '@/components/ui/Feedback'
+import { SaveError, TextField } from '@/components/ui/Form'
 import { GroupHeader } from '@/components/ui/GroupHeader'
 import { formatEur, parseEurInput, plural, toCents } from '@/lib/format'
 import { wishDue, wishHoursLeft, wishSavedCents } from '@/lib/rules/wishlist'
 import { WishQuestions } from './WishQuestions'
 import { useAddWish, useWishlist } from './wishlistApi'
 
-const field = 'h-12 w-full rounded-xl border border-line2 bg-card px-4 text-base text-ink outline-none focus:border-ink2'
 
-/** Хотелки (rule 5): a wish waits 48 hours, then one question — «Всё ещё нужно?». */
+/** Хотелки (rule 5): a wish waits 48 hours, then one question — «Всё ещё нужно?». «+» writes a new one. */
 export function WishlistTab() {
   const wishes = useWishlist()
-  const add = useAddWish()
-  const toast = useToast()
-  const [title, setTitle] = useState('')
-  const [price, setPrice] = useState('')
+  const [adding, setAdding] = useState(false)
   const [showDone, setShowDone] = useState(false)
+  useAddAction(() => setAdding(true))
   if (wishes.isPending) return <SkeletonCard />
   const now = new Date()
   const list = wishes.data ?? []
   const waiting = list.filter((w) => w.decision === null && !wishDue(w, now))
   const decided = list.filter((w) => w.decision !== null)
   const saved = wishSavedCents(list)
-  const cents = parseEurInput(price)
 
   return (
     <>
       <WishQuestions />
-      <Card>
-        <CardHeader title="Новая хотелка" dotClass="bg-money" />
-        <p className="m-0 text-cap text-ink2">Запиши и подожди 48 часов. Потом спрошу один раз — нужно ли ещё.</p>
-        <form
-          className="flex flex-col gap-2"
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (!title.trim()) return
-            add.mutate(
-              { title: title.trim(), price_eur: cents === null ? null : cents / 100 },
-              {
-                onSuccess: () => {
-                  toast({ text: `${title.trim()} — подождём до послезавтра` })
-                  setTitle('')
-                  setPrice('')
-                },
-              },
-            )
-          }}
-        >
-          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Что хочется" aria-label="Что хочется" className={field} />
-          <input value={price} onChange={(e) => setPrice(e.target.value)} inputMode="decimal" placeholder="Цена, €" aria-label="Цена" className={field} />
-          <Button type="submit" variant="secondary" icon={<Plus size={20} strokeWidth={1.75} aria-hidden="true" />} disabled={!title.trim() || (price !== '' && cents === null) || add.isPending}>
-            Отложить на 48 часов
-          </Button>
-        </form>
-      </Card>
+      {list.length === 0 && <EmptyState title="Хотелок пока нет">Захотелось купить — запиши через «+» и подожди 48 часов. Потом спрошу один раз, нужно ли ещё.</EmptyState>}
+      <WishSheet open={adding} onClose={() => setAdding(false)} />
       {waiting.length > 0 && (
         <Card>
           <CardHeader title="Думаю" context={`${waiting.length}`} />
@@ -96,5 +70,43 @@ export function WishlistTab() {
         </Card>
       )}
     </>
+  )
+}
+
+function WishSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const add = useAddWish()
+  const toast = useToast()
+  const [title, setTitle] = useState('')
+  const [price, setPrice] = useState('')
+  const cents = parseEurInput(price)
+  return (
+    <BottomSheet open={open} onClose={onClose} label="Новая хотелка">
+      <form
+        className="flex flex-col gap-6"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (!title.trim()) return
+          add.mutate(
+            { title: title.trim(), price_eur: cents === null ? null : cents / 100 },
+            {
+              onSuccess: () => {
+                toast({ text: `${title.trim()} — подождём до послезавтра` })
+                setTitle('')
+                setPrice('')
+                onClose()
+              },
+            },
+          )
+        }}
+      >
+        <p className="m-0 text-cap text-ink2">Запиши и подожди 48 часов. Потом спрошу один раз — нужно ли ещё.</p>
+        <TextField label="Что хочется" autoFocus value={title} onChange={(e) => setTitle(e.target.value)} />
+        <TextField label="Цена, €" value={price} onChange={(e) => setPrice(e.target.value)} inputMode="decimal" />
+        <SaveError show={add.isError} />
+        <Button type="submit" disabled={!title.trim() || (price !== '' && cents === null) || add.isPending}>
+          Отложить на 48 часов
+        </Button>
+      </form>
+    </BottomSheet>
   )
 }

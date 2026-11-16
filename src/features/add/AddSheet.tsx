@@ -1,91 +1,119 @@
-import { useCallback, useState, type FormEvent } from 'react'
+import { lazy, Suspense, useCallback, useState, type FormEvent } from 'react'
+import { BookOpen, Briefcase, ChevronLeft, ListTodo, NotebookPen, PersonStanding, Wallet, type LucideIcon } from 'lucide-react'
 import { BottomSheet } from '@/components/ui/BottomSheet'
-import { Button } from '@/components/ui/Button'
+import { Button, IconButton } from '@/components/ui/Button'
 import { Chip } from '@/components/ui/Chip'
-import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
+import { DateChoice } from '@/components/ui/DateChoice'
+import { SaveError } from '@/components/ui/Form'
+import { PickList } from '@/components/ui/PickSheet'
 import { useToast } from '@/app/toastContext'
-import type { AddMode } from '@/app/addSheetContext'
+import type { AddForm } from '@/app/addSheetContext'
 import { SPHERE_CLASS, SPHERE_LABEL, type Sphere } from '@/lib/constants'
-import { addDaysISO, formatRelativeDay, todayBerlin } from '@/lib/dates'
+import { addDaysISO, formatRelativeDay, todayBerlin, type ISODate } from '@/lib/dates'
 import { useCreateItem } from '@/features/items/api'
 import { newItem } from '@/features/items/newItem'
 import { useCreateNote } from '@/features/notes/api'
 import { ExpenseForm } from '@/features/money/ExpenseForm'
+import { SkeletonCard } from '@/components/ui/Feedback'
 
-const MODES = [
-  { value: 'expense', label: 'Трата' },
-  { value: 'item', label: 'Пункт' },
-  { value: 'note', label: 'Заметка' },
-] as const
+// sphere forms load on first use: the shell (and «Сегодня») stay light
+const WorkTaskForm = lazy(() => import('@/features/work/WorkTaskForm').then((m) => ({ default: m.WorkTaskForm })))
+const StudyItemForm = lazy(() => import('@/features/study/StudyItemForm').then((m) => ({ default: m.StudyItemForm })))
+const BodyTaskForm = lazy(() => import('@/features/body/BodyTaskForm').then((m) => ({ default: m.BodyTaskForm })))
 
-const SPHERE_ORDER: Sphere[] = ['personal', 'work', 'study', 'body', 'money']
+type Choice = { form: Exclude<AddForm, 'choose'>; label: string; hint: string; icon: LucideIcon; sphere: Sphere; dated: boolean }
 
-const field = 'h-12 rounded-xl border border-line2 bg-card px-4 text-base text-ink outline-none focus:border-ink2'
+/** The chooser of «Сегодня»: each row opens its sphere's own form. `dated` — offered for a preset day (calendar). */
+const CHOICES: readonly Choice[] = [
+  { form: 'expense', label: 'Трата', hint: 'сумма и категория', icon: Wallet, sphere: 'money', dated: false },
+  { form: 'personal', label: 'Дело', hint: 'на сегодня или любой день', icon: ListTodo, sphere: 'personal', dated: true },
+  { form: 'work', label: 'Задача по работе', hint: 'на доску', icon: Briefcase, sphere: 'work', dated: true },
+  { form: 'study', label: 'Учёба', hint: 'пункт в план недели', icon: BookOpen, sphere: 'study', dated: true },
+  { form: 'body', label: 'Тело', hint: 'задача или визит', icon: PersonStanding, sphere: 'body', dated: true },
+  { form: 'note', label: 'Заметка', hint: 'в любую сферу', icon: NotebookPen, sphere: 'personal', dated: false },
+]
 
-/** «+» sheet: трата / пункт / заметка. */
+const TITLE: Record<AddForm, string> = {
+  choose: 'Добавить',
+  expense: 'Трата',
+  personal: 'Новое дело',
+  work: 'Новая задача',
+  study: 'Пункт учёбы',
+  body: 'Задача или визит',
+  note: 'Заметка',
+}
+
+/** «+»: the chooser on «Сегодня», one sphere's own form elsewhere. */
 export function AddSheet({
   open,
   onClose,
-  mode,
-  onMode,
+  form,
+  picked,
+  onPick,
+  onBack,
   sphere,
   date,
 }: {
   open: boolean
   onClose: () => void
-  mode: AddMode
-  onMode: (m: AddMode) => void
+  form: AddForm
+  /** the form was picked in the chooser: show the way back */
+  picked: boolean
+  onPick: (f: AddForm) => void
+  onBack: () => void
   sphere: Sphere
   /** preset day (from the calendar) */
-  date?: string
+  date?: ISODate
 }) {
   const close = useCallback(() => onClose(), [onClose])
+  const header =
+    form !== 'choose' && picked ? (
+      <div className="flex items-center gap-2">
+        <IconButton label="К выбору" onClick={onBack}>
+          <ChevronLeft size={20} strokeWidth={1.75} aria-hidden="true" />
+        </IconButton>
+        <h2 className="m-0 text-title font-semibold">{TITLE[form]}</h2>
+      </div>
+    ) : undefined
+
   return (
-    <BottomSheet
-      open={open}
-      onClose={close}
-      label="Добавить"
-      header={<SegmentedTabs segments={MODES} value={mode} onChange={onMode} label="Что добавить" />}
-    >
-      {mode === 'expense' && <ExpenseForm onDone={close} />}
-      {mode === 'item' && <ItemForm key={date ?? 'today'} onDone={close} initialSphere={sphere} initialDate={date} />}
-      {mode === 'note' && <NoteForm onDone={close} initialSphere={sphere} />}
+    <BottomSheet open={open} onClose={close} label={TITLE[form]} header={header}>
+      {form === 'choose' && <Chooser onPick={onPick} dated={Boolean(date)} />}
+      {form === 'expense' && <ExpenseForm onDone={close} />}
+      {form === 'personal' && <PersonalForm onDone={close} initialDate={date} />}
+      <Suspense fallback={<SkeletonCard />}>
+        {form === 'work' && <WorkTaskForm onDone={close} initialDate={date} />}
+        {form === 'study' && <StudyItemForm onDone={close} initialDate={date} />}
+        {form === 'body' && <BodyTaskForm onDone={close} initialDate={date} />}
+      </Suspense>
+      {form === 'note' && <NoteForm onDone={close} initialSphere={sphere} />}
     </BottomSheet>
   )
 }
 
-function SpherePicker({ value, onChange }: { value: Sphere; onChange: (s: Sphere) => void }) {
+function Chooser({ onPick, dated }: { onPick: (f: AddForm) => void; dated: boolean }) {
   return (
-    <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-      <legend className="mb-2 text-cap font-semibold text-ink2">Сфера</legend>
-      <div className="flex flex-wrap gap-2">
-        {SPHERE_ORDER.map((s) => (
-          <Chip key={s} selected={value === s} dotClass={SPHERE_CLASS[s].dot} onClick={() => onChange(s)}>
-            {SPHERE_LABEL[s]}
-          </Chip>
-        ))}
-      </div>
-    </fieldset>
+    <PickList
+      options={CHOICES.filter((c) => !dated || c.dated).map((c) => ({ label: c.label, hint: c.hint, icon: c.icon, sphere: c.sphere, onPick: () => onPick(c.form) }))}
+    />
   )
 }
 
-function ItemForm({ onDone, initialSphere, initialDate }: { onDone: () => void; initialSphere: Sphere; initialDate?: string }) {
+/** «Дело»: a personal item — what and when. */
+function PersonalForm({ onDone, initialDate }: { onDone: () => void; initialDate?: ISODate }) {
   const today = todayBerlin()
-  const tomorrow = addDaysISO(today, 1)
   const [title, setTitle] = useState('')
-  const [sphere, setSphere] = useState<Sphere>(initialSphere === 'money' ? 'money' : initialSphere)
-  const [date, setDate] = useState<string>(initialDate ?? today)
+  const [date, setDate] = useState<ISODate | null>(initialDate ?? today)
   const create = useCreateItem()
   const toast = useToast()
-  const custom = date !== '' && date !== today && date !== tomorrow
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
     const t = title.trim()
     if (!t) return
-    create.mutate(newItem(sphere, t, date || null), {
+    create.mutate(newItem('personal', t, date), {
       onSuccess: () => {
-        toast({ text: `Пункт добавлен · ${date ? formatRelativeDay(date, today) : 'без даты'}` })
+        toast({ text: `Дело добавлено · ${date ? formatRelativeDay(date, today) : 'без даты'}` })
         onDone()
       },
     })
@@ -94,46 +122,26 @@ function ItemForm({ onDone, initialSphere, initialDate }: { onDone: () => void; 
   return (
     <form onSubmit={submit} className="flex flex-col gap-6">
       <label className="flex flex-col gap-2">
-        <span className="text-cap font-semibold text-ink2">Что сделать</span>
+        <span className="text-cap text-ink2">Что сделать</span>
         <input
           autoFocus
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           enterKeyHint="done"
-          lang={sphere === 'work' ? 'de' : undefined}
-          className={field}
+          className="h-12 rounded-xl border border-line2 bg-card px-4 text-base text-ink outline-none focus:border-ink2"
           placeholder="Например, записаться к врачу"
         />
       </label>
-      <SpherePicker value={sphere} onChange={setSphere} />
-      <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-        <legend className="mb-2 text-cap font-semibold text-ink2">Когда</legend>
-        <div className="flex flex-wrap gap-2">
-          <Chip selected={date === today} onClick={() => setDate(today)}>
-            Сегодня
-          </Chip>
-          <Chip selected={date === tomorrow} onClick={() => setDate(tomorrow)}>
-            Завтра
-          </Chip>
-          <Chip selected={date === ''} onClick={() => setDate('')}>
-            Без даты
-          </Chip>
-          <input
-            type="date"
-            aria-label="Другая дата"
-            value={custom ? date : ''}
-            onChange={(e) => setDate(e.target.value || today)}
-            className="h-11 rounded-xl border border-line2 bg-card px-3 text-base text-ink"
-          />
-        </div>
-      </fieldset>
-      {create.isError && <p className="m-0 text-cap text-ink2">Не получилось сохранить. Проверь сеть и попробуй ещё раз.</p>}
+      <DateChoice label="Когда" value={date} onChange={setDate} options={[today, addDaysISO(today, 1)]} today={today} none={{ label: 'Без даты', onSelect: () => setDate(null) }} />
+      <SaveError show={create.isError} />
       <Button type="submit" disabled={!title.trim() || create.isPending}>
         Сохранить
       </Button>
     </form>
   )
 }
+
+const NOTE_SPHERES: Sphere[] = ['personal', 'work', 'study', 'body', 'money']
 
 function NoteForm({ onDone, initialSphere }: { onDone: () => void; initialSphere: Sphere }) {
   const [text, setText] = useState('')
@@ -159,7 +167,7 @@ function NoteForm({ onDone, initialSphere }: { onDone: () => void; initialSphere
   return (
     <form onSubmit={submit} className="flex flex-col gap-6">
       <label className="flex flex-col gap-2">
-        <span className="text-cap font-semibold text-ink2">Заметка</span>
+        <span className="text-cap text-ink2">Заметка</span>
         <textarea
           autoFocus
           rows={4}
@@ -169,8 +177,17 @@ function NoteForm({ onDone, initialSphere }: { onDone: () => void; initialSphere
           placeholder="Первая строка станет заголовком"
         />
       </label>
-      <SpherePicker value={sphere} onChange={setSphere} />
-      {create.isError && <p className="m-0 text-cap text-ink2">Не получилось сохранить. Проверь сеть и попробуй ещё раз.</p>}
+      <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+        <legend className="mb-2 text-cap text-ink2">Сфера</legend>
+        <div className="flex flex-wrap gap-2">
+          {NOTE_SPHERES.map((s) => (
+            <Chip key={s} selected={sphere === s} dotClass={SPHERE_CLASS[s].dot} onClick={() => setSphere(s)}>
+              {SPHERE_LABEL[s]}
+            </Chip>
+          ))}
+        </div>
+      </fieldset>
+      <SaveError show={create.isError} />
       <Button type="submit" disabled={!text.trim() || create.isPending}>
         Сохранить
       </Button>

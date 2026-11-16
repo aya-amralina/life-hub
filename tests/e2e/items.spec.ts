@@ -1,17 +1,16 @@
 import { expect, test } from '@playwright/test'
-import { NEEDS, cleanupTestUser, live, login } from './helpers'
+import { NEEDS, addFromToday, cleanupTestUser, live, login } from './helpers'
 
 test.beforeAll(cleanupTestUser)
 test.afterAll(cleanupTestUser)
 
-test('«+» → пункт на сегодня → в «Горит» → отметка видна на втором устройстве', async ({ page, browser }) => {
+test('«+» → дело на сегодня → в «Горит» → отметка видна на втором устройстве', async ({ page, browser }) => {
   test.skip(!live, NEEDS)
   const title = `e2e пункт ${Date.now()}`
   await login(page)
 
-  await page.getByRole('button', { name: 'Добавить' }).click()
-  const sheet = page.getByRole('dialog', { name: 'Добавить' })
-  await sheet.getByRole('tab', { name: 'Пункт' }).click()
+  await addFromToday(page, 'Дело')
+  const sheet = page.getByRole('dialog', { name: 'Новое дело' })
   await sheet.getByLabel('Что сделать').fill(title)
   await sheet.getByRole('button', { name: 'Сохранить' }).click()
   await expect(sheet).toBeHidden()

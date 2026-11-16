@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { ChevronRight, Plus } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
+import { useAddAction } from '@/app/addSheetContext'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import { Button } from '@/components/ui/Button'
@@ -44,6 +45,7 @@ export function MonthTab() {
   const actual = useActualBalances()
   // the operation sheet: null — closed, 'new' — a new operation, else the one being edited
   const [editing, setEditing] = useState<Transaction | 'new' | null>(null)
+  useAddAction(() => setEditing('new'))
 
   if (txs.isPending) return <SkeletonCard />
   const all = txs.data ?? []
@@ -52,7 +54,7 @@ export function MonthTab() {
       <>
         <EmptyState title="Операций пока нет">
           <span className="flex flex-col items-start gap-3">
-            Заведи первую — ожидаемый доход, аренду, поездку. Траты через «+» появятся здесь сами.
+            Заведи первую через «+» — ожидаемый доход, аренду, поездку. Траты появятся здесь сами.
             <Button variant="secondary" onClick={() => setEditing('new')}>
               Новая операция
             </Button>
@@ -163,9 +165,6 @@ export function MonthTab() {
           Показать убранные · {removed.length}
         </Chip>
       )}
-      <Button variant="secondary" icon={<Plus size={20} strokeWidth={1.75} className="text-money" aria-hidden="true" />} onClick={() => setEditing('new')}>
-        Операция
-      </Button>
       <Card>
         <CardHeader title="Операции" context={`${ops.length}`} />
         {ops.length === 0 ? (

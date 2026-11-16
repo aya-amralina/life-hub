@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { NEEDS, berlinDate, cleanupTestUser, live, login, testClient } from './helpers'
+import { NEEDS, berlinDate, cleanupTestUser, live, login, more, plus, testClient } from './helpers'
 
 test.beforeEach(cleanupTestUser)
 test.afterAll(cleanupTestUser)
@@ -24,7 +24,7 @@ test('Конверты: «Отложено» только по конверта�
 
   await login(page)
   await page.goto('/money')
-  await page.getByRole('tab', { name: 'Конверты' }).click()
+  await more(page, 'Конверты и долги')
   await expect(page.getByText('Отложено в конвертах')).toBeVisible()
   await expect(page.getByText('120 €', { exact: true })).toHaveCount(2) // total and the card: 200 − 80, the goal is not counted
   await expect(page.getByRole('progressbar', { name: 'Подушка: накоплено' })).toHaveAttribute('aria-valuenow', '39000')
@@ -44,10 +44,10 @@ test('без Excel: плановая операция, её правка и до
 
   await login(page)
   await page.goto('/money')
-  await page.getByRole('tab', { name: 'Месяц' }).click()
+  await more(page, 'Месяц')
 
-  // a planned expense for today: it joins the plan and asks «Списалось?»
-  await page.getByRole('button', { name: 'Операция', exact: true }).click()
+  // a planned expense for today: «+» in «Месяц» is an operation; it joins the plan and asks «Списалось?»
+  await plus(page)
   const sheet = page.getByRole('dialog', { name: 'Новая операция' })
   await sheet.getByLabel('Название').fill('Miete e2e')
   await sheet.getByLabel('Сумма').fill('650')
@@ -66,8 +66,10 @@ test('без Excel: плановая операция, её правка и до
   await expect(page.getByText(/план на 31\.12 — 400\s€/)).toBeVisible()
 
   // a debt
-  await page.getByRole('tab', { name: 'Конверты' }).click()
-  await page.getByRole('button', { name: 'Долг', exact: true }).click()
+  await page.getByRole('link', { name: 'Назад: Деньги' }).click()
+  await more(page, 'Конверты и долги')
+  await plus(page)
+  await page.getByRole('dialog', { name: 'Добавить' }).getByRole('button', { name: /^Долг/ }).click()
   const debt = page.getByRole('dialog', { name: 'Новый долг' })
   await debt.getByLabel('Кто').fill('Жилец e2e')
   await debt.getByLabel('Сумма долга').fill('100')

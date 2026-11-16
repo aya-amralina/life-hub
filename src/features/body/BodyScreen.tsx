@@ -1,15 +1,17 @@
 import { useState } from 'react'
-import { CalendarClock, Plus, X } from 'lucide-react'
-import { Button, IconButton } from '@/components/ui/Button'
+import { CalendarClock, ChartLine, Dumbbell, Flag, NotebookPen, Pill, Ruler, Stethoscope, X } from 'lucide-react'
+import { Navigate, useParams } from 'react-router'
+import { useAddAction, useOpenAdd } from '@/app/addSheetContext'
+import { IconButton } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Chip } from '@/components/ui/Chip'
 import { EmptyState, SkeletonCard } from '@/components/ui/Feedback'
 import { GroupHeader } from '@/components/ui/GroupHeader'
 import { ProgressBar } from '@/components/ui/ProgressBar'
-import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { Switch } from '@/components/ui/Switch'
 import { WeekSwitcher } from '@/components/ui/WeekSwitcher'
 import { CalendarLink } from '@/components/layout/CalendarLink'
+import { MoreList, SectionHeader, type MoreLink } from '@/components/layout/MoreList'
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
 import { addDaysISO, formatDayMonth, formatRelativeDay, formatWeekdayDate, todayBerlin, weekStart, type ISODate } from '@/lib/dates'
 import { activityPoints, dayPoints, weekPoints, weekPointsTarget } from '@/lib/rules/activities'
@@ -17,7 +19,7 @@ import { careChoice, careDone, careItems, toggleCare } from '@/lib/rules/care'
 import { activeHabits, minimumSet, stageForDate, weekHabitShare } from '@/lib/rules/habits'
 import { isItemOpen, isUpcoming } from '@/lib/rules/items'
 import { plural } from '@/lib/format'
-import { NotesCard } from '@/features/notes/NotesCard'
+import { NotesSection } from '@/features/notes/NotesCard'
 import { useItems, useUpdateItem } from '@/features/items/api'
 import { donePatch, reopenPatch } from '@/features/items/donePatch'
 import { ItemQuestions } from '@/features/items/ItemQuestions'
@@ -34,30 +36,67 @@ import { IntakeTab } from './IntakeTab'
 import { MeasurementsTab } from './MeasurementsTab'
 import { StrengthTab } from './StrengthTab'
 
-const TABS = [
-  { value: 'day', label: 'День' },
-  { value: 'charts', label: 'Графики' },
-  { value: 'strength', label: 'Сила' },
-  { value: 'measure', label: 'Замеры' },
-  { value: 'intake', label: 'Приём' },
-] as const
-type Tab = (typeof TABS)[number]['value']
+const BACK = '/body'
+const SECTIONS = {
+  tasks: 'Задачи и визиты',
+  charts: 'Графики',
+  strength: 'Сила',
+  measure: 'Замеры',
+  intake: 'Приём',
+  stage: 'Этап',
+  notes: 'Справка и заметки',
+} as const
+type Section = keyof typeof SECTIONS
 
+const MORE: readonly MoreLink[] = [
+  { to: '/body/tasks', label: 'Задачи и визиты', icon: Stethoscope },
+  { to: '/body/charts', label: 'Графики', icon: ChartLine },
+  { to: '/body/strength', label: 'Сила', icon: Dumbbell },
+  { to: '/body/measure', label: 'Замеры', icon: Ruler },
+  { to: '/body/intake', label: 'Приём', icon: Pill },
+  { to: '/body/stage', label: 'Этап', icon: Flag },
+  { to: '/body/notes', label: 'Справка и заметки', icon: NotebookPen },
+]
+
+/** Тело: the day on the main view; tasks, charts, journals, the stage and notes one tap deeper. */
 export function BodyScreen() {
-  const [tab, setTab] = useState<Tab>('day')
+  const section = useParams()['*'] ?? ''
+  if (section === '') {
+    return (
+      <>
+        <ScreenHeader title="Тело" right={<CalendarLink sphere="body" />} />
+        <DayTab />
+        <MoreList links={MORE} />
+      </>
+    )
+  }
+  if (!(section in SECTIONS)) return <Navigate to={BACK} replace />
+  const s = section as Section
   return (
     <>
-      <ScreenHeader title="Тело" right={<CalendarLink sphere="body" />} />
-      <SegmentedTabs label="Раздел" segments={TABS} value={tab} onChange={setTab} />
-      {tab === 'day' && <DayTab />}
-      {tab === 'charts' && <BodyCharts />}
-      {tab === 'strength' && <StrengthTab />}
-      {tab === 'measure' && <MeasurementsTab />}
-      {tab === 'intake' && <IntakeTab />}
-      {/* «Справка»: Программа, Питание, Уход, правила гибкости — body notes. */}
-      <NotesCard sphere="body" />
+      <SectionHeader title={SECTIONS[s]} back={BACK} sphere="Тело" right={s === 'tasks' ? <CalendarLink sphere="body" /> : undefined} />
+      {s === 'tasks' && <BodyTasks />}
+      {s === 'charts' && (
+        <>
+          <AddActivity />
+          <WeekShare date={todayBerlin()} />
+          <BodyCharts />
+        </>
+      )}
+      {s === 'strength' && <StrengthTab />}
+      {s === 'measure' && <MeasurementsTab />}
+      {s === 'intake' && <IntakeTab />}
+      {s === 'stage' && <StageCard />}
+      {s === 'notes' && <NotesSection sphere="body" />}
     </>
   )
+}
+
+/** «+» of a section that shows movement: a new activity today. */
+function AddActivity() {
+  const [adding, setAdding] = useState(false)
+  useAddAction(() => setAdding(true))
+  return <ActivitySheet open={adding} onClose={() => setAdding(false)} date={todayBerlin()} />
 }
 
 function DayTab() {
@@ -65,6 +104,9 @@ function DayTab() {
   const [date, setDate] = useState<ISODate>(today)
   const log = useDailyLog(date)
   const minimum = log.data?.minimum_mode ?? false
+  // «+» on the day: an activity on the day shown (in «минимум» too)
+  const [adding, setAdding] = useState(false)
+  useAddAction(() => setAdding(true))
   return (
     <>
       <WeekSwitcher
@@ -88,9 +130,7 @@ function DayTab() {
       )}
       <EveningCard date={date} />
       <DayNoteCard date={date} />
-      <WeekShare date={date} />
-      <BodyTasks />
-      <StageCard />
+      <ActivitySheet open={adding} onClose={() => setAdding(false)} date={date} />
     </>
   )
 }
@@ -139,7 +179,6 @@ function MovementCard({ date }: { date: ISODate }) {
   const activities = useActivities()
   const write = useWrite('activities', bodyDataKeys.activities)
   const { stage } = useStageFor(date)
-  const [adding, setAdding] = useState(false)
   if (types.isPending || activities.isPending) return <SkeletonCard />
   const all = activities.data ?? []
   const typeList = types.data ?? []
@@ -154,7 +193,7 @@ function MovementCard({ date }: { date: ISODate }) {
     <Card>
       <CardHeader title="Движение" dotClass="bg-body" context={today.length ? `скор дня ${num(day)}` : undefined} />
       {today.length === 0 ? (
-        <p className="m-0 text-cap text-ink2">Пока ничего. Прогулка тоже считается.</p>
+        <p className="m-0 text-cap text-ink2">Пока ничего. Прогулка тоже считается — запиши через «+».</p>
       ) : (
         <ul className="m-0 flex list-none flex-col p-0">
           {today.map((a) => {
@@ -174,14 +213,10 @@ function MovementCard({ date }: { date: ISODate }) {
           })}
         </ul>
       )}
-      <Button variant="secondary" onClick={() => setAdding(true)} icon={<Plus size={20} strokeWidth={1.75} className="text-body" aria-hidden="true" />}>
-        Активность
-      </Button>
       <div className="flex flex-col gap-2">
         <div className="text-cap text-ink2 tabular-nums">{target ? `Неделя: ${num(week)} из ${num(target)} ${points(target)}` : `Неделя: ${num(week)} ${points(week)}`}</div>
         {target && <ProgressBar value={Math.min(week, target)} max={target} fillClass="bg-body" label="Очки недели" />}
       </div>
-      <ActivitySheet open={adding} onClose={() => setAdding(false)} date={date} />
     </Card>
   )
 }
@@ -253,11 +288,13 @@ function BodyTasks() {
   const items = useItems()
   const update = useUpdateItem()
   const [soonOpen, setSoonOpen] = useState(false)
-  if (items.isPending) return null
+  const openAdd = useOpenAdd()
+  useAddAction(() => openAdd('body'))
+  if (items.isPending) return <SkeletonCard />
   const body = (items.data ?? []).filter((i) => i.sphere === 'body' && isItemOpen(i))
   const now = body.filter((i) => !isUpcoming(i, today))
   const soon = body.filter((i) => isUpcoming(i, today))
-  if (!body.length) return null
+  if (!body.length) return <EmptyState title="Открытых задач нет">Визит к врачу или покупка к сроку — через «+».</EmptyState>
   return (
     <Card>
       <CardHeader title="Задачи и визиты" dotClass="bg-body" context={`${now.length}`} />
@@ -292,6 +329,8 @@ function BodyTasks() {
 
 function StageCard() {
   const today = todayBerlin()
+  const openAdd = useOpenAdd()
+  useAddAction(() => openAdd('body'))
   const { stages, stage } = useStageFor(today)
   if (stages.isPending) return null
   const list = stages.data ?? []

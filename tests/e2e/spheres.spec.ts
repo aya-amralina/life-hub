@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { NEEDS, cleanupTestUser, live, login, tab } from './helpers'
+import { NEEDS, cleanupTestUser, live, login, more, plus, tab } from './helpers'
 
 test.beforeAll(cleanupTestUser)
 test.afterAll(cleanupTestUser)
@@ -10,11 +10,11 @@ test('Работа: новая задача → смена статуса → в
   await login(page)
   await tab(page, 'Работа')
 
-  await page.getByRole('button', { name: 'Добавить' }).click()
-  const add = page.getByRole('dialog', { name: 'Добавить' })
-  await expect(add.getByRole('button', { name: 'Работа', pressed: true })).toBeVisible() // sphere preselected
-  await add.getByLabel('Что сделать').fill(title)
-  await add.getByRole('button', { name: 'Без даты' }).click()
+  await plus(page) // Работа's own form: a task for the board
+  const add = page.getByRole('dialog', { name: 'Новая задача' })
+  await add.getByLabel('Titel').fill(title)
+  await add.getByRole('button', { name: 'Mittel' }).click()
+  await expect(add.getByRole('button', { name: 'Без срока', pressed: true })).toBeVisible()
   await add.getByRole('button', { name: 'Сохранить' }).click()
 
   const offen = page.getByRole('region', { name: 'Offen' })
@@ -26,16 +26,19 @@ test('Работа: новая задача → смена статуса → в
   await expect(page.getByText(title)).toBeVisible()
 })
 
-test('Учёба: пункт на сегодня попадает в неделю, «готово к» и чекбокс', async ({ page }) => {
+test('Учёба: пункт из «+» встаёт в эту неделю, чекбокс', async ({ page }) => {
   test.skip(!live, NEEDS)
   const title = `e2e HA ${Date.now()}`
   await login(page)
   await tab(page, 'Учёба')
   await expect(page.getByText(/пока пустой/)).toBeVisible()
 
-  await page.getByRole('button', { name: 'Добавить' }).click()
-  const add = page.getByRole('dialog', { name: 'Добавить' })
-  await add.getByLabel('Что сделать').fill(title)
+  await plus(page)
+  const add = page.getByRole('dialog', { name: 'Пункт учёбы' })
+  await add.getByLabel('Что закрыть').fill(title)
+  await expect(add.getByRole('button', { name: /^Эта/, pressed: true })).toBeVisible()
+  await add.getByRole('button', { name: 'Больше на полчаса' }).click()
+  await expect(add.getByText('1,5\u00a0ч')).toBeVisible()
   await add.getByRole('button', { name: 'Сохранить' }).click()
 
   const box = page.getByRole('checkbox', { name: title })
@@ -47,14 +50,15 @@ test('Учёба: пункт на сегодня попадает в недел�
   await expect(box).toHaveAttribute('aria-checked', 'true')
 })
 
-test('Заметка из «+» появляется в сфере', async ({ page }) => {
+test('Заметка из «+» в разделе заметок сферы', async ({ page }) => {
   test.skip(!live, NEEDS)
   const title = `e2e заметка ${Date.now()}`
   await login(page)
   await tab(page, 'Тело')
-  await page.getByRole('button', { name: 'Добавить' }).click()
-  const add = page.getByRole('dialog', { name: 'Добавить' })
-  await add.getByRole('tab', { name: 'Заметка' }).click()
+  await more(page, 'Справка и заметки')
+  await expect(page.getByText('Заметок пока нет')).toBeVisible()
+  await plus(page)
+  const add = page.getByRole('dialog', { name: 'Заметка' })
   await expect(add.getByRole('button', { name: 'Тело', pressed: true })).toBeVisible() // sphere of the current screen
   await add.getByLabel('Заметка', { exact: true }).fill(`${title}\nподробности`)
   await add.getByRole('button', { name: 'Сохранить' }).click()

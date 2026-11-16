@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus } from 'lucide-react'
+import { useAddAction } from '@/app/addSheetContext'
 import { useToast } from '@/app/toastContext'
 import { BottomSheet } from '@/components/ui/BottomSheet'
 import { Button } from '@/components/ui/Button'
@@ -16,18 +16,16 @@ const field = 'h-12 w-full rounded-xl border border-line2 bg-card px-4 text-base
 export function StrengthTab() {
   const sets = useStrengthSets()
   const [adding, setAdding] = useState(false)
+  useAddAction(() => setAdding(true))
   if (sets.isPending) return <SkeletonCard />
   const list = sets.data ?? []
   const days = [...new Set(list.map((s) => s.date))]
   return (
     <>
-      <Button onClick={() => setAdding(true)} icon={<Plus size={20} strokeWidth={1.75} aria-hidden="true" />}>
-        Записать упражнение
-      </Button>
       {days.length === 0 ? (
         <section className="flex flex-col gap-1 rounded-2xl border border-dashed border-line2 p-4">
           <div className="text-base font-semibold">Журнал пока пустой</div>
-          <p className="m-0 text-cap text-ink2">Записей пока нет. Первую тренировку можно записать сразу.</p>
+          <p className="m-0 text-cap text-ink2">Записей пока нет. Первую тренировку — через «+».</p>
         </section>
       ) : (
         days.slice(0, 20).map((d) => {

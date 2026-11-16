@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { NEEDS, cleanupTestUser, live, login, tab } from './helpers'
+import { NEEDS, cleanupTestUser, live, login, plus, tab } from './helpers'
 
 test.beforeAll(cleanupTestUser)
 test.afterAll(cleanupTestUser)
@@ -18,9 +18,8 @@ test('лимиты недели, быстрая трата за 3 тапа, «О
   await expect(page.getByText('из 26 €')).toBeVisible()
 
   // «+» → 4,60 → Кофейни: saved at once
-  await page.getByRole('button', { name: 'Добавить' }).click()
-  const add = page.getByRole('dialog', { name: 'Добавить' })
-  await expect(add.getByRole('tab', { name: 'Трата', selected: true })).toBeVisible()
+  await plus(page) // on Деньги «+» is an expense right away
+  const add = page.getByRole('dialog', { name: 'Трата' })
   for (const k of ['4', ',', '6']) await add.getByRole('button', { name: k, exact: true }).click()
   await add.getByRole('button', { name: /^Кофейни и перекусы/ }).click()
   await expect(add).toBeHidden()
@@ -29,7 +28,7 @@ test('лимиты недели, быстрая трата за 3 тапа, «О
   await expect(page.getByText(/осталось 21,40/)).toBeVisible()
 
   // Second expense pushes Кофейни over the limit → amber caption
-  await page.getByRole('button', { name: 'Добавить' }).click()
+  await plus(page)
   for (const k of ['3']) await add.getByRole('button', { name: k, exact: true }).click()
   await add.getByRole('button', { name: /^Кофейни и перекусы/ }).click()
   await expect(page.getByText('+1,60 € сверх лимита')).toBeVisible()

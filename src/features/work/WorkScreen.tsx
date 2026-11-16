@@ -1,8 +1,8 @@
 import { lazy, Suspense, useState } from 'react'
-import { useNavigate } from 'react-router'
-import { CalendarClock, Check, Hourglass, Pause, Plus } from 'lucide-react'
+import { Navigate, useNavigate, useParams } from 'react-router'
+import { CalendarClock, Check, Hourglass, NotebookPen, Pause, Plus, Trophy, Users } from 'lucide-react'
 import { useToast } from '@/app/toastContext'
-import { useOpenAdd } from '@/app/addSheetContext'
+import { useAddAction, useOpenAdd } from '@/app/addSheetContext'
 import { BottomSheet } from '@/components/ui/BottomSheet'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
@@ -10,9 +10,10 @@ import { EmptyState, SkeletonCard } from '@/components/ui/Feedback'
 import { FilterChips } from '@/components/ui/FilterChips'
 import { GroupHeader } from '@/components/ui/GroupHeader'
 import { MetaChip } from '@/components/ui/MetaChip'
-import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
+import { SaveError, TextField } from '@/components/ui/Form'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { CalendarLink } from '@/components/layout/CalendarLink'
+import { MoreList, SectionHeader, type MoreLink } from '@/components/layout/MoreList'
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
 import { useView } from '@/components/layout/useView'
 import { ViewToggle } from '@/components/layout/ViewToggle'
@@ -25,7 +26,7 @@ import { daysBetween, formatWeekdayDate, todayBerlin, type ISODate } from '@/lib
 import { plural } from '@/lib/format'
 import { deadlineChip } from '@/lib/rules/items'
 import { boardGroups, fridayQueue, isErfolg, nachhaken, statusAltDays, type BoardGroupKey } from '@/lib/rules/work'
-import { NotesCard } from '@/features/notes/NotesCard'
+import { NotesSection } from '@/features/notes/NotesCard'
 import { useItems, useUpdateItem, type Item } from '@/features/items/api'
 import { ItemQuestions } from '@/features/items/ItemQuestions'
 import { useAddPerson, usePeople } from './api'
@@ -34,51 +35,59 @@ import { StatusSheet } from './StatusSheet'
 import { WorkRow } from './WorkRow'
 import { statusPatch } from './statusPatch'
 
-const TABS = [
-  { value: 'board', label: 'Доска' },
-  { value: 'people', label: 'Люди' },
-  { value: 'archive', label: 'Архив' },
-] as const
-type Tab = (typeof TABS)[number]['value']
-
-const field = 'h-12 w-full rounded-xl border border-line2 bg-card px-4 text-base text-ink outline-none focus:border-ink2'
 
 // the table and its logic load only when it is opened (laptop)
 const WorkTable = lazy(() => import('./WorkTable').then((m) => ({ default: m.WorkTable })))
 
+const BACK = '/work'
+const SECTIONS = { people: 'Люди', archive: 'Архив и Erfolge', notes: 'Заметки' } as const
+type Section = keyof typeof SECTIONS
+
+const MORE: readonly MoreLink[] = [
+  { to: '/work/people', label: 'Люди', icon: Users, hint: 'bei wem nachhaken' },
+  { to: '/work/archive', label: 'Архив и Erfolge', icon: Trophy },
+  { to: '/work/notes', label: 'Заметки', icon: NotebookPen },
+]
+
+/** Работа: the board on the main view; people, archive with Erfolge and notes one tap deeper. */
 export function WorkScreen() {
-  const [tab, setTab] = useState<Tab>('board')
+  const section = useParams()['*'] ?? ''
   const [view, setView, desktop] = useView('work')
-  useWideLayout(view === 'table')
-  const header = (
-    <ScreenHeader
-      title="Работа"
-      right={
-        <div className="flex items-center gap-2">
-          {desktop && <ViewToggle view={view} onChange={setView} />}
-          <CalendarLink sphere="work" />
-        </div>
-      }
-    />
-  )
-  if (view === 'table') {
+  const table = section === '' && view === 'table'
+  useWideLayout(table)
+  if (section !== '') {
+    if (!(section in SECTIONS)) return <Navigate to={BACK} replace />
+    const s = section as Section
     return (
       <>
-        {header}
-        <Suspense fallback={<SkeletonCard />}>
-          <WorkTable />
-        </Suspense>
+        <SectionHeader title={SECTIONS[s]} back={BACK} sphere="Работа" />
+        {s === 'people' && <PeopleTab />}
+        {s === 'archive' && <ArchiveTab />}
+        {s === 'notes' && <NotesSection sphere="work" />}
       </>
     )
   }
   return (
     <>
-      {header}
-      <SegmentedTabs label="Раздел" segments={TABS} value={tab} onChange={setTab} />
-      {tab === 'board' && <BoardTab />}
-      {tab === 'people' && <PeopleTab />}
-      {tab === 'archive' && <ArchiveTab />}
-      <NotesCard sphere="work" />
+      <ScreenHeader
+        title="Работа"
+        right={
+          <div className="flex items-center gap-2">
+            {desktop && <ViewToggle view={view} onChange={setView} />}
+            <CalendarLink sphere="work" />
+          </div>
+        }
+      />
+      {table ? (
+        <Suspense fallback={<SkeletonCard />}>
+          <WorkTable />
+        </Suspense>
+      ) : (
+        <>
+          <BoardTab />
+          <MoreList links={MORE} />
+        </>
+      )}
     </>
   )
 }
@@ -119,6 +128,7 @@ function BoardTab() {
   const items = useItems()
   const navigate = useNavigate()
   const openAdd = useOpenAdd()
+  useAddAction(() => openAdd('work'))
   const setStatus = useSetStatus()
   const [picking, setPicking] = useState<Item | null>(null)
   const [area, setArea] = useState<string[]>([])
@@ -133,7 +143,7 @@ function BoardTab() {
       <EmptyState title="Доска пустая">
         <span className="flex flex-col items-start gap-3">
           Новая задача — через «+». Хватит названия, остальное потом.
-          <Button variant="secondary" onClick={() => openAdd('item', { sphere: 'work' })}>
+          <Button variant="secondary" onClick={() => openAdd('work')}>
             Новая задача
           </Button>
         </span>
@@ -302,9 +312,8 @@ function PeopleTab() {
   const today = todayBerlin()
   const items = useItems()
   const people = usePeople()
-  const add = useAddPerson()
-  const [name, setName] = useState('')
-  const [role, setRole] = useState('')
+  const [adding, setAdding] = useState(false)
+  useAddAction(() => setAdding(true))
   if (items.isPending || people.isPending) return <SkeletonCard />
   const work = (items.data ?? []).filter((i) => i.sphere === 'work')
   const names = (people.data ?? []).map((p) => p.name)
@@ -334,7 +343,7 @@ function PeopleTab() {
       </Card>
       <Card>
         <CardHeader title="Люди" context={names.length ? `${names.length}` : undefined} />
-        {names.length === 0 && <p className="m-0 text-cap text-ink2">Списка пока нет. Добавь первое имя.</p>}
+        {names.length === 0 && <p className="m-0 text-cap text-ink2">Списка пока нет. Первое имя — через «+».</p>}
         <ul className="m-0 flex list-none flex-col p-0">
           {(people.data ?? []).map((p) => {
             const open = work.filter((i) => i.people.includes(p.name) || (i.waiting_on ?? '').includes(p.name)).filter((i) => i.status !== 'Erledigt' && i.status !== 'Verworfen').length
@@ -356,27 +365,43 @@ function PeopleTab() {
             )
           })}
         </ul>
-        <form
-          className="flex flex-col gap-2"
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (!name.trim()) return
-            add.mutate({ name: name.trim(), role: role.trim() || null }, {
-                onSuccess: () => {
-                  setName('')
-                  setRole('')
-                },
-              })
-          }}
-        >
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Имя" aria-label="Имя" lang="de" className={field} />
-          <input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Роль" aria-label="Роль" lang="de" className={field} />
-          <Button type="submit" variant="secondary" disabled={!name.trim() || add.isPending} icon={<Plus size={20} strokeWidth={1.75} aria-hidden="true" />}>
-            Добавить человека
-          </Button>
-        </form>
       </Card>
+      <PersonSheet open={adding} onClose={() => setAdding(false)} />
     </>
+  )
+}
+
+function PersonSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const add = useAddPerson()
+  const [name, setName] = useState('')
+  const [role, setRole] = useState('')
+  return (
+    <BottomSheet open={open} onClose={onClose} label="Новый человек">
+      <form
+        className="flex flex-col gap-6"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (!name.trim()) return
+          add.mutate(
+            { name: name.trim(), role: role.trim() || null },
+            {
+              onSuccess: () => {
+                setName('')
+                setRole('')
+                onClose()
+              },
+            },
+          )
+        }}
+      >
+        <TextField label="Имя" autoFocus value={name} onChange={(e) => setName(e.target.value)} lang="de" />
+        <TextField label="Роль" value={role} onChange={(e) => setRole(e.target.value)} lang="de" />
+        <SaveError show={add.isError} />
+        <Button type="submit" disabled={!name.trim() || add.isPending}>
+          Сохранить
+        </Button>
+      </form>
+    </BottomSheet>
   )
 }
 
@@ -387,6 +412,7 @@ function ArchiveTab() {
   const navigate = useNavigate()
   const [adding, setAdding] = useState(false)
   const [showDone, setShowDone] = useState(false)
+  useAddAction(() => setAdding(true))
   if (items.isPending) return <SkeletonCard />
   const work = (items.data ?? []).filter((i) => i.sphere === 'work')
   const erfolge = work
@@ -456,9 +482,6 @@ function ArchiveTab() {
               ))}
             </ul>
           </Card>
-          <Button variant="secondary" onClick={() => setAdding(true)} icon={<Plus size={20} strokeWidth={1.75} aria-hidden="true" />}>
-            Записать Erfolg
-          </Button>
         </>
       )}
       <Card>

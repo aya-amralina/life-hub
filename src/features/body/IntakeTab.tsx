@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Pill, Plus } from 'lucide-react'
+import { useAddAction } from '@/app/addSheetContext'
+import { Pill } from 'lucide-react'
 import { useToast } from '@/app/toastContext'
 import { BottomSheet } from '@/components/ui/BottomSheet'
 import { Button } from '@/components/ui/Button'
@@ -22,6 +23,7 @@ export function IntakeTab() {
   const write = useWrite('intake', bodyDataKeys.intake)
   const toast = useToast()
   const [adding, setAdding] = useState(false)
+  useAddAction(() => setAdding(true))
   const [archiveOpen, setArchiveOpen] = useState(false)
   if (intake.isPending) return <SkeletonCard />
   const list = intake.data ?? []
@@ -61,9 +63,6 @@ export function IntakeTab() {
           </p>
         )}
       </Card>
-      <Button variant="secondary" onClick={() => setAdding(true)} icon={<Plus size={20} strokeWidth={1.75} aria-hidden="true" />}>
-        Добавить приём
-      </Button>
       {archive.length > 0 && (
         <Card>
           <GroupHeader title="Архив" count={archive.length} open={archiveOpen} onToggle={() => setArchiveOpen(!archiveOpen)} />

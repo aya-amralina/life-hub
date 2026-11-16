@@ -11,6 +11,22 @@ export async function tab(page: Page, name: 'Сегодня' | 'Деньги' | 
   await page.getByRole('navigation', { name: 'Разделы' }).getByRole('link', { name, exact: true }).click()
 }
 
+/** Open a section of the current sphere from its «Ещё» list (a row may carry a hint after the name). */
+export async function more(page: Page, name: string) {
+  await page.getByRole('navigation', { name: 'Ещё' }).getByRole('link', { name: new RegExp(`^${name}`) }).click()
+}
+
+/** «+» of the current screen. */
+export async function plus(page: Page) {
+  await page.getByRole('button', { name: 'Добавить', exact: true }).click()
+}
+
+/** «+» on «Сегодня» → the chooser → one of its forms (e.g. 'Дело'). */
+export async function addFromToday(page: Page, choice: string) {
+  await plus(page)
+  await page.getByRole('dialog', { name: 'Добавить' }).getByRole('button', { name: new RegExp(`^${choice}`) }).click()
+}
+
 export async function login(page: Page) {
   await page.goto('/login')
   await page.getByLabel('E-mail').fill(user!.email)

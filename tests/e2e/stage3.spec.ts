@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { NEEDS, berlinDate, berlinMonday, cleanupTestUser, live, login, tab, testClient } from './helpers'
+import { NEEDS, addFromToday, berlinDate, berlinMonday, cleanupTestUser, live, login, more, tab, testClient } from './helpers'
 
 test.beforeEach(cleanupTestUser)
 test.afterAll(cleanupTestUser)
@@ -19,7 +19,7 @@ test('«Списалось?»: плановый расход в свой ден�
   await expect(card).toBeHidden()
 
   await tab(page, 'Деньги')
-  await page.getByRole('tab', { name: 'Месяц' }).click()
+  await more(page, 'Месяц')
   await expect(page.getByText(/^факт/).first()).toBeVisible()
   await expect(page.getByRole('region', { name: 'Списалось? Miete e2e' })).toBeHidden()
 })
@@ -43,9 +43,8 @@ test('карточка пункта: дедлайн → «С даты» убир
   test.skip(!live, NEEDS)
   const title = `e2e срок ${Date.now()}`
   await login(page)
-  await page.getByRole('button', { name: 'Добавить' }).click()
-  const add = page.getByRole('dialog', { name: 'Добавить' })
-  await add.getByRole('tab', { name: 'Пункт' }).click()
+  await addFromToday(page, 'Дело')
+  const add = page.getByRole('dialog', { name: 'Новое дело' })
   await add.getByLabel('Что сделать').fill(title)
   await add.getByRole('button', { name: 'Сохранить' }).click()
   await expect(add).toBeHidden()

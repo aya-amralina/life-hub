@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react'
-import { useOpenAdd } from '@/app/addSheetContext'
+import { CalendarRange, ChevronRight, Hourglass, NotebookPen, Pencil, PiggyBank, Trash2 } from 'lucide-react'
+import { Link, Navigate, useParams } from 'react-router'
+import { useAddAction, useOpenAdd } from '@/app/addSheetContext'
 import { useToast } from '@/app/toastContext'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
@@ -9,12 +10,12 @@ import { ProgressBar } from '@/components/ui/ProgressBar'
 import { Swipeable } from '@/components/ui/Swipeable'
 import { WeekSwitcher } from '@/components/ui/WeekSwitcher'
 import { CalendarLink } from '@/components/layout/CalendarLink'
+import { MoreList, SectionHeader, type MoreLink } from '@/components/layout/MoreList'
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
 import { addDaysISO, formatDayMonth, formatRelativeDay, todayBerlin, weekStart } from '@/lib/dates'
 import { formatAmount, formatEur, plural, toCents } from '@/lib/format'
 import { plannedQuestions, weekSpendings } from '@/lib/rules/money'
-import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
-import { NotesCard } from '@/features/notes/NotesCard'
+import { NotesSection } from '@/features/notes/NotesCard'
 import { useAddExpense, useAllTransactions, useDeleteTransaction, useWeekLimits, type Transaction } from './api'
 import { CutNextWeek } from './CutNextWeek'
 import { EnvelopesTab } from './EnvelopesTab'
@@ -25,44 +26,62 @@ import { MonthTab } from './MonthTab'
 import { WishlistTab } from './WishlistTab'
 import { useMoneyWeek } from './useMoneyWeek'
 
-const TABS = [
-  { value: 'week', label: 'Неделя' },
-  { value: 'month', label: 'Месяц' },
-  { value: 'envelopes', label: 'Конверты' },
-  { value: 'wishes', label: 'Хотелки' },
-] as const
-type Tab = (typeof TABS)[number]['value']
+const BACK = '/money'
+const SECTIONS = {
+  month: 'Месяц',
+  envelopes: 'Конверты и долги',
+  wishes: 'Хотелки',
+  notes: 'Заметки',
+} as const
+type Section = keyof typeof SECTIONS
 
+const MORE: readonly MoreLink[] = [
+  { to: '/money/month', label: 'Месяц', icon: CalendarRange, hint: 'план и баланс' },
+  { to: '/money/envelopes', label: 'Конверты и долги', icon: PiggyBank },
+  { to: '/money/wishes', label: 'Хотелки', icon: Hourglass },
+  { to: '/money/notes', label: 'Заметки', icon: NotebookPen },
+]
+
+/** Деньги: the week on the main view; month, envelopes, wishes and notes one tap deeper («Ещё»). */
 export function MoneyScreen() {
-  const [tab, setTab] = useState<Tab>('week')
+  const section = useParams()['*'] ?? ''
+  if (section === '') {
+    return (
+      <>
+        <ScreenHeader title="Деньги" right={<CalendarLink sphere="money" />} />
+        {/* the questions themselves — on the week (and «Сегодня»); sections only say that some are waiting */}
+        <MoneyQuestions />
+        <WeekTab />
+        <MoreList links={MORE} />
+      </>
+    )
+  }
+  if (!(section in SECTIONS)) return <Navigate to={BACK} replace />
+  const s = section as Section
   return (
     <>
-      <ScreenHeader title="Деньги" right={<CalendarLink sphere="money" />} />
-      <SegmentedTabs label="Раздел" segments={TABS} value={tab} onChange={setTab} />
-      {/* the questions themselves — on «Неделя» (and «Сегодня»); other tabs only say that some are waiting */}
-      {tab === 'week' ? <MoneyQuestions /> : <PendingLink onOpen={() => (setTab('week'), window.scrollTo({ top: 0 }))} />}
-      {tab === 'week' && <WeekTab />}
-      {tab === 'month' && <MonthTab />}
-      {tab === 'envelopes' && <EnvelopesTab />}
-      {tab === 'wishes' && <WishlistTab />}
-      {/* Pinned «Правила» and other money notes. */}
-      <NotesCard sphere="money" />
+      <SectionHeader title={SECTIONS[s]} back={BACK} sphere="Деньги" right={s === 'month' ? <CalendarLink sphere="money" /> : undefined} />
+      {(s === 'month' || s === 'envelopes') && <PendingLink />}
+      {s === 'month' && <MonthTab />}
+      {s === 'envelopes' && <EnvelopesTab />}
+      {s === 'wishes' && <WishlistTab />}
+      {s === 'notes' && <NotesSection sphere="money" />}
     </>
   )
 }
 
-function PendingLink({ onOpen }: { onOpen: () => void }) {
+function PendingLink() {
   const txs = useAllTransactions()
   const n = plannedQuestions(txs.data ?? [], todayBerlin()).length
   if (n === 0) return null
   return (
-    <button type="button" onClick={onOpen} className="flex min-h-11 items-center gap-2 rounded-xl bg-sub px-4 text-left text-base active:bg-line2">
+    <Link to={BACK} className="flex min-h-11 items-center gap-2 rounded-xl bg-sub px-4 text-left text-base text-ink no-underline active:bg-line2">
       <span className="size-2 flex-none rounded-full bg-money" />
       <span className="min-w-0 flex-1">
         {plural(n, ['Ждёт', 'Ждут', 'Ждут'])} подтверждения · <span className="font-semibold tabular-nums">{n}</span>
       </span>
       <ChevronRight size={20} strokeWidth={1.75} aria-hidden="true" className="flex-none text-ink3" />
-    </button>
+    </Link>
   )
 }
 
@@ -74,6 +93,7 @@ function WeekTab() {
   const { week, txs, summary, pending } = useMoneyWeek(monday)
   const limits = useWeekLimits(week?.id ?? null)
   const openAdd = useOpenAdd()
+  useAddAction(() => openAdd('expense'))
   const spendings = weekSpendings(txs, monday)
 
   return (
@@ -131,12 +151,6 @@ function WeekTab() {
         </>
       )}
 
-      {monday === thisMonday && (
-        <Button variant="secondary" icon={<Plus size={20} strokeWidth={1.75} className="text-money" aria-hidden="true" />} onClick={() => openAdd('expense')}>
-          Трата
-        </Button>
-      )}
-
       <Card>
         <CardHeader title="Траты недели" context={spendings.list.length ? formatEur(spendings.limitCents) : undefined} />
         {spendings.list.length === 0 ? (
@@ -150,7 +164,6 @@ function WeekTab() {
                 </li>
               ))}
             </ul>
-            <p className="m-0 text-cap text-ink2">Только то, что идёт в лимит недели. Свою трату убирает свайп влево или тап по строке.</p>
           </>
         )}
       </Card>
