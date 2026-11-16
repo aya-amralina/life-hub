@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { write } from '@/app/offlineQueue'
 import { supabase } from '@/lib/supabase'
+import { fetchAllPages } from '@/lib/paging'
 import type { Tables, TablesInsert, TablesUpdate } from '@/lib/db/types'
 
 export type Item = Pick<
@@ -43,19 +44,21 @@ export type FullItem = Tables<'items'>
 
 export const itemKeys = { all: ['items'] as const, one: (id: string) => ['items', 'one', id] as const }
 
-/** All items (a few hundred at most) — every sphere screen derives its view from this one cache. */
+/** All items — every sphere screen derives its view from this one cache. */
 export function useItems() {
   return useQuery({
     queryKey: itemKeys.all,
     queryFn: async (): Promise<Item[]> => {
-      const { data, error } = await supabase
-        .from('items')
-        .select(LIST_FIELDS)
-        .order('sort_order')
-        .order('due_date', { ascending: true, nullsFirst: false })
-        .limit(5000)
-      if (error) throw error
-      return data
+      // paged past max_rows (1000); id keeps the order (and so the pages) stable
+      return fetchAllPages((from, to) =>
+        supabase
+          .from('items')
+          .select(LIST_FIELDS)
+          .order('sort_order')
+          .order('due_date', { ascending: true, nullsFirst: false })
+          .order('id')
+          .range(from, to),
+      )
     },
   })
 }

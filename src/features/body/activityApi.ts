@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { write } from '@/app/offlineQueue'
 import { supabase } from '@/lib/supabase'
+import { fetchAllPages } from '@/lib/paging'
 import type { Tables, TablesInsert, TablesUpdate } from '@/lib/db/types'
 
 export type ActivityType = Tables<'activity_types'>
@@ -22,9 +23,9 @@ function useList<T>(key: readonly string[], table: 'activity_types' | 'activitie
   return useQuery({
     queryKey: key,
     queryFn: async (): Promise<T[]> => {
-      const { data, error } = await supabase.from(table).select('*').order(order, { ascending }).limit(5000)
-      if (error) throw error
-      return data as T[]
+      // paged past max_rows (1000): strength sets alone grow by ~2000 a year
+      const rows = await fetchAllPages((from, to) => supabase.from(table).select('*').order(order, { ascending }).order('id').range(from, to))
+      return rows as T[]
     },
   })
 }

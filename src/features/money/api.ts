@@ -191,9 +191,7 @@ export function useActualBalances() {
   return useQuery({
     queryKey: [...moneyKeys.all, 'actual_balances'] as const,
     queryFn: async (): Promise<ActualBalance[]> => {
-      const { data, error } = await supabase.from('actual_balances').select('*').order('date', { ascending: false }).limit(2000)
-      if (error) throw error
-      return data
+      return fetchAllPages((from, to) => supabase.from('actual_balances').select('*').order('date', { ascending: false }).order('id').range(from, to))
     },
   })
 }
