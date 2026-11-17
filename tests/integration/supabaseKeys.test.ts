@@ -135,3 +135,41 @@ describe.skipIf(!ready)('live: stage 3 tables — the test user writes and clean
     await sb.auth.signOut()
   })
 })
+
+describe.skipIf(!ready)('live: recurring rules and the plan amount (migrations 0014, 0015)', () => {
+  it('one row per occurrence, a deleted rule leaves its rows as plain operations, schema checks hold', async () => {
+    const sb = createClient(url!, publishable!, noSession)
+    expect((await sb.auth.signInWithPassword(user!)).error).toBeNull()
+    const ids: string[] = []
+    try {
+      // an end before the first date and an interval of 0 are refused
+      expect((await sb.from('recurring').insert({ title: 'it', amount_eur: 1, kind: 'expense', freq: 'monthly', anchor_date: '2026-12-01', end_date: '2026-11-30' })).error?.code).toBe('23514')
+      expect((await sb.from('recurring').insert({ title: 'it', amount_eur: 1, kind: 'expense', freq: 'monthly', interval_n: 0, anchor_date: '2026-12-01' })).error?.code).toBe('23514')
+
+      const rule = await sb.from('recurring').insert({ title: 'it-rule', amount_eur: 10, kind: 'expense', freq: 'monthly', anchor_date: '2026-12-01' }).select('id, interval_n, active').single()
+      expect(rule.error).toBeNull()
+      expect(rule.data).toMatchObject({ interval_n: 1, active: true })
+      const ruleId = rule.data!.id
+
+      const row = { title: 'it-rule', amount_eur: 10, kind: 'expense', is_planned: true, recurring_id: ruleId, occurrence_date: '2026-12-01' }
+      const first = await sb.from('transactions').insert({ ...row, date: '2026-12-01', confirmed_at: new Date().toISOString(), planned_amount_eur: 10 }).select('id, planned_amount_eur').single()
+      expect(first.error).toBeNull()
+      ids.push(first.data!.id)
+      expect(Number(first.data!.planned_amount_eur)).toBe(10)
+      // the same occurrence again — even moved to another day — is refused
+      expect((await sb.from('transactions').insert({ ...row, date: '2026-12-03' })).error?.code).toBe('23505')
+      // a link needs its occurrence; the plan amount is above zero
+      expect((await sb.from('transactions').insert({ ...row, date: '2026-12-01', occurrence_date: null })).error?.code).toBe('23514')
+      expect((await sb.from('transactions').insert({ title: 'it', amount_eur: 1, kind: 'expense', date: '2026-12-01', planned_amount_eur: 0 })).error?.code).toBe('23514')
+
+      // deleting the rule keeps the answered row as a plain operation
+      expect((await sb.from('recurring').delete().eq('id', ruleId)).error).toBeNull()
+      const after = await sb.from('transactions').select('recurring_id, occurrence_date').eq('id', first.data!.id).single()
+      expect(after.data).toEqual({ recurring_id: null, occurrence_date: '2026-12-01' })
+    } finally {
+      for (const id of ids) await sb.from('transactions').delete().eq('id', id)
+      await sb.from('recurring').delete().eq('title', 'it-rule')
+      await sb.auth.signOut()
+    }
+  })
+})
