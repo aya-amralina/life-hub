@@ -679,6 +679,74 @@ export type Database = {
         }
         Relationships: []
       }
+      recurring: {
+        Row: {
+          account: string | null
+          active: boolean
+          amount_eur: number
+          anchor_date: string
+          created_at: string
+          end_date: string | null
+          envelope_id: string | null
+          freq: string
+          grp: string | null
+          id: string
+          interval_n: number
+          kind: string
+          note: string | null
+          source_id: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account?: string | null
+          active?: boolean
+          amount_eur: number
+          anchor_date: string
+          created_at?: string
+          end_date?: string | null
+          envelope_id?: string | null
+          freq: string
+          grp?: string | null
+          id?: string
+          interval_n?: number
+          kind: string
+          note?: string | null
+          source_id?: string | null
+          title: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          account?: string | null
+          active?: boolean
+          amount_eur?: number
+          anchor_date?: string
+          created_at?: string
+          end_date?: string | null
+          envelope_id?: string | null
+          freq?: string
+          grp?: string | null
+          id?: string
+          interval_n?: number
+          kind?: string
+          note?: string | null
+          source_id?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_envelope_id_fkey"
+            columns: ["envelope_id"]
+            isOneToOne: false
+            referencedRelation: "envelopes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reviews: {
         Row: {
           answers: Json
@@ -791,7 +859,9 @@ export type Database = {
           is_planned: boolean
           kind: string
           note: string | null
+          occurrence_date: string | null
           planned_amount_eur: number | null
+          recurring_id: string | null
           source_id: string | null
           title: string
           updated_at: string
@@ -814,7 +884,9 @@ export type Database = {
           is_planned?: boolean
           kind: string
           note?: string | null
+          occurrence_date?: string | null
           planned_amount_eur?: number | null
+          recurring_id?: string | null
           source_id?: string | null
           title: string
           updated_at?: string
@@ -837,7 +909,9 @@ export type Database = {
           is_planned?: boolean
           kind?: string
           note?: string | null
+          occurrence_date?: string | null
           planned_amount_eur?: number | null
+          recurring_id?: string | null
           source_id?: string | null
           title?: string
           updated_at?: string
@@ -857,6 +931,13 @@ export type Database = {
             columns: ["envelope_id"]
             isOneToOne: false
             referencedRelation: "envelopes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_recurring_id_fkey"
+            columns: ["recurring_id"]
+            isOneToOne: false
+            referencedRelation: "recurring"
             referencedColumns: ["id"]
           },
         ]

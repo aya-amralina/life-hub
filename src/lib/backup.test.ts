@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BACKUP_FORMAT, parseBackup, restorePlan, restoreRow, toCsv, type Backup } from './backup'
+import { BACKUP_FORMAT, BACKUP_TABLES, BACKUP_VERSION, parseBackup, restorePlan, restoreRow, toCsv, type Backup } from './backup'
 
 const backup: Backup = {
   format: BACKUP_FORMAT,
@@ -19,9 +19,23 @@ describe('backup', () => {
     expect(parseBackup(JSON.stringify(backup)).ok).toBe(true)
     expect(parseBackup('nope')).toEqual({ ok: false, reason: 'Это не JSON-файл.' })
     expect(parseBackup('{"format":"x"}')).toEqual({ ok: false, reason: 'Это не экспорт Life Hub.' })
-    expect(parseBackup(JSON.stringify({ ...backup, version: 2 })).ok).toBe(false)
+    expect(parseBackup(JSON.stringify({ ...backup, version: 3 }))).toEqual({ ok: false, reason: 'Версия файла 3 — читаются версии 1–2.' })
     expect(parseBackup(JSON.stringify({ ...backup, tables: { secrets: [] } }))).toEqual({ ok: false, reason: 'Неизвестная таблица «secrets».' })
     expect(parseBackup(JSON.stringify({ ...backup, tables: { items: [{ title: 'no id' }] } })).ok).toBe(false)
+  })
+  it('v2 carries recurring rules; a v1 file (before them) is still read, but never with that table', () => {
+    expect(BACKUP_VERSION).toBe(2)
+    const v1 = { ...backup, version: 1 }
+    expect(parseBackup(JSON.stringify(v1)).ok).toBe(true)
+    expect(parseBackup(JSON.stringify({ ...v1, tables: { recurring: [{ id: 'r1' }] } }))).toEqual({ ok: false, reason: 'Неизвестная таблица «recurring».' })
+    expect(parseBackup(JSON.stringify({ ...backup, version: 2, tables: { recurring: [{ id: 'r1' }] } })).ok).toBe(true)
+  })
+  it('rules restore after envelopes and before the operations that point to them', () => {
+    const order = BACKUP_TABLES as readonly string[]
+    expect(order.indexOf('recurring')).toBeGreaterThan(order.indexOf('envelopes'))
+    expect(order.indexOf('recurring')).toBeLessThan(order.indexOf('transactions'))
+    const v2: Backup = { ...backup, version: 2, tables: { transactions: [{ id: 't1', recurring_id: 'r1' }], recurring: [{ id: 'r1' }] } }
+    expect(restorePlan(v2, {}).map((l) => l.table)).toEqual(['recurring', 'transactions'])
   })
   it('restore preview: rows in the file, updated by id, new — parents first', () => {
     expect(restorePlan(backup, { items: new Set(['i1']) })).toEqual([

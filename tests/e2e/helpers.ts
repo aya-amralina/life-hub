@@ -40,6 +40,7 @@ const TABLES = [
   'week_limits',
   'actual_balances',
   'transactions',
+  'recurring',
   'debts',
   'items',
   'daily_logs',

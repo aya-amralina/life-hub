@@ -31,6 +31,7 @@ const TABLES = [
   'import_baseline',
   'debts',
   'actual_balances',
+  'recurring',
 ] as const
 
 async function adminFindUserId(email: string): Promise<string | undefined> {

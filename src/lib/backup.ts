@@ -7,6 +7,7 @@ export const BACKUP_TABLES = [
   'activity_types',
   'envelopes',
   'debts',
+  'recurring',
   'people',
   'items',
   'transactions',
@@ -25,7 +26,14 @@ export const BACKUP_TABLES = [
 export type BackupTable = (typeof BACKUP_TABLES)[number]
 
 export const BACKUP_FORMAT = 'life-hub-backup'
-export const BACKUP_VERSION = 1
+/** v2 (16.11.2026) adds `recurring` and the columns of operations that link to it; v1 files are still restored. */
+export const BACKUP_VERSION = 2
+
+/** Tables each readable version may hold. */
+const TABLES_OF_VERSION: Record<number, readonly string[]> = {
+  1: BACKUP_TABLES.filter((t) => t !== 'recurring'),
+  2: BACKUP_TABLES,
+}
 
 export type Row = Record<string, unknown> & { id: string }
 export type Backup = { format: string; version: number; exported_at: string; tables: Partial<Record<BackupTable, Row[]>> }
@@ -36,6 +44,7 @@ export const TABLE_LABEL: Record<BackupTable, string> = {
   activity_types: 'Типы активностей',
   envelopes: 'Конверты и цели',
   debts: 'Долги',
+  recurring: 'Регулярные',
   actual_balances: 'Остатки',
   people: 'Люди',
   items: 'Пункты',
@@ -65,10 +74,11 @@ export function parseBackup(text: string): { ok: true; backup: Backup } | { ok: 
   }
   const b = data as Partial<Backup>
   if (!b || b.format !== BACKUP_FORMAT) return { ok: false, reason: 'Это не экспорт Life Hub.' }
-  if (b.version !== BACKUP_VERSION) return { ok: false, reason: `Версия файла ${String(b.version)} — ожидается ${BACKUP_VERSION}.` }
+  const known = typeof b.version === 'number' ? TABLES_OF_VERSION[b.version] : undefined
+  if (!known) return { ok: false, reason: `Версия файла ${String(b.version)} — читаются версии 1–${BACKUP_VERSION}.` }
   if (!b.tables || typeof b.tables !== 'object') return { ok: false, reason: 'В файле нет таблиц.' }
   for (const [name, rows] of Object.entries(b.tables)) {
-    if (!(BACKUP_TABLES as readonly string[]).includes(name)) return { ok: false, reason: `Неизвестная таблица «${name}».` }
+    if (!known.includes(name)) return { ok: false, reason: `Неизвестная таблица «${name}».` }
     if (!Array.isArray(rows) || rows.some((r) => !r || typeof r !== 'object' || typeof (r as Row).id !== 'string')) {
       return { ok: false, reason: `Таблица «${name}» повреждена.` }
     }
