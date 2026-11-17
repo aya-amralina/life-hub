@@ -7,9 +7,9 @@ test.afterAll(cleanupTestUser)
 test('«Списалось?»: плановый расход в свой день → подтвердить → факт', async ({ page }) => {
   test.skip(!live, NEEDS)
   const sb = await testClient()
-  const ins = await sb.from('transactions').insert({ date: berlinDate(), amount_eur: 650, kind: 'expense', grp: 'Обязательное', title: 'Miete e2e', is_planned: true })
+  const ins = await sb.from('transactions').insert({ date: berlinDate(), amount_eur: 650, kind: 'expense', grp: 'Обязательное', title: 'Miete e2e', is_planned: true }).select('id').single()
   expect(ins.error).toBeNull()
-  await sb.auth.signOut()
+  const row = async () => (await sb.from('transactions').select('confirmed_at, amount_eur, planned_amount_eur').eq('id', ins.data!.id).single()).data
 
   await login(page)
   const card = page.getByRole('region', { name: 'Списалось? Miete e2e' })
@@ -17,6 +17,16 @@ test('«Списалось?»: плановый расход в свой ден�
   await card.getByRole('button', { name: 'Подтвердить' }).click()
   await expect(page.getByText('Miete e2e · 650 € — списано')).toBeVisible()
   await expect(card).toBeHidden()
+  // the plan's amount is kept with the confirmation; «Вернуть» puts the row back in plan without it
+  await expect.poll(async () => Number((await row())?.planned_amount_eur)).toBe(650)
+  await page.getByRole('button', { name: 'Вернуть' }).click()
+  await expect(card).toBeVisible()
+  await expect.poll(async () => (await row())?.planned_amount_eur ?? null).toBeNull()
+  expect((await row())?.confirmed_at).toBeNull()
+  await card.getByRole('button', { name: 'Подтвердить' }).click()
+  await expect(card).toBeHidden()
+  await expect.poll(async () => Number((await row())?.planned_amount_eur)).toBe(650)
+  await sb.auth.signOut()
 
   await tab(page, 'Деньги')
   await more(page, 'Месяц')

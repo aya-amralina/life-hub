@@ -14,7 +14,8 @@ import { formatEur, toCents } from '@/lib/format'
 import { balanceLine } from '@/lib/rules/charts'
 import { XYChart } from '@/components/charts/Chart'
 import { ChartLegend } from '@/components/charts/chartParts'
-import { BUDGET_END, balanceAt, balancesByDate, isFact, isWeekRow, monthsTable, plannedQuestions, reconcile, signedCents, upcomingPlanned } from '@/lib/rules/money'
+import { balanceAt, balancesByDate, forecastEnd, isFact, isWeekRow, monthsTable, plannedQuestions, reconcile, signedCents, upcomingPlanned } from '@/lib/rules/money'
+import { confirmPatch } from '@/lib/rules/operation'
 import { ACCOUNTS } from '@/lib/constants'
 import { Chip } from '@/components/ui/Chip'
 import { joinRu } from '@/lib/format'
@@ -34,7 +35,7 @@ const signed = (t: Transaction) => {
   return c > 0 ? `+${formatEur(c, { whole: true })}` : c < 0 ? `−${formatEur(-c, { whole: true })}` : formatEur(toCents(t.amount_eur), { whole: true })
 }
 
-/** Месяц: balance now and the plan to 31.12 (rule 1), operations plan/fact, what comes next, months table. */
+/** Месяц: balance now and the plan to the rolling horizon (rule 1), operations plan/fact, what comes next, months table. */
 export function MonthTab() {
   const today = todayBerlin()
   const txs = useAllTransactions()
@@ -67,7 +68,8 @@ export function MonthTab() {
 
   // «сейчас» = start + operations with status «факт»; planned ones with a past date only wait for an answer
   const factNow = balanceAt(all, today, 'fact')
-  const planEnd = balanceAt(all, BUDGET_END, 'plan', today)
+  const end = forecastEnd(today)
+  const planEnd = balanceAt(all, end, 'plan', today)
   const pending = plannedQuestions(all, today)
   const pendingCents = pending.reduce((s, q) => s + signedCents(q.tx), 0)
   // real balances from the Sunday review against the calculated balance on that day
@@ -79,15 +81,14 @@ export function MonthTab() {
     .filter((t) => (filter[0] === 'plan' ? !isFact(t) && !t.cancelled_at : filter[0] === 'fact' ? isFact(t) : true))
     .sort((a, b) => b.date.localeCompare(a.date))
   const next = upcomingPlanned(all, today).slice(0, 5)
-  // two months on the chart: from the start of this month (from 1.11 once December has come)
-  const lineFrom = today.slice(0, 7) >= '2026-12' ? '2026-11-01' : `${today.slice(0, 7)}-01`
-  const line = balanceLine(all, lineFrom, BUDGET_END, today)
-  const months = monthsTable(all, today)
+  // the chart: from the start of this month to the horizon
+  const line = balanceLine(all, `${today.slice(0, 7)}-01`, end, today)
+  const months = monthsTable(all, today, end)
 
   return (
     <>
       <Card>
-        <CardHeader title="Баланс до 31.12" dotClass="bg-money" />
+        <CardHeader title={`Баланс до ${formatDayMonth(end)}`} dotClass="bg-money" />
         <div className="flex items-baseline gap-2 tabular-nums">
           <span className="text-big font-semibold">{formatEur(factNow, { whole: true })}</span>
           <span className="text-base text-ink2">сейчас</span>
@@ -98,9 +99,9 @@ export function MonthTab() {
             {`Ждут подтверждения: ${joinRu(pending.slice(0, 3).map((q) => q.tx.title))}${pending.length > 3 ? ` и ещё ${pending.length - 3}` : ''} · ${pendingCents > 0 ? '+' : '−'}${formatEur(Math.abs(pendingCents), { whole: true })}`}
           </p>
         )}
-        <div className="text-base text-ink2 tabular-nums">план на 31.12 — {formatEur(planEnd, { whole: true })}</div>
+        <div className="text-base text-ink2 tabular-nums">план на {formatDayMonth(end)} — {formatEur(planEnd, { whole: true })}</div>
         <XYChart
-          label="Баланс до 31.12: план и факт"
+          label={`Баланс до ${formatDayMonth(end)}: план и факт`}
           data={line}
           height={184}
           empty={all.filter((t) => isFact(t)).length < 2}
@@ -172,7 +173,7 @@ export function MonthTab() {
         ) : (
           <ul className="m-0 flex list-none flex-col p-0">
             {ops.map((t) => (
-              <OperationRow key={t.id} t={t} today={today} onOpen={() => setEditing(t)} onConfirm={() => update.mutate({ id: t.id, patch: { confirmed_at: new Date().toISOString() } })} />
+              <OperationRow key={t.id} t={t} today={today} onOpen={() => setEditing(t)} onConfirm={() => update.mutate({ id: t.id, patch: confirmPatch(t, null, new Date().toISOString()) })} />
             ))}
           </ul>
         )}

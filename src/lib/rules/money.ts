@@ -94,12 +94,6 @@ export function forecastEnd(today: ISODate): ISODate {
   return endOfMonthISO(addMonthsISO(today, FORECAST_MONTHS))
 }
 
-/**
- * @deprecated Fixed end of the Oct–Dec 2026 budget. Kept only until «Месяц» switches to `forecastEnd` (after the
- * new «Деньги» navigation lands in main); do not use in new code.
- */
-export const BUDGET_END: ISODate = '2026-12-31'
-
 /** Rule 1: signed amount in cents — opening and income +, expense −, transfer 0. */
 export function signedCents(t: Pick<TxLike, 'kind' | 'amount_eur'>): number {
   const c = toCents(t.amount_eur)

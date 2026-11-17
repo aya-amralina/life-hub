@@ -4,6 +4,7 @@ import { QuestionCard } from '@/components/ui/QuestionCard'
 import { dayChipLabel, formatWeekdayDate, todayBerlin } from '@/lib/dates'
 import { formatEur, toCents } from '@/lib/format'
 import { plannedQuestions } from '@/lib/rules/money'
+import { confirmPatch, unconfirmPatch } from '@/lib/rules/operation'
 import { useAllTransactions, useUpdateTransaction, type Transaction } from './api'
 
 /**
@@ -17,10 +18,11 @@ export function MoneyQuestions({ only }: { only?: number } = {}) {
   const toast = useToast()
   const list = plannedQuestions(txs.data ?? [], today).filter((_, i) => only === undefined || i === only)
 
-  const answer = (tx: Transaction, patch: Parameters<typeof update.mutate>[0]['patch'], text: string) => {
-    const before = { date: tx.date, amount_eur: tx.amount_eur, confirmed_at: tx.confirmed_at, cancelled_at: tx.cancelled_at }
+  type Patch = Parameters<typeof update.mutate>[0]['patch']
+  // «Вернуть» puts the row back as it was; after a confirmation — back to plan with the plan's amount
+  const answer = (tx: Transaction, patch: Patch, text: string, undo: Patch = { date: tx.date, amount_eur: tx.amount_eur, confirmed_at: tx.confirmed_at, cancelled_at: tx.cancelled_at }) => {
     update.mutate({ id: tx.id, patch })
-    toast({ text, actionLabel: 'Вернуть', onAction: () => update.mutate({ id: tx.id, patch: before }) })
+    toast({ text, actionLabel: 'Вернуть', onAction: () => update.mutate({ id: tx.id, patch: undo }) })
   }
 
   return (
@@ -42,15 +44,12 @@ export function MoneyQuestions({ only }: { only?: number } = {}) {
             amount={{
               cents,
               question: income ? 'Сколько пришло?' : 'Сколько списалось?',
-              hint: `${income ? 'Пришло' : 'Списалось'} меньше или больше — поправь, план до 31.12 пересчитается.`,
+              hint: `${income ? 'Пришло' : 'Списалось'} меньше или больше — поправь, прогноз пересчитается.`,
             }}
             onConfirm={(c) => {
               const amount = c ?? cents
-              answer(
-                tx,
-                { confirmed_at: new Date().toISOString(), ...(c ? { amount_eur: c / 100 } : {}) },
-                `${tx.title} · ${formatEur(amount, { whole: true })} — ${income ? 'пришло' : 'списано'}`,
-              )
+              const patch = confirmPatch(tx, c ?? null, new Date().toISOString())
+              answer(tx, patch, `${tx.title} · ${formatEur(amount, { whole: true })} — ${income ? 'пришло' : 'списано'}`, unconfirmPatch({ ...tx, ...patch }))
             }}
             reschedule={{
               title: 'Когда ждать?',
