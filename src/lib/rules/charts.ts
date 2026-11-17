@@ -217,11 +217,17 @@ export function enoughForMonths(dates: readonly ISODate[], today: ISODate): bool
   return dates.length > 0 && daysBetween([...dates].sort()[0]!, today) >= 28
 }
 
+/** Most points on the balance line: the horizon is months long, the chart stays light. */
+export const BALANCE_LINE_POINTS = 70
+
 /**
- * Balance line to 31.12 (design 3k): every `step` days the plan (rule 1/26, planned operations included) and the
- * fact up to today (confirmed only; null after today — the line stops at «сейчас»).
+ * Balance line to the horizon (design 3k): the plan (rule 1/26, planned operations included) and the fact up to
+ * today (confirmed only; null after today — the line stops at «сейчас»). The step in days grows with the range so
+ * there are at most `maxPoints` points, the last day and today included.
  */
-export function balanceLine(txs: readonly TxLike[], from: ISODate, to: ISODate, today: ISODate, step = 3) {
+export function balanceLine(txs: readonly TxLike[], from: ISODate, to: ISODate, today: ISODate, maxPoints = BALANCE_LINE_POINTS) {
+  // the loop gives ≤ maxPoints − 2 points; the last day and today may add one each
+  const step = Math.max(1, Math.ceil(daysBetween(from, to) / Math.max(1, maxPoints - 3)))
   const out: { key: ISODate; label: string; plan: number; fact: number | null }[] = []
   for (let d = from; d <= to; d = addDaysISO(d, step)) {
     out.push({ key: d, label: formatDayMonth(d), plan: balanceAt(txs, d, 'plan', today) / 100, fact: d <= today ? balanceAt(txs, d, 'fact', today) / 100 : null })

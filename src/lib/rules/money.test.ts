@@ -81,7 +81,8 @@ describe('«Траты недели» — only what counts for the week', () => 
 })
 
 describe('rule 1: balance and forecast', async () => {
-  const { balanceAt, BUDGET_END } = await import('./money')
+  const { balanceAt } = await import('./money')
+  const END = '2026-12-31'
   const t = (date: string, kind: string, amount_eur: number, p: Record<string, unknown> = {}) => ({
     date,
     kind,
@@ -102,11 +103,11 @@ describe('rule 1: balance and forecast', async () => {
     t('2026-12-09', 'income', 100, { is_planned: true, cancelled_at: '2026-11-10T08:00:00Z' }),
   ]
   it('fact: signed running sum up to the date, transfers 0', () => expect(balanceAt(txs, '2026-11-10', 'fact')).toBe(65000))
-  it('plan to 31.12 adds planned, skips cancelled', () => expect(balanceAt(txs, BUDGET_END, 'plan')).toBe(0))
-  it('fact ignores unconfirmed planned operations', () => expect(balanceAt(txs, BUDGET_END, 'fact')).toBe(65000))
+  it('plan to a date adds planned, skips cancelled', () => expect(balanceAt(txs, END, 'plan')).toBe(0))
+  it('fact ignores unconfirmed planned operations', () => expect(balanceAt(txs, END, 'fact')).toBe(65000))
   it('a confirmed planned operation moves the fact line', () => {
     const confirmed = txs.map((x) => (x.date === '2026-12-01' ? { ...x, confirmed_at: '2026-12-01T09:00:00Z' } : x))
-    expect(balanceAt(confirmed, BUDGET_END, 'fact')).toBe(0)
+    expect(balanceAt(confirmed, END, 'fact')).toBe(0)
   })
 })
 
@@ -200,11 +201,31 @@ describe('months table', async () => {
       t('2026-10-20', 'expense', 100),
       t('2026-11-01', 'income', 500, { is_planned: true }),
       t('2026-11-02', 'expense', 50, { is_planned: true, cancelled_at: '2026-11-03T00:00:00Z' }),
-    ], '2026-10-20')
+    ], '2026-10-20', '2026-11-30')
     expect(rows).toEqual([
       { month: '2026-10', incomeCents: 0, expenseCents: 10000, endCents: 90000, hasPlan: false },
       { month: '2026-11', incomeCents: 50000, expenseCents: 0, endCents: 140000, hasPlan: true },
     ])
+  })
+  it('runs from the start through the horizon, empty months included, past the end of 2026', () => {
+    const rows = monthsTable([t('2026-10-13', 'opening', 1000), t('2027-02-28', 'expense', 100, { is_planned: true })], '2026-11-16')
+    expect(rows.map((r) => r.month)).toEqual(['2026-10', '2026-11', '2026-12', '2027-01', '2027-02', '2027-03', '2027-04', '2027-05'])
+    expect(rows.find((r) => r.month === '2027-01')).toEqual({ month: '2027-01', incomeCents: 0, expenseCents: 0, endCents: 100000, hasPlan: false })
+    // the balance is taken on the real last day: 28.02 counts in February
+    expect(rows.find((r) => r.month === '2027-02')!.endCents).toBe(90000)
+    expect(rows.at(-1)!.endCents).toBe(90000)
+  })
+  it('no operations — no months', () => expect(monthsTable([], '2026-11-16')).toEqual([]))
+})
+
+describe('forecast horizon', async () => {
+  const { FORECAST_MONTHS, forecastEnd } = await import('./money')
+  it('is the end of the month six months ahead and moves with today', () => {
+    expect(FORECAST_MONTHS).toBe(6)
+    expect(forecastEnd('2026-11-16')).toBe('2027-05-31')
+    expect(forecastEnd('2026-11-30')).toBe('2027-05-31')
+    expect(forecastEnd('2026-12-01')).toBe('2027-06-30')
+    expect(forecastEnd('2027-08-31')).toBe('2028-02-29')
   })
 })
 

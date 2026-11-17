@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { bandsOn, calendarBands, calendarEvents, monthGrid, parseFilters } from './calendar'
-import { activityWeeks, balanceLine, coffeeSeries, coffeeWeek, enoughForMonths, erfolgeByMonth, habitCalendar, intakeBands, repsSeries, studyHeatmap, wellbeingSeries } from './charts'
+import { BALANCE_LINE_POINTS, activityWeeks, balanceLine, coffeeSeries, coffeeWeek, enoughForMonths, erfolgeByMonth, habitCalendar, intakeBands, repsSeries, studyHeatmap, wellbeingSeries } from './charts'
 
 const today = '2026-11-11' // Wed
 
@@ -119,6 +119,20 @@ describe('erfolge, balance line', () => {
     expect(line[0]).toMatchObject({ plan: 1000, fact: 1000 })
     expect(line.find((p) => p.key === today)).toMatchObject({ fact: 1000 })
     expect(line.at(-1)).toMatchObject({ key: '2026-12-31', plan: 800, fact: null })
+  })
+  it('balance line over a six-month horizon stays within the point limit, ends on the last day', () => {
+    const txs = [{ date: '2026-10-13', amount_eur: 1000, kind: 'opening', category: null, envelope_id: null, is_planned: false, confirmed_at: null }]
+    const line = balanceLine(txs, '2026-11-01', '2027-05-31', '2026-11-16')
+    expect(line.length).toBeLessThanOrEqual(BALANCE_LINE_POINTS)
+    expect(line.length).toBeGreaterThan(50)
+    expect(line[0]!.key).toBe('2026-11-01')
+    expect(line.at(-1)!.key).toBe('2027-05-31')
+    expect(line.some((p) => p.key === '2026-11-16')).toBe(true)
+    expect(line.map((p) => p.key)).toEqual([...line.map((p) => p.key)].sort())
+  })
+  it('a short range keeps a daily step', () => {
+    const txs = [{ date: '2026-10-13', amount_eur: 1000, kind: 'opening', category: null, envelope_id: null, is_planned: false, confirmed_at: null }]
+    expect(balanceLine(txs, '2026-11-01', '2026-11-30', '2026-11-16')).toHaveLength(30)
   })
 })
 

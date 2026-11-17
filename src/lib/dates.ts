@@ -1,4 +1,4 @@
-import { addDays, differenceInCalendarDays, format, startOfWeek } from 'date-fns'
+import { addDays, addMonths, differenceInCalendarDays, endOfMonth, format, startOfWeek } from 'date-fns'
 import { ru } from 'date-fns/locale'
 
 /** ISO calendar date 'YYYY-MM-DD'. All app dates are plain dates in Europe/Berlin. */
@@ -42,6 +42,16 @@ export function toISODate(date: Date): ISODate {
 
 export function addDaysISO(iso: ISODate, days: number): ISODate {
   return toISODate(addDays(parseISODate(iso), days))
+}
+
+/** Same day `n` months later; a day the month lacks becomes its last day (31.01 + 1 → 28.02 / 29.02). */
+export function addMonthsISO(iso: ISODate, n: number): ISODate {
+  return toISODate(addMonths(parseISODate(iso), n))
+}
+
+/** Last day of the date's month: '2027-02-10' → '2027-02-28'. */
+export function endOfMonthISO(iso: ISODate): ISODate {
+  return toISODate(endOfMonth(parseISODate(iso)))
 }
 
 export function daysBetween(from: ISODate, to: ISODate): number {

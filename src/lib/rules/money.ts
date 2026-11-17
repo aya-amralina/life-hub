@@ -1,5 +1,5 @@
 import { WEEK_CATEGORIES, type WeekCategory } from '../constants'
-import { addDaysISO, weekStart as weekStartISO, type ISODate } from '../dates'
+import { addDaysISO, addMonthsISO, endOfMonthISO, weekStart as weekStartISO, type ISODate } from '../dates'
 import { toCents } from '../format'
 
 export type LimitLike = { category: string; limit_eur: number }
@@ -86,7 +86,18 @@ export function isWeekRow(t: Pick<TxLike, 'entry_kind'>): boolean {
   return t.entry_kind === 'week_budget' || t.entry_kind === 'week_total'
 }
 
-/** End of the budget (SPEC rule 1: «На счетах 31.12»). */
+/** Forecast horizon in months: the plan is shown up to the end of the month this many months ahead (decision 16.11.2026). */
+export const FORECAST_MONTHS = 6
+
+/** Rolling forecast horizon: the last day of the month `FORECAST_MONTHS` after today (16.11.2026 → 31.05.2027). */
+export function forecastEnd(today: ISODate): ISODate {
+  return endOfMonthISO(addMonthsISO(today, FORECAST_MONTHS))
+}
+
+/**
+ * @deprecated Fixed end of the Oct–Dec 2026 budget. Kept only until «Месяц» switches to `forecastEnd` (after the
+ * new «Деньги» navigation lands in main); do not use in new code.
+ */
 export const BUDGET_END: ISODate = '2026-12-31'
 
 /** Rule 1: signed amount in cents — opening and income +, expense −, transfer 0. */
@@ -199,23 +210,27 @@ export function envelopeSummary(envelope: EnvelopeLike, txs: readonly TxLike[]) 
 export type MonthRow = { month: string; incomeCents: number; expenseCents: number; endCents: number; hasPlan: boolean }
 
 /**
- * Months table (like the «Обзор» sheet): per calendar month income and expenses (planned ones included,
- * cancelled ones not) and the balance at its end with the plan.
+ * Months table (like the «Обзор» sheet): every calendar month from the first operation (the start) through `to`,
+ * empty months included — income and expenses (planned ones included, cancelled ones not) and the balance at its
+ * last day with the plan. `to` defaults to the forecast horizon.
  */
-export function monthsTable(txs: readonly TxLike[], today: ISODate): MonthRow[] {
-  const months = [...new Set(txs.filter((t) => t.kind !== 'opening').map((t) => t.date.slice(0, 7)))].sort()
-  return months.map((month) => {
-    const inMonth = txs.filter((t) => t.date.startsWith(month) && isInPlan(t))
+export function monthsTable(txs: readonly TxLike[], today: ISODate, to: ISODate = forecastEnd(today)): MonthRow[] {
+  if (txs.length === 0) return []
+  const first = txs.reduce((m, t) => (t.date < m ? t.date : m), txs[0]!.date)
+  const rows: MonthRow[] = []
+  for (let day = `${first.slice(0, 7)}-01`; day <= to; day = addMonthsISO(day, 1)) {
+    const month = day.slice(0, 7)
+    const inMonth = txs.filter((t) => t.date.startsWith(month) && isInPlan(t) && t.kind !== 'opening')
     const sum = (kind: string) => inMonth.filter((t) => t.kind === kind).reduce((s, t) => s + toCents(t.amount_eur), 0)
-    const last = `${month}-31`
-    return {
+    rows.push({
       month,
       incomeCents: sum('income'),
       expenseCents: sum('expense'),
-      endCents: balanceAt(txs, last, 'plan', today),
+      endCents: balanceAt(txs, endOfMonthISO(day), 'plan', today),
       hasPlan: inMonth.some((t) => !isFact(t)),
-    }
-  })
+    })
+  }
+  return rows
 }
 
 export type ActualBalances = { date: ISODate; balances: Record<string, string | number> }

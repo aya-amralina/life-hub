@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { describe, expect, it } from 'vitest'
 import { todayBerlin } from '../../src/lib/dates'
 import { fetchAllPages } from '../../src/lib/paging'
-import { balanceAt, type TxLike } from '../../src/lib/rules/money'
+import { balanceAt, forecastEnd, type TxLike } from '../../src/lib/rules/money'
 import { supabaseConfigured } from '../testUser'
 
 // SPEC §6 checks after the import, on the REAL user's base (LIFEHUB_EMAIL). Read-only with the secret key
@@ -43,7 +43,7 @@ describe.skipIf(!ready)('import checks (SPEC §6)', () => {
     )
     expect(txs.length).toBeGreaterThan(0)
     expect(txs.filter((t) => t.kind === 'opening' && !t.cancelled_at)).toHaveLength(1)
-    expect(Number.isFinite(balanceAt(txs, '2026-12-31', 'plan', todayBerlin()))).toBe(true)
+    expect(Number.isFinite(balanceAt(txs, forecastEnd(todayBerlin()), 'plan', todayBerlin()))).toBe(true)
   })
 
   it('work tasks = non-empty rows of «Dev Aufgaben»', async () => {

@@ -86,7 +86,12 @@ def signed(t: dict) -> float:
     return 0.0
 
 
-def balance_end(txs: list[dict], end: str = "2026-12-31") -> float:
+# The Excel budget (archive) covers Oct–Dec 2026: its «Обзор» is compared on this date. The app's own horizon is
+# rolling (forecastEnd in money.ts, decision 16.11.2026) and is not used here.
+ARCHIVE_END = "2026-12-31"
+
+
+def balance_end(txs: list[dict], end: str = ARCHIVE_END) -> float:
     return round(sum(signed(t) for t in txs if t["date"] <= end), 2)
 
 
@@ -114,8 +119,9 @@ def _is_fact(t: dict) -> bool:
     return not t.get("cancelled_at") and (not t.get("is_planned") or bool(t.get("confirmed_at")))
 
 
-def app_forecast_all(txs: list[dict], today: dt.date, end: str = "2026-12-31") -> float:
-    """«На счетах 31.12» exactly as money.ts balanceAt(plan) computes it over all rows of the base (rule 26):
+def app_forecast_all(txs: list[dict], today: dt.date, end: str = ARCHIVE_END) -> float:
+    """«На счетах 31.12» exactly as money.ts balanceAt(plan) computes it over the rows of the base (rule 26) —
+    without virtual operations of recurring rules, which exist only in the app:
     planned week budgets — finished weeks drop out, the current week costs max(budget, spent), later weeks in
     full; a confirmed week fact replaces the app's weekly-category expenses of that week in the balance."""
     def monday(s: str) -> dt.date:

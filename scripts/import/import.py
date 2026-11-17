@@ -275,7 +275,7 @@ def checks(b: Batch, st: State, tx_changes: list[upd.Change]) -> list[str]:
         verdict = "сходится" if abs(rec["diff"]) < 1 else f"расхождение {rec['diff']:+.2f} €"
         out.append(f"сверка на {rec['date']}: «Остатки» {rec['actual']:.2f} € против расчёта {rec['calculated']:.2f} € — {verdict}" + (f" (нет строк: {', '.join(rec['missing'])})" if rec["missing"] else ""))
     out += ["", "=== Прогноз «На счетах 31.12» ==="]
-    out.append(f"сейчас в приложении: {before:.2f} € → после записи: {after:.2f} € (конфликты не применены)")
+    out.append(f"сейчас в приложении: {before:.2f} € → после записи: {after:.2f} € (строки базы без регулярных правил; конфликты не применены)")
     out.append(f"по Excel (все строки со знаком, как «Обзор»): {excel:.2f} €")
     h04 = plan.week_hours(b.rows["items"], "Н04", b.weeks)
     out.append(f"часов учёбы в Н04 по Excel: {h04:g}; задач Работы: {sum(1 for i in b.rows['items'] if i['sphere'] == 'work')}")

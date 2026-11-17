@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   addDaysISO,
+  addMonthsISO,
+  endOfMonthISO,
   formatDayMonth,
   formatLongDate,
   formatRelativeDay,
@@ -66,5 +68,20 @@ describe('formats', () => {
 describe('formatTimeBerlin', () => {
   it('formats in Berlin time', () => {
     expect(formatTimeBerlin('2026-11-09T17:40:00Z')).toBe('18:40')
+  })
+})
+
+describe('months', () => {
+  it('end of month: 30/31 days, February in common and leap years', () => {
+    expect(endOfMonthISO('2026-11-16')).toBe('2026-11-30')
+    expect(endOfMonthISO('2026-12-01')).toBe('2026-12-31')
+    expect(endOfMonthISO('2027-02-10')).toBe('2027-02-28')
+    expect(endOfMonthISO('2028-02-10')).toBe('2028-02-29')
+  })
+  it('add months: across the year, a missing day becomes the last one', () => {
+    expect(addMonthsISO('2026-11-16', 6)).toBe('2027-05-16')
+    expect(addMonthsISO('2027-01-31', 1)).toBe('2027-02-28')
+    expect(addMonthsISO('2028-01-31', 1)).toBe('2028-02-29')
+    expect(addMonthsISO('2026-12-31', -1)).toBe('2026-11-30')
   })
 })
