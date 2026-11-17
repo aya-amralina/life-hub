@@ -14,7 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:import": "vitest run --config vitest.integration.config.ts tests/integration/import",
+    "test:import": "vitest run --config vitest.integration.config.ts --reporter=verbose tests/integration/import",
     "db:push": "supabase db push --remote",
     "db:types": "supabase gen types typescript --remote --schema public > src/lib/db/types.ts",
     "icons": "python3 scripts/make_icons.py",

@@ -22,13 +22,17 @@ const WORK_TASKS = 31 // non-empty rows of «Dev Aufgaben»
 const CHECKLIST_ITEMS = 254 // rows of «Чеклист» (without the 2 instruction rows)
 const H04_HOURS = 27.5
 
-/** The archive: the last backup of 12.11.2026, the day the app became the source (decision 17.11.2026). */
-const ARCHIVE = resolve(process.env.LIFEHUB_ARCHIVE_BACKUP ?? 'data/backups/lifehub-backup-2026-11-12-1930.json')
+/**
+ * The archive: the last backup of 12.11.2026, the day the app became the source, kept apart from data/backups (which
+ * may be cleaned) as data/archive/excel-final-2026-11-12.json — never in git. LIFEHUB_ARCHIVE_BACKUP points elsewhere.
+ */
+const ARCHIVE = resolve(process.env.LIFEHUB_ARCHIVE_BACKUP ?? 'data/archive/excel-final-2026-11-12.json')
+const hasArchive = existsSync(ARCHIVE)
+const NO_ARCHIVE = `Проверки архива пропущены: нет файла ${ARCHIVE} (бэкап 12.11.2026; другой путь — LIFEHUB_ARCHIVE_BACKUP).`
 
 type ArchiveRow = { id: string; source_id?: string | null; week_id?: string | null; study_week?: string | null; hours_est?: number | string | null; rollover_count?: number }
 
 function archive(): { items: ArchiveRow[]; weeks: ArchiveRow[] } {
-  expect(existsSync(ARCHIVE), `нет архивного бэкапа ${ARCHIVE} (или задай LIFEHUB_ARCHIVE_BACKUP)`).toBe(true)
   const tables = (JSON.parse(readFileSync(ARCHIVE, 'utf8')) as { tables: Record<string, ArchiveRow[]> }).tables
   return { items: tables.items ?? [], weeks: tables.weeks ?? [] }
 }
@@ -65,7 +69,15 @@ describe.skipIf(!ready)('live base: the operations are in shape', () => {
   })
 })
 
-describe('import checks (SPEC §6) against the archive of 12.11.2026', () => {
+describe('import checks (SPEC §6): the archive file', () => {
+  it('is there, or the archive checks are skipped with a reason', (ctx) => {
+    if (hasArchive) return
+    console.warn(NO_ARCHIVE)
+    ctx.skip(NO_ARCHIVE)
+  })
+})
+
+describe.skipIf(!hasArchive)('import checks (SPEC §6) against the archive of 12.11.2026', () => {
   it('work tasks = non-empty rows of «Dev Aufgaben»', () => {
     expect(archive().items.filter((i) => i.source_id?.startsWith('work:'))).toHaveLength(WORK_TASKS)
   })
