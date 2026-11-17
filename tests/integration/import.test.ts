@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { createClient } from '@supabase/supabase-js'
 import { describe, expect, it } from 'vitest'
 import { todayBerlin } from '../../src/lib/dates'
@@ -5,8 +7,11 @@ import { fetchAllPages } from '../../src/lib/paging'
 import { balanceAt, forecastEnd, type TxLike } from '../../src/lib/rules/money'
 import { supabaseConfigured } from '../testUser'
 
-// SPEC §6 checks after the import, on the REAL user's base (LIFEHUB_EMAIL). Read-only with the secret key
-// (bypasses RLS, filtered by user_id). Counts and sums only — no row contents in the output.
+// SPEC §6 checks of the import. Since 12.11.2026 the app is the source of the data: items are edited, rolled over
+// and closed there, so the control numbers from Excel are checked against the ARCHIVE — the backup made right after
+// the import (12.11.2026, data/backups, never in git) — not against the live base. Only the shape of the operations
+// is checked live, read-only with the secret key (bypasses RLS, filtered by user_id). Counts and sums only — no row
+// contents in the output.
 const url = process.env.VITE_SUPABASE_URL
 const secret = process.env.SUPABASE_SECRET_KEY
 const email = process.env.LIFEHUB_EMAIL
@@ -17,6 +22,19 @@ const WORK_TASKS = 31 // non-empty rows of «Dev Aufgaben»
 const CHECKLIST_ITEMS = 254 // rows of «Чеклист» (without the 2 instruction rows)
 const H04_HOURS = 27.5
 
+/** The archive: the last backup of 12.11.2026, the day the app became the source (decision 17.11.2026). */
+const ARCHIVE = resolve(process.env.LIFEHUB_ARCHIVE_BACKUP ?? 'data/backups/lifehub-backup-2026-11-12-1930.json')
+
+type ArchiveRow = { id: string; source_id?: string | null; week_id?: string | null; study_week?: string | null; hours_est?: number | string | null; rollover_count?: number }
+
+function archive(): { items: ArchiveRow[]; weeks: ArchiveRow[] } {
+  expect(existsSync(ARCHIVE), `нет архивного бэкапа ${ARCHIVE} (или задай LIFEHUB_ARCHIVE_BACKUP)`).toBe(true)
+  const tables = (JSON.parse(readFileSync(ARCHIVE, 'utf8')) as { tables: Record<string, ArchiveRow[]> }).tables
+  return { items: tables.items ?? [], weeks: tables.weeks ?? [] }
+}
+
+const checklist = (rows: readonly ArchiveRow[]) => rows.filter((i) => i.source_id?.startsWith('study:') && !i.source_id.startsWith('study:dl:'))
+
 async function setup() {
   const admin = createClient(url!, secret!, { auth: { persistSession: false, autoRefreshToken: false } })
   const { data, error } = await admin.auth.admin.listUsers({ perPage: 100 })
@@ -26,10 +44,10 @@ async function setup() {
   return { admin, uid: uid! }
 }
 
-describe.skipIf(!ready)('import checks (SPEC §6)', () => {
+describe.skipIf(!ready)('live base: the operations are in shape', () => {
   // Until 12.11.2026 this compared the balance of the imported operations with the last imported Excel. The app is
   // the source now (operations are created and edited in it), so the two legitimately differ: only the shape is checked.
-  it('operations are there: one start row, a finite plan to 31.12', async () => {
+  it('operations are there: one start row, a finite plan to the horizon', async () => {
     const { admin, uid } = await setup()
     // paged: more than max_rows (1000) operations must not be cut short
     const txs: TxLike[] = await fetchAllPages((from, to) =>
@@ -45,34 +63,23 @@ describe.skipIf(!ready)('import checks (SPEC §6)', () => {
     expect(txs.filter((t) => t.kind === 'opening' && !t.cancelled_at)).toHaveLength(1)
     expect(Number.isFinite(balanceAt(txs, forecastEnd(todayBerlin()), 'plan', todayBerlin()))).toBe(true)
   })
+})
 
-  it('work tasks = non-empty rows of «Dev Aufgaben»', async () => {
-    const { admin, uid } = await setup()
-    const { count, error } = await admin.from('items').select('id', { count: 'exact', head: true }).eq('user_id', uid).like('source_id', 'work:%')
-    expect(error).toBeNull()
-    expect(count).toBe(WORK_TASKS)
+describe('import checks (SPEC §6) against the archive of 12.11.2026', () => {
+  it('work tasks = non-empty rows of «Dev Aufgaben»', () => {
+    expect(archive().items.filter((i) => i.source_id?.startsWith('work:'))).toHaveLength(WORK_TASKS)
   })
 
-  it('checklist items = rows of «Чеклист»', async () => {
-    const { admin, uid } = await setup()
-    const { data, error } = await admin.from('items').select('source_id').eq('user_id', uid).like('source_id', 'study:%')
-    expect(error).toBeNull()
-    expect((data ?? []).filter((r) => !r.source_id!.startsWith('study:dl:')).length).toBe(CHECKLIST_ITEMS)
+  it('checklist items = rows of «Чеклист»', () => {
+    expect(checklist(archive().items)).toHaveLength(CHECKLIST_ITEMS)
   })
 
-  it('study hours of Н04 = 27,5 h (items planned there, not rolled over from earlier weeks)', async () => {
-    const { admin, uid } = await setup()
-    const week = await admin.from('weeks').select('id').eq('user_id', uid).eq('study_week', 'Н04').single()
-    expect(week.error).toBeNull()
-    const { data, error } = await admin
-      .from('items')
-      .select('hours_est, source_id, rollover_count')
-      .eq('user_id', uid)
-      .eq('week_id', week.data!.id)
-      .like('source_id', 'study:%')
-    expect(error).toBeNull()
-    const hours = (data ?? [])
-      .filter((i) => !i.source_id!.startsWith('study:dl:') && i.rollover_count === 0)
+  it('study hours of Н04 = 27,5 h (items planned there, not rolled over from earlier weeks)', () => {
+    const { items, weeks } = archive()
+    const h04 = weeks.filter((w) => w.study_week === 'Н04').map((w) => w.id)
+    expect(h04).toHaveLength(1)
+    const hours = checklist(items)
+      .filter((i) => i.week_id === h04[0] && i.rollover_count === 0)
       .reduce((s, i) => s + (Number(i.hours_est) || 0), 0)
     expect(hours).toBeCloseTo(H04_HOURS, 2)
   })
