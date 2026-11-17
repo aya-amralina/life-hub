@@ -1,10 +1,28 @@
 import { createClient } from '@supabase/supabase-js'
 import { expect, type Page } from '@playwright/test'
+import { addDaysISO, hourBerlin, todayBerlin, type ISODate } from '../../src/lib/dates'
 import { supabaseConfigured, testUser } from '../testUser'
 
 export const user = testUser()
 export const live = supabaseConfigured() && user !== null
 export const NEEDS = 'needs VITE_SUPABASE_URL (real project), LIFEHUB_TEST_EMAIL, LIFEHUB_TEST_PASSWORD in .env.local'
+
+/** The instant of `hour`:00 Berlin time on `day`. */
+export function berlinAt(day: ISODate, hour: number): Date {
+  const [y, m, d] = day.split('-').map(Number)
+  const guess = Date.UTC(y, m - 1, d, hour)
+  const offset = (hourBerlin(new Date(guess)) - hour + 24) % 24 // 1 (CET) or 2 (CEST)
+  return new Date(guess - offset * 3_600_000)
+}
+
+/**
+ * Pin the page's clock to 20:00 Berlin yesterday, so «Вечер» is open whatever the real hour. Call before login.
+ * Always behind the real time, never ahead: a clock ahead of the server makes the fresh session look expired.
+ * The clock keeps running from there, timers work as usual.
+ */
+export async function eveningClock(page: Page) {
+  await page.clock.install({ time: berlinAt(addDaysISO(todayBerlin(), -1), 20) })
+}
 
 /** Go to a section via the bottom tab bar (card headers on «Сегодня» are links with the same names). */
 export async function tab(page: Page, name: 'Сегодня' | 'Деньги' | 'Работа' | 'Учёба' | 'Тело') {

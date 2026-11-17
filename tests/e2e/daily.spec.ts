@@ -1,11 +1,12 @@
 import { expect, test } from '@playwright/test'
-import { NEEDS, cleanupTestUser, live, login, plus, tab } from './helpers'
+import { NEEDS, cleanupTestUser, eveningClock, live, login, plus, tab } from './helpers'
 
 test.beforeAll(cleanupTestUser)
 test.afterAll(cleanupTestUser)
 
 test('день отмечается: привычка в 1 тап, энергия, активность — всё сохраняется само', async ({ page }) => {
   test.skip(!live, NEEDS)
+  await eveningClock(page) // «Энергия» is in «Вечер», folded before 18:00
   await login(page)
 
   const habit = page.getByRole('checkbox', { name: /Утренний старт/ })
