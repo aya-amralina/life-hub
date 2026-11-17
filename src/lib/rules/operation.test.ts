@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { debtRow, debtValid, operationForm, operationRow, operationValid, type DebtForm, type OperationForm } from './operation'
+import { confirmPatch, debtRow, debtValid, operationForm, operationRow, operationValid, unconfirmPatch, type DebtForm, type OperationForm } from './operation'
 
 const NOW = '2026-11-12T18:00:00.000Z'
 const form = (p: Partial<OperationForm> = {}): OperationForm => ({
@@ -18,11 +18,11 @@ describe('operation form → row', () => {
   })
   it('a new fact is a plain fact; a planned one turned to fact keeps its mark and is confirmed', () => {
     expect(operationRow(form({ status: 'fact' }), null, NOW)).toMatchObject({ is_planned: false, confirmed_at: NOW })
-    expect(operationRow(form({ status: 'fact' }), { is_planned: true, confirmed_at: null }, NOW)).toMatchObject({ is_planned: true, confirmed_at: NOW })
-    expect(operationRow(form({ status: 'fact' }), { is_planned: true, confirmed_at: 'earlier' }, NOW).confirmed_at).toBe('earlier')
+    expect(operationRow(form({ status: 'fact' }), { is_planned: true, confirmed_at: null, amount_eur: 650 }, NOW)).toMatchObject({ is_planned: true, confirmed_at: NOW })
+    expect(operationRow(form({ status: 'fact' }), { is_planned: true, confirmed_at: 'earlier', amount_eur: 650 }, NOW).confirmed_at).toBe('earlier')
   })
   it('back to plan clears the confirmation', () => {
-    expect(operationRow(form({ status: 'plan' }), { is_planned: false, confirmed_at: 'x' }, NOW)).toMatchObject({ is_planned: true, confirmed_at: null })
+    expect(operationRow(form({ status: 'plan' }), { is_planned: false, confirmed_at: 'x', amount_eur: 650 }, NOW)).toMatchObject({ is_planned: true, confirmed_at: null })
   })
   it('group by kind; weekly category only for an expense of «Жизнь»; envelope only for an expense', () => {
     expect(operationRow(form({ kind: 'income', grp: 'Жизнь', envelopeId: 'e' }), null, NOW)).toMatchObject({ grp: 'Доход', envelope_id: null, category: null })
@@ -34,6 +34,41 @@ describe('operation form → row', () => {
     const row = operationRow(form({ note: 'x', debtId: 'd' }), null, NOW)
     expect(operationRow(operationForm(row), row, NOW)).toEqual(row)
     expect(operationForm({ ...row, is_planned: true, confirmed_at: 't' }).status).toBe('fact')
+  })
+})
+
+describe('the amount that was in the plan (planned_amount_eur)', () => {
+  const planned = { is_planned: true, confirmed_at: null, amount_eur: 650, planned_amount_eur: null }
+  it('confirming as planned stores the plan amount, no amount change', () => {
+    expect(confirmPatch(planned, null, NOW)).toEqual({ confirmed_at: NOW, planned_amount_eur: 650 })
+    expect(confirmPatch(planned, 65000, NOW)).toEqual({ confirmed_at: NOW, planned_amount_eur: 650 })
+  })
+  it('a corrected amount replaces amount_eur, the plan amount stays the old one', () => {
+    expect(confirmPatch(planned, 67250, NOW)).toEqual({ confirmed_at: NOW, amount_eur: 672.5, planned_amount_eur: 650 })
+  })
+  it('numeric columns as strings are read as numbers', () => {
+    expect(confirmPatch({ ...planned, amount_eur: '650.00' }, 60000, NOW)).toEqual({ confirmed_at: NOW, amount_eur: 600, planned_amount_eur: 650 })
+  })
+  it('a plain fact gets only the time', () => {
+    expect(confirmPatch({ is_planned: false, confirmed_at: null, amount_eur: 20 }, null, NOW)).toEqual({ confirmed_at: NOW })
+  })
+  it('confirm → undo → confirm with another correction keeps the original plan amount', () => {
+    const first = { ...planned, ...confirmPatch(planned, 70000, NOW) }
+    expect(first).toMatchObject({ amount_eur: 700, planned_amount_eur: 650 })
+    const undone = { ...first, ...unconfirmPatch(first) }
+    expect(undone).toMatchObject({ confirmed_at: null, amount_eur: 650, planned_amount_eur: null })
+    expect(confirmPatch(undone, 68000, NOW)).toEqual({ confirmed_at: NOW, amount_eur: 680, planned_amount_eur: 650 })
+  })
+  it('an operation confirmed before the column (null) goes back to plan with its amount', () => {
+    expect(unconfirmPatch({ is_planned: true, confirmed_at: 'old', amount_eur: 640, planned_amount_eur: null })).toEqual({ confirmed_at: null, amount_eur: 640, planned_amount_eur: null })
+  })
+  it('the operation sheet: plan → fact takes the plan amount; stays while confirmed; back to plan clears it', () => {
+    const toFact = operationRow(form({ status: 'fact', cents: 66000 }), planned, NOW)
+    expect(toFact).toMatchObject({ amount_eur: 660, confirmed_at: NOW, planned_amount_eur: 650 })
+    expect(operationRow(form({ status: 'fact', cents: 66500 }), toFact, NOW).planned_amount_eur).toBe(650)
+    expect(operationRow(form({ status: 'fact' }), { ...toFact, planned_amount_eur: null }, NOW).planned_amount_eur).toBeNull()
+    expect(operationRow(form({ status: 'plan' }), toFact, NOW).planned_amount_eur).toBeNull()
+    expect(operationRow(form({ status: 'fact' }), null, NOW).planned_amount_eur).toBeNull()
   })
 })
 

@@ -34,6 +34,35 @@ export type OperationRow = {
   envelope_id: string | null
   debt_id: string | null
   note: string | null
+  planned_amount_eur: number | null
+}
+
+/** What the rules need of a stored operation to confirm it or turn it back to plan. */
+export type PlanState = {
+  is_planned: boolean
+  confirmed_at: string | null
+  amount_eur: number | string
+  planned_amount_eur?: number | string | null
+}
+
+const eur = (cents: number) => cents / 100
+
+/**
+ * Confirming a planned operation («Пришло? / Списалось?», «Подтвердить»): the time, the corrected amount if it
+ * differs, and the amount that was in the plan (`planned_amount_eur`, decision 16.11.2026) — kept from an earlier
+ * confirmation if there was one, so confirm → undo → confirm does not lose it. A plain fact gets only the time.
+ * The patch is complete in itself: it goes through the offline queue as is.
+ */
+export function confirmPatch(tx: PlanState, correctedCents: number | null, nowIso: string): { confirmed_at: string; amount_eur?: number; planned_amount_eur?: number } {
+  const patch: { confirmed_at: string; amount_eur?: number; planned_amount_eur?: number } = { confirmed_at: nowIso }
+  if (correctedCents !== null && correctedCents > 0 && correctedCents !== Math.round(Number(tx.amount_eur) * 100)) patch.amount_eur = eur(correctedCents)
+  if (tx.is_planned) patch.planned_amount_eur = Number(tx.planned_amount_eur ?? tx.amount_eur)
+  return patch
+}
+
+/** Back to plan («Вернуть» after a confirmation): unconfirmed, the planned amount restored, the planned-amount mark cleared. */
+export function unconfirmPatch(tx: PlanState): { confirmed_at: null; amount_eur: number; planned_amount_eur: null } {
+  return { confirmed_at: null, amount_eur: Number(tx.planned_amount_eur ?? tx.amount_eur), planned_amount_eur: null }
 }
 
 export function operationValid(f: OperationForm): boolean {
@@ -46,8 +75,11 @@ export function operationValid(f: OperationForm): boolean {
  * (the time of the first confirmation stays). Group: income — «Доход», transfer — none. A weekly category only
  * for an expense of «Жизнь» (it is what counts against the week's limit); an envelope only for an expense.
  */
-export function operationRow(f: OperationForm, prev: { is_planned: boolean; confirmed_at: string | null } | null, nowIso: string): OperationRow {
+export function operationRow(f: OperationForm, prev: PlanState | null, nowIso: string): OperationRow {
   const planned = f.status === 'plan' ? true : (prev?.is_planned ?? false)
+  // the plan's amount: taken when a planned operation is confirmed here, kept while it stays confirmed, cleared back in plan
+  const plannedAmount =
+    f.status === 'plan' || !prev?.is_planned ? null : prev.confirmed_at === null ? Number(prev.amount_eur) : prev.planned_amount_eur == null ? null : Number(prev.planned_amount_eur)
   const grp = f.kind === 'income' ? 'Доход' : f.kind === 'transfer' ? null : f.grp
   const weekly = f.kind === 'expense' && grp === 'Жизнь' && f.category !== null && (WEEK_CATEGORIES as readonly string[]).includes(f.category)
   return {
@@ -63,11 +95,12 @@ export function operationRow(f: OperationForm, prev: { is_planned: boolean; conf
     envelope_id: f.kind === 'expense' ? f.envelopeId : null,
     debt_id: f.debtId,
     note: f.note.trim() || null,
+    planned_amount_eur: plannedAmount,
   }
 }
 
 /** A stored operation back into the form (for editing). */
-export function operationForm(t: OperationRow & { cancelled_at?: string | null }): OperationForm {
+export function operationForm(t: Omit<OperationRow, 'planned_amount_eur'> & { cancelled_at?: string | null }): OperationForm {
   return {
     kind: t.kind === 'income' ? 'income' : t.kind === 'transfer' ? 'transfer' : 'expense',
     title: t.title,

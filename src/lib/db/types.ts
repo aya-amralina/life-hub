@@ -791,6 +791,7 @@ export type Database = {
           is_planned: boolean
           kind: string
           note: string | null
+          planned_amount_eur: number | null
           source_id: string | null
           title: string
           updated_at: string
@@ -813,6 +814,7 @@ export type Database = {
           is_planned?: boolean
           kind: string
           note?: string | null
+          planned_amount_eur?: number | null
           source_id?: string | null
           title: string
           updated_at?: string
@@ -835,6 +837,7 @@ export type Database = {
           is_planned?: boolean
           kind?: string
           note?: string | null
+          planned_amount_eur?: number | null
           source_id?: string | null
           title?: string
           updated_at?: string
