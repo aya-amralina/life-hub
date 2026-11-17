@@ -232,6 +232,11 @@ export type RecurringForm = {
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/
 
+/** A new rule: a monthly expense from today. */
+export function blankRecurring(today: ISODate): RecurringForm {
+  return { title: '', cents: null, kind: 'expense', grp: 'Обязательное', account: null, envelopeId: null, freq: 'monthly', interval: 1, anchor: today, end: null, active: true, note: '' }
+}
+
 export function recurringValid(f: RecurringForm): boolean {
   return (
     f.title.trim().length > 0 &&
@@ -298,6 +303,26 @@ export function scheduleChanged(prev: Pick<RecurringLike, 'freq' | 'interval_n' 
 export function suggestedAnchor(rule: RecurringLike, txs: readonly OccurrenceLink[]): ISODate {
   const last = lastAnswered(rule.id, txs)
   return last === null ? rule.anchor_date : nextDateAfter(rule, last)
+}
+
+/**
+ * The first date while frequency or interval is being changed in the form. After answers, a new rhythm whose
+ * first date is not past the last answer gets the suggested one (the old schedule's next period); when the
+ * rhythm goes back to the rule's own, a date the form chose itself goes back too. `auto` — the current date was
+ * chosen by the form, not typed.
+ */
+export function anchorForRhythm(
+  rule: RecurringLike,
+  txs: readonly OccurrenceLink[],
+  next: Pick<RecurringForm, 'freq' | 'interval' | 'anchor'>,
+  auto: boolean,
+): { anchor: ISODate; auto: boolean } {
+  const last = lastAnswered(rule.id, txs)
+  if (last === null) return { anchor: next.anchor, auto }
+  const same = next.freq === rule.freq && next.interval === rule.interval_n
+  if (same) return auto ? { anchor: rule.anchor_date, auto: false } : { anchor: next.anchor, auto }
+  if (next.anchor <= last) return { anchor: suggestedAnchor(rule, txs), auto: true }
+  return { anchor: next.anchor, auto }
 }
 
 export type RuleSave =

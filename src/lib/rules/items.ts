@@ -107,7 +107,7 @@ export function nextTargetAfterHorizon(items: readonly ItemLike[], today: ISODat
   return next
 }
 
-export type ChipKind = 'clock' | 'from' | 'flag' | 'hot' | 'late' | 'moved' | 'stuck' | 'rigid' | 'ok' | 'alt'
+export type ChipKind = 'clock' | 'from' | 'flag' | 'hot' | 'late' | 'moved' | 'stuck' | 'rigid' | 'ok' | 'alt' | 'repeat'
 export type Chip = { kind: ChipKind; text: string }
 
 /** «сегодня», «завтра», «через 2 дня», «5 дней назад». */

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { confirmPatch } from './operation'
 import { balanceAt, monthsTable, plannedQuestions, upcomingPlanned } from './money'
 import {
+  anchorForRhythm,
+  blankRecurring,
   describeRule,
   isVirtual,
   lastAnswered,
@@ -226,6 +228,12 @@ describe('the rule form', () => {
     expect(recurringValid(form({ end: '2026-11-30' }))).toBe(false)
     expect(recurringValid(form({ end: '2026-12-01' }))).toBe(true)
   })
+  it('a new rule: a monthly expense from today, waiting for a name and a sum', () => {
+    const b = blankRecurring('2026-11-17')
+    expect(b).toMatchObject({ kind: 'expense', freq: 'monthly', interval: 1, anchor: '2026-11-17', end: null, active: true })
+    expect(recurringValid(b)).toBe(false)
+    expect(recurringValid({ ...b, title: 'Netflix', cents: 1399 })).toBe(true)
+  })
   it('row: trimmed, group by kind, envelope only for an expense', () => {
     expect(recurringRow(form({ title: ' Miete ', note: ' ' }))).toMatchObject({ title: 'Miete', note: null, amount_eur: 650, interval_n: 1, anchor_date: '2026-12-01' })
     expect(recurringRow(form({ kind: 'income', envelopeId: 'e' }))).toMatchObject({ grp: 'Доход', envelope_id: null })
@@ -279,6 +287,18 @@ describe('changing a rule (correction C)', () => {
     expect(suggestedAnchor(r, answers)).toBe('2027-01-01')
     expect(suggestedAnchor(r, [])).toBe('2026-10-01')
     expect(suggestedAnchor(rule({ freq: 'weekly', anchor_date: '2026-11-02' }), [tx('w', '2026-11-16', 'expense', 1, { recurring_id: 'r1', occurrence_date: '2026-11-16' })])).toBe('2026-11-23')
+  })
+
+  it('the form: a new rhythm starts after the last answer by default; the old rhythm back — the old date back', () => {
+    const weekly = anchorForRhythm(r, answers, { freq: 'weekly', interval: 1, anchor: r.anchor_date }, false)
+    expect(weekly).toEqual({ anchor: '2027-01-01', auto: true })
+    expect(anchorForRhythm(r, answers, { freq: 'weekly', interval: 2, anchor: weekly.anchor }, weekly.auto)).toEqual({ anchor: '2027-01-01', auto: true })
+    expect(anchorForRhythm(r, answers, { freq: 'monthly', interval: 1, anchor: weekly.anchor }, weekly.auto)).toEqual({ anchor: '2026-10-01', auto: false })
+  })
+  it('the form keeps a typed date, and never moves it without answers', () => {
+    expect(anchorForRhythm(r, answers, { freq: 'weekly', interval: 1, anchor: '2027-01-10' }, false)).toEqual({ anchor: '2027-01-10', auto: false })
+    expect(anchorForRhythm(r, answers, { freq: 'monthly', interval: 1, anchor: '2027-01-10' }, false)).toEqual({ anchor: '2027-01-10', auto: false })
+    expect(anchorForRhythm(r, [], { freq: 'weekly', interval: 2, anchor: '2026-10-01' }, false)).toEqual({ anchor: '2026-10-01', auto: false })
   })
 
   it('warns, without forbidding, when the new date is closer than one interval to the last answer', () => {

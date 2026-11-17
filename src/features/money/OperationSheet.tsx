@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useToast } from '@/app/toastContext'
 import { BottomSheet } from '@/components/ui/BottomSheet'
 import { Button } from '@/components/ui/Button'
-import { Chip } from '@/components/ui/Chip'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { ACCOUNTS, WEEK_CATEGORIES } from '@/lib/constants'
 import { todayBerlin } from '@/lib/dates'
@@ -10,6 +9,7 @@ import { formatAmount, formatEur, parseEurInput } from '@/lib/format'
 import { isWeekRow } from '@/lib/rules/money'
 import { DEBT_DIRECTION_LABEL, OPERATION_GROUPS, OPERATION_KIND_LABEL, operationForm, operationRow, operationValid, type DebtDirection, type OperationForm, type OperationKind } from '@/lib/rules/operation'
 import { isVirtual, materialize } from '@/lib/rules/recurring'
+import { Choice } from './Choice'
 import { useAnswerPlanned, useCreateTransaction, useDebts, useDeleteTransaction, useEnvelopes, useUpdateTransaction, type PlanTx } from './api'
 
 const field = 'h-12 w-full rounded-xl border border-line2 bg-card px-4 text-base text-ink outline-none placeholder:text-ink3 focus:border-ink2'
@@ -181,21 +181,5 @@ function OperationFormBody({ tx, onClose }: { tx: PlanTx | null; onClose: () => 
         </div>
       )}
     </form>
-  )
-}
-
-/** One choice of chips; tapping the chosen one clears it. */
-function Choice<T extends string>({ label, options, value, onChange }: { label: string; options: { value: T; label: string }[]; value: T | null; onChange: (v: T | null) => void }) {
-  return (
-    <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-      <legend className="mb-2 text-cap text-ink2">{label}</legend>
-      <div className="flex flex-wrap gap-2">
-        {options.map((o) => (
-          <Chip key={o.value} selected={value === o.value} onClick={() => onChange(value === o.value ? null : o.value)}>
-            {o.label}
-          </Chip>
-        ))}
-      </div>
-    </fieldset>
   )
 }

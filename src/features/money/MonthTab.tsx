@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ChevronRight } from 'lucide-react'
+import { Link } from 'react-router'
 import { useAddAction } from '@/app/addSheetContext'
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
@@ -18,8 +19,10 @@ import { balanceAt, balancesByDate, forecastEnd, isFact, isWeekRow, monthsTable,
 import { confirmPatch } from '@/lib/rules/operation'
 import { ACCOUNTS } from '@/lib/constants'
 import { Chip } from '@/components/ui/Chip'
+import { MetaChip } from '@/components/ui/MetaChip'
+import { ruleState } from '@/lib/rules/recurring'
 import { joinRu } from '@/lib/format'
-import { useActualBalances, useAnswerPlanned, usePlanTransactions, type PlanTx } from './api'
+import { useActualBalances, useAnswerPlanned, usePlanTransactions, useRecurring, type PlanTx } from './api'
 import { OperationSheet } from './OperationSheet'
 
 type Filter = 'plan' | 'fact'
@@ -44,6 +47,7 @@ export function MonthTab() {
   const [filter, setFilter] = useState<Filter[]>([])
   const [showRemoved, setShowRemoved] = useState(false)
   const actual = useActualBalances()
+  const rules = useRecurring()
   // the operation sheet: null — closed, 'new' — a new operation, else the one being edited
   const [editing, setEditing] = useState<PlanTx | 'new' | null>(null)
   useAddAction(() => setEditing('new'))
@@ -84,6 +88,7 @@ export function MonthTab() {
   // the chart: from the start of this month to the horizon
   const line = balanceLine(all, `${today.slice(0, 7)}-01`, end, today)
   const months = monthsTable(all, today, end)
+  const ruleCount = (rules.data ?? []).filter((r) => ruleState(r, today) !== 'ended').length
 
   return (
     <>
@@ -135,13 +140,28 @@ export function MonthTab() {
             {next.map((t) => (
               <li key={t.id} className="flex min-h-11 items-center gap-3 border-t border-line text-base first:border-t-0">
                 <span className="w-10 flex-none text-cap text-ink2 tabular-nums">{formatDayMonth(t.date)}</span>
-                <span lang="de" className="min-w-0 flex-1 [overflow-wrap:anywhere]">
-                  {t.title}
+                <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2">
+                  <span lang="de" className="min-w-0 [overflow-wrap:anywhere]">
+                    {t.title}
+                  </span>
+                  {t.recurring_id && <MetaChip kind="repeat" text="регулярный" />}
                 </span>
                 <span className="tabular-nums">{signed(t)}</span>
               </li>
             ))}
           </ul>
+          <Link to="/money/recurring" className="-mb-2 flex min-h-11 items-center gap-2 border-t border-line text-base text-ink no-underline active:bg-sub">
+            <span className="min-w-0 flex-1">
+              {ruleCount ? (
+                <>
+                  Регулярные <span className="text-ink2 tabular-nums">· {ruleCount}</span>
+                </>
+              ) : (
+                'Завести регулярный платёж'
+              )}
+            </span>
+            <ChevronRight size={16} strokeWidth={1.75} aria-hidden="true" className="flex-none text-ink3" />
+          </Link>
         </Card>
       )}
 

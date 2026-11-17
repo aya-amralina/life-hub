@@ -1,4 +1,4 @@
-import { ArrowRightFromLine, Check, Clock, Flag, Flame, Lock, Pause, Redo2, type LucideIcon } from 'lucide-react'
+import { ArrowRightFromLine, Check, Clock, Flag, Flame, Lock, Pause, Redo2, Repeat, type LucideIcon } from 'lucide-react'
 import type { Chip, ChipKind } from '@/lib/rules/items'
 import { cn } from './cn'
 
@@ -11,6 +11,7 @@ const ICON: Partial<Record<ChipKind, LucideIcon>> = {
   stuck: Pause,
   rigid: Lock,
   ok: Check,
+  repeat: Repeat,
 }
 
 const STYLE: Record<ChipKind, string> = {
@@ -24,6 +25,7 @@ const STYLE: Record<ChipKind, string> = {
   late: 'bg-red-soft text-red font-semibold',
   stuck: 'border-dashed border-line2 text-ink2',
   rigid: 'text-ink2',
+  repeat: 'bg-sub text-ink2',
 }
 
 /**

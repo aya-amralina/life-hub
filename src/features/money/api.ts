@@ -139,6 +139,40 @@ export function useRecurring() {
   })
 }
 
+export type RecurringStep =
+  | { action: 'insert'; values: TablesInsert<'recurring'> & { id: string } }
+  | { action: 'update'; id: string; values: TablesUpdate<'recurring'> }
+  | { action: 'delete'; id: string }
+
+/**
+ * Rules are written through the offline queue, steps in order — a change of the schedule after answers is two:
+ * close the old rule, then create the new one. Optimistic in the rules cache.
+ */
+export function useSaveRecurring() {
+  const qc = useQueryClient()
+  const key = [...moneyKeys.all, 'recurring'] as const
+  return useMutation({
+    mutationFn: async (steps: readonly RecurringStep[]) => {
+      for (const s of steps) await write({ table: 'recurring', ...s })
+    },
+    onMutate: async (steps) => {
+      await qc.cancelQueries({ queryKey: moneyKeys.all })
+      const prev = qc.getQueryData<Recurring[]>(key)
+      const blank = { grp: null, account: null, envelope_id: null, interval_n: 1, end_date: null, active: true, note: null, source_id: null, user_id: '', created_at: '', updated_at: '' }
+      qc.setQueryData<Recurring[]>(key, (old = []) =>
+        steps.reduce<Recurring[]>((rows, s) => {
+          if (s.action === 'insert') return [...rows, { ...blank, ...s.values } as Recurring]
+          if (s.action === 'update') return rows.map((r) => (r.id === s.id ? ({ ...r, ...s.values } as Recurring) : r))
+          return rows.filter((r) => r.id !== s.id)
+        }, old),
+      )
+      return { prev }
+    },
+    onError: (_e, _v, ctx) => qc.setQueryData(key, ctx?.prev),
+    onSettled: () => qc.invalidateQueries({ queryKey: moneyKeys.all }),
+  })
+}
+
 /**
  * The plan: stored operations plus the virtual occurrences of the recurring rules up to the forecast horizon —
  * what balance, forecast, months, questions, «Дальше по плану» and the calendar work on.
