@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { addDaysISO, addMonthsISO } from '../../src/lib/dates'
+import { addDaysISO, addMonthsISO, formatDayMonth } from '../../src/lib/dates'
 import { NEEDS, berlinDate, cleanupTestUser, live, login, more, plus, tab, testClient } from './helpers'
 
 test.beforeEach(cleanupTestUser) // each test starts with no rules
@@ -95,5 +95,43 @@ test('«Регулярные»: правило через «+», смена ра
   // «Ещё» on «Деньги» says how many and when next
   await tab(page, 'Деньги')
   await expect(page.getByRole('navigation', { name: 'Ещё' }).getByRole('link', { name: /^Регулярные.*2 · след\./ })).toBeVisible()
+  await sb.auth.signOut()
+})
+
+// «Уже есть в плане»: a new rule offers the similar operations; nothing is linked before «Привязать N»
+test('«Уже есть в плане»: похожие операции привязываются только по «Привязать»', async ({ page }) => {
+  test.skip(!live, NEEDS)
+  const today = berlinDate()
+  const next = addMonthsISO(today, 1)
+  const sb = await testClient()
+  const fact = await sb.from('transactions').insert({ date: today, amount_eur: 650, kind: 'expense', grp: 'Обязательное', title: 'Miete e2e', is_planned: true, confirmed_at: new Date().toISOString() }).select('id').single()
+  const plan = await sb.from('transactions').insert({ date: addDaysISO(next, 2), amount_eur: 650, kind: 'expense', grp: 'Обязательное', title: 'Miete e2e', is_planned: true }).select('id').single()
+  expect(fact.error ?? plan.error).toBeNull()
+  const linked = async () =>
+    Object.fromEntries(((await sb.from('transactions').select('id, occurrence_date').in('id', [fact.data!.id, plan.data!.id])).data ?? []).map((r) => [r.id, r.occurrence_date]))
+
+  await login(page)
+  await tab(page, 'Деньги')
+  await more(page, 'Регулярные')
+  await plus(page)
+  const sheet = page.getByRole('dialog', { name: 'Новый регулярный платёж' })
+  await sheet.getByLabel('Название').fill('Miete e2e')
+  await sheet.getByLabel('Сумма').fill('650')
+  await sheet.getByRole('button', { name: 'Сохранить' }).click()
+
+  const link = page.getByRole('dialog', { name: 'Уже есть в плане' })
+  await expect(link.getByRole('checkbox')).toHaveCount(2)
+  await expect(link.getByText(`повторение ${formatDayMonth(next)}`)).toBeVisible() // the planned row is two days off its occurrence
+  expect(await linked()).toEqual({ [fact.data!.id]: null, [plan.data!.id]: null }) // nothing written yet
+  await link.getByRole('checkbox', { name: `${formatDayMonth(addDaysISO(next, 2))} Miete e2e` }).click()
+  await link.getByRole('button', { name: 'Привязать 1' }).click()
+  await expect(link).toBeHidden()
+  await expect.poll(linked).toEqual({ [fact.data!.id]: today, [plan.data!.id]: null })
+
+  // the rest — later, from the rule's sheet
+  await page.getByRole('button', { name: /Miete e2e/ }).click()
+  await page.getByRole('dialog', { name: 'Регулярный платёж' }).getByRole('button', { name: 'Уже есть в плане · 1' }).click()
+  await link.getByRole('button', { name: 'Привязать 1' }).click()
+  await expect.poll(linked).toEqual({ [fact.data!.id]: today, [plan.data!.id]: next })
   await sb.auth.signOut()
 })

@@ -9,8 +9,9 @@ import { cn } from '@/components/ui/cn'
 import { formatDayMonth, todayBerlin, type ISODate } from '@/lib/dates'
 import { formatEur, toCents } from '@/lib/format'
 import { forecastEnd } from '@/lib/rules/money'
-import { describeRule, nextOccurrence, ruleState } from '@/lib/rules/recurring'
+import { describeRule, linkCandidates, nextOccurrence, ruleState } from '@/lib/rules/recurring'
 import { useAllTransactions, useRecurring, type Recurring } from './api'
+import { RecurringLinkSheet } from './RecurringLinkSheet'
 import { RecurringSheet } from './RecurringSheet'
 
 const signed = (r: Recurring) => {
@@ -29,13 +30,30 @@ export function RecurringTab() {
   // the rule sheet: null — closed, 'new' — a new rule, else the one being edited
   const [editing, setEditing] = useState<Recurring | 'new' | null>(null)
   const [endedOpen, setEndedOpen] = useState(false)
+  // «Уже есть в плане» for a rule: right after a new one is saved, or from its sheet
+  const [linking, setLinking] = useState<Recurring | null>(null)
   useAddAction(() => setEditing('new'))
 
   if (rules.isPending || txs.isPending) return <SkeletonCard />
   const all = rules.data ?? []
   const tx = txs.data ?? []
   const end = forecastEnd(today)
-  const sheet = <RecurringSheet open={editing !== null} onClose={() => setEditing(null)} rule={editing === 'new' ? null : editing} txs={tx} />
+  const sheet = (
+    <>
+      <RecurringSheet
+        open={editing !== null}
+        onClose={() => setEditing(null)}
+        rule={editing === 'new' ? null : editing}
+        txs={tx}
+        onCreated={(r) => linkCandidates(r, tx, end).length > 0 && setLinking(r)}
+        onLink={(r) => {
+          setEditing(null)
+          setLinking(r)
+        }}
+      />
+      <RecurringLinkSheet rule={linking} txs={tx} onClose={() => setLinking(null)} />
+    </>
+  )
 
   if (!all.length) {
     return (

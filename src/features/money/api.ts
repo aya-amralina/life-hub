@@ -144,20 +144,25 @@ export type RecurringStep =
   | { action: 'update'; id: string; values: TablesUpdate<'recurring'> }
   | { action: 'delete'; id: string }
 
+/** An existing operation bound to an occurrence of a rule («Уже есть в плане», «Сделать регулярным»). */
+export type OccurrenceLinkWrite = { txId: string; recurringId: string; occurrence: ISODate }
+
 /**
  * Rules are written through the offline queue, steps in order — a change of the schedule after answers is two:
- * close the old rule, then create the new one. Optimistic in the rules cache.
+ * close the old rule, then create the new one. `links` bind existing operations to occurrences, written after
+ * the rules in the same run (a new rule must exist before an operation points at it). Optimistic in the caches.
  */
 export function useSaveRecurring() {
   const qc = useQueryClient()
   const key = [...moneyKeys.all, 'recurring'] as const
   return useMutation({
-    mutationFn: async (steps: readonly RecurringStep[]) => {
+    mutationFn: async ({ steps, links = [] }: { steps: readonly RecurringStep[]; links?: readonly OccurrenceLinkWrite[] }) => {
       for (const s of steps) await write({ table: 'recurring', ...s })
+      for (const l of links) await write({ table: 'transactions', action: 'update', id: l.txId, values: { recurring_id: l.recurringId, occurrence_date: l.occurrence } })
     },
-    onMutate: async (steps) => {
+    onMutate: async ({ steps, links = [] }) => {
       await qc.cancelQueries({ queryKey: moneyKeys.all })
-      const prev = qc.getQueryData<Recurring[]>(key)
+      const prev = qc.getQueriesData({ queryKey: moneyKeys.all })
       const blank = { grp: null, account: null, envelope_id: null, interval_n: 1, end_date: null, active: true, note: null, source_id: null, user_id: '', created_at: '', updated_at: '' }
       qc.setQueryData<Recurring[]>(key, (old = []) =>
         steps.reduce<Recurring[]>((rows, s) => {
@@ -166,9 +171,22 @@ export function useSaveRecurring() {
           return rows.filter((r) => r.id !== s.id)
         }, old),
       )
+      if (links.length) {
+        const byTx = new Map(links.map((l) => [l.txId, l]))
+        for (const [k, data] of qc.getQueriesData<Transaction[]>({ queryKey: [...moneyKeys.all, 'tx'] })) {
+          if (!Array.isArray(data)) continue
+          qc.setQueryData<Transaction[]>(
+            k,
+            data.map((t) => {
+              const l = byTx.get(t.id)
+              return l ? { ...t, recurring_id: l.recurringId, occurrence_date: l.occurrence } : t
+            }),
+          )
+        }
+      }
       return { prev }
     },
-    onError: (_e, _v, ctx) => qc.setQueryData(key, ctx?.prev),
+    onError: (_e, _v, ctx) => ctx?.prev.forEach(([k, data]) => qc.setQueryData(k, data)),
     onSettled: () => qc.invalidateQueries({ queryKey: moneyKeys.all }),
   })
 }

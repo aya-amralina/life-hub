@@ -6,6 +6,7 @@ import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { ACCOUNTS } from '@/lib/constants'
 import { formatDayMonth, todayBerlin } from '@/lib/dates'
 import { formatAmount, formatEur, parseEurInput } from '@/lib/format'
+import { forecastEnd } from '@/lib/rules/money'
 import { OPERATION_GROUPS, OPERATION_KIND_LABEL, type OperationKind } from '@/lib/rules/operation'
 import {
   FREQ_LABEL,
@@ -13,6 +14,7 @@ import {
   blankRecurring,
   describeRule,
   lastAnswered,
+  linkCandidates,
   planRuleSave,
   recurringForm,
   recurringRow,
@@ -42,6 +44,7 @@ export function RecurringSheet({
   txs,
   initial,
   onCreated,
+  onLink,
 }: {
   open: boolean
   onClose: () => void
@@ -49,10 +52,12 @@ export function RecurringSheet({
   txs: readonly Transaction[]
   initial?: RecurringForm
   onCreated?: (rule: Recurring) => void
+  /** «Уже есть в плане · N» of an existing rule */
+  onLink?: (rule: Recurring) => void
 }) {
   return (
     <BottomSheet open={open} onClose={onClose} label={rule ? 'Регулярный платёж' : 'Новый регулярный платёж'}>
-      {open && <RecurringFormBody key={rule?.id ?? 'new'} rule={rule} txs={txs} initial={initial} onClose={onClose} onCreated={onCreated} />}
+      {open && <RecurringFormBody key={rule?.id ?? 'new'} rule={rule} txs={txs} initial={initial} onClose={onClose} onCreated={onCreated} onLink={onLink} />}
     </BottomSheet>
   )
 }
@@ -63,12 +68,14 @@ function RecurringFormBody({
   initial,
   onClose,
   onCreated,
+  onLink,
 }: {
   rule: Recurring | null
   txs: readonly Transaction[]
   initial?: RecurringForm
   onClose: () => void
   onCreated?: (rule: Recurring) => void
+  onLink?: (rule: Recurring) => void
 }) {
   const [f, setF] = useState<RecurringForm>(() => (rule ? recurringForm(rule) : (initial ?? blankRecurring(todayBerlin()))))
   const [amount, setAmount] = useState(() => {
@@ -90,6 +97,7 @@ function RecurringFormBody({
   const warning = rule ? scheduleWarning(rule, form, txs) : null
   const split = plan?.mode === 'split'
   const valid = recurringValid(form) && plan?.mode !== 'invalid'
+  const similar = rule && onLink ? linkCandidates(rule, txs, forecastEnd(todayBerlin())).length : 0
   const pots = (envelopes.data ?? []).filter((e) => e.type === 'envelope' || e.id === f.envelopeId)
 
   // a new frequency or interval after answers starts, by default, in the old schedule's next period after the last answer
@@ -110,7 +118,7 @@ function RecurringFormBody({
     const row = recurringRow(form)
     if (!rule || !plan) {
       const id = crypto.randomUUID()
-      save.mutate([{ action: 'insert', values: { id, ...row } }])
+      save.mutate({ steps: [{ action: 'insert', values: { id, ...row } }] })
       toast({ text: `${row.title} · ${sum} — ${describeRule(row)}` })
       onClose()
       onCreated?.({ ...row, id, source_id: null, user_id: '', created_at: '', updated_at: '' })
@@ -124,7 +132,7 @@ function RecurringFormBody({
         { action: 'insert', values: { id: crypto.randomUUID(), ...plan.create } },
       ]
     }
-    save.mutate(steps)
+    save.mutate({ steps })
     toast({ text: plan.mode === 'split' ? `${row.title}: новое расписание с ${formatDayMonth(row.anchor_date)}` : `${row.title} · ${sum} — сохранено` })
     onClose()
   }
@@ -196,17 +204,22 @@ function RecurringFormBody({
       <Button type="submit" disabled={!valid}>
         Сохранить
       </Button>
+      {rule && similar > 0 && (
+        <Button variant="secondary" onClick={() => onLink?.(rule)}>
+          Уже есть в плане · {similar}
+        </Button>
+      )}
       {rule && (
         <div className="grid grid-cols-2 gap-2">
           <Button
             variant="secondary"
             className="h-11"
             onClick={() => {
-              save.mutate([{ action: 'update', id: rule.id, values: { active: !rule.active } }])
+              save.mutate({ steps: [{ action: 'update', id: rule.id, values: { active: !rule.active } }] })
               toast({
                 text: rule.active ? `${rule.title} — на паузе, в плане его нет` : `${rule.title} — снова в плане`,
                 actionLabel: 'Вернуть',
-                onAction: () => save.mutate([{ action: 'update', id: rule.id, values: { active: rule.active } }]),
+                onAction: () => save.mutate({ steps: [{ action: 'update', id: rule.id, values: { active: rule.active } }] }),
               })
               onClose()
             }}
@@ -217,7 +230,7 @@ function RecurringFormBody({
             <Button
               variant="quiet"
               onClick={() => {
-                save.mutate([{ action: 'delete', id: rule.id }])
+                save.mutate({ steps: [{ action: 'delete', id: rule.id }] })
                 toast({ text: `${rule.title} — удалено` })
                 onClose()
               }}
