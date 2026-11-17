@@ -16,7 +16,7 @@ import { addDaysISO, formatDayMonth, formatRelativeDay, todayBerlin, weekStart }
 import { formatAmount, formatEur, plural, toCents } from '@/lib/format'
 import { plannedQuestions, weekSpendings } from '@/lib/rules/money'
 import { NotesSection } from '@/features/notes/NotesCard'
-import { useAddExpense, useAllTransactions, useDeleteTransaction, useWeekLimits, type Transaction } from './api'
+import { useAddExpense, usePlanTransactions, useDeleteTransaction, useWeekLimits, type Transaction } from './api'
 import { CutNextWeek } from './CutNextWeek'
 import { EnvelopesTab } from './EnvelopesTab'
 import { LimitsSheet } from './LimitsSheet'
@@ -71,7 +71,7 @@ export function MoneyScreen() {
 }
 
 function PendingLink() {
-  const txs = useAllTransactions()
+  const txs = usePlanTransactions()
   const n = plannedQuestions(txs.data ?? [], todayBerlin()).length
   if (n === 0) return null
   return (

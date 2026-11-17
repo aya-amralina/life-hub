@@ -25,7 +25,7 @@ import { useCreateItem, useItems, usePatchItems, useUpdateItem, type Item } from
 import { CutNextWeek } from '@/features/money/CutNextWeek'
 import { MoneyQuestions } from '@/features/money/MoneyQuestions'
 import { MoneyTotal } from '@/features/money/MoneyTotal'
-import { useAllTransactions } from '@/features/money/api'
+import { usePlanTransactions } from '@/features/money/api'
 import { useMoneyWeek } from '@/features/money/useMoneyWeek'
 import { MoveSheet } from '@/features/study/MoveSheet'
 import { weekLabel } from '@/features/study/weekLabel'
@@ -372,7 +372,7 @@ export function WorkStep({ note, onNote }: { note: string; onNote: (v: string) =
 export function AheadStep({ monday, thought, onThought }: { monday: ISODate; thought: string; onThought: (v: string) => void }) {
   const items = useItems()
   const weeks = useAllWeeks()
-  const txs = useAllTransactions()
+  const txs = usePlanTransactions()
   const stages = useStages()
   if (items.isPending || weeks.isPending || txs.isPending) return <SkeletonCard />
   const ws = weeks.data ?? []

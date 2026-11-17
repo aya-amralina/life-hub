@@ -9,7 +9,8 @@ import { todayBerlin } from '@/lib/dates'
 import { formatAmount, formatEur, parseEurInput } from '@/lib/format'
 import { isWeekRow } from '@/lib/rules/money'
 import { DEBT_DIRECTION_LABEL, OPERATION_GROUPS, OPERATION_KIND_LABEL, operationForm, operationRow, operationValid, type DebtDirection, type OperationForm, type OperationKind } from '@/lib/rules/operation'
-import { useCreateTransaction, useDebts, useDeleteTransaction, useEnvelopes, useUpdateTransaction, type Transaction } from './api'
+import { isVirtual, materialize } from '@/lib/rules/recurring'
+import { useAnswerPlanned, useCreateTransaction, useDebts, useDeleteTransaction, useEnvelopes, useUpdateTransaction, type PlanTx } from './api'
 
 const field = 'h-12 w-full rounded-xl border border-line2 bg-card px-4 text-base text-ink outline-none placeholder:text-ink3 focus:border-ink2'
 const KINDS = (Object.keys(OPERATION_KIND_LABEL) as OperationKind[]).map((value) => ({ value, label: OPERATION_KIND_LABEL[value] }))
@@ -25,8 +26,10 @@ const blank = (): OperationForm => ({ kind: 'expense', title: '', cents: null, d
  * Everything of «Статьи» can be changed: kind, name, sum, date, plan / fact, group, account, envelope, debt, note.
  * A week row («Неделя N») keeps its kind and status — only the sum, the date and the note. «Убрать из плана»
  * keeps the row (it can come back); an operation made in the app can also be deleted.
+ * An occurrence of a recurring rule is virtual: saving it or taking it out of the plan makes it a real row
+ * answering that occurrence; there is nothing to delete — the rule itself is changed in «Регулярные».
  */
-export function OperationSheet({ open, onClose, tx }: { open: boolean; onClose: () => void; tx: Transaction | null }) {
+export function OperationSheet({ open, onClose, tx }: { open: boolean; onClose: () => void; tx: PlanTx | null }) {
   return (
     <BottomSheet open={open} onClose={onClose} label={tx ? 'Операция' : 'Новая операция'}>
       {/* remount per operation: the form starts from the row it edits */}
@@ -35,7 +38,7 @@ export function OperationSheet({ open, onClose, tx }: { open: boolean; onClose: 
   )
 }
 
-function OperationFormBody({ tx, onClose }: { tx: Transaction | null; onClose: () => void }) {
+function OperationFormBody({ tx, onClose }: { tx: PlanTx | null; onClose: () => void }) {
   const [f, setF] = useState<OperationForm>(() => (tx ? operationForm(tx) : blank()))
   const [amount, setAmount] = useState(tx ? formatAmount(Math.round(Number(tx.amount_eur) * 100), { whole: true }) : '')
   const envelopes = useEnvelopes()
@@ -43,6 +46,7 @@ function OperationFormBody({ tx, onClose }: { tx: Transaction | null; onClose: (
   const create = useCreateTransaction()
   const update = useUpdateTransaction()
   const del = useDeleteTransaction()
+  const answer = useAnswerPlanned()
   const toast = useToast()
   const set = (p: Partial<OperationForm>) => setF((old) => ({ ...old, ...p }))
   const week = tx !== null && isWeekRow(tx)
@@ -56,7 +60,10 @@ function OperationFormBody({ tx, onClose }: { tx: Transaction | null; onClose: (
     if (!valid) return
     const row = operationRow(form, tx, new Date().toISOString())
     const sum = formatEur(form.cents!, { whole: true })
-    if (tx) {
+    if (tx && isVirtual(tx)) {
+      create.mutate(materialize(tx, crypto.randomUUID(), row) as Parameters<typeof create.mutate>[0])
+      toast({ text: `${row.title} · ${sum} — сохранено` })
+    } else if (tx) {
       // a week row changes only what its form shows
       update.mutate({ id: tx.id, patch: week ? { amount_eur: row.amount_eur, date: row.date, note: row.note } : row })
       toast({ text: `${row.title} · ${sum} — сохранено` })
@@ -145,18 +152,19 @@ function OperationFormBody({ tx, onClose }: { tx: Transaction | null; onClose: (
             className="h-11"
             onClick={() => {
               const cancelled = tx.cancelled_at ? null : new Date().toISOString()
-              update.mutate({ id: tx.id, patch: { cancelled_at: cancelled } })
               toast({
                 text: cancelled ? `${tx.title} — убрала из плана` : `${tx.title} — снова в плане`,
                 actionLabel: 'Вернуть',
-                onAction: () => update.mutate({ id: tx.id, patch: { cancelled_at: tx.cancelled_at } }),
+                onAction: answer(tx, { cancelled_at: cancelled }, { cancelled_at: tx.cancelled_at }),
               })
               onClose()
             }}
           >
             {tx.cancelled_at ? 'Вернуть в план' : 'Убрать из плана'}
           </Button>
-          {tx.source_id === null ? (
+          {isVirtual(tx) ? (
+            <span className="flex items-center text-cap text-ink2">Повторение регулярного платежа — само правило меняется в «Регулярных».</span>
+          ) : tx.source_id === null ? (
             <Button
               variant="quiet"
               onClick={() => {

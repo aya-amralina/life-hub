@@ -7,7 +7,7 @@ import { plannedQuestions } from '@/lib/rules/money'
 import { wishDue } from '@/lib/rules/wishlist'
 import { useItems } from '@/features/items/api'
 import { ItemQuestions } from '@/features/items/ItemQuestions'
-import { useAllTransactions } from '@/features/money/api'
+import { usePlanTransactions } from '@/features/money/api'
 import { MoneyQuestions } from '@/features/money/MoneyQuestions'
 import { WishQuestions } from '@/features/money/WishQuestions'
 import { useWishlist } from '@/features/money/wishlistApi'
@@ -18,7 +18,7 @@ import { useWishlist } from '@/features/money/wishlistApi'
  */
 export function QuestionStack() {
   const today = todayBerlin()
-  const txs = useAllTransactions()
+  const txs = usePlanTransactions()
   const items = useItems()
   const wishes = useWishlist()
   const [at, setAt] = useState(0)

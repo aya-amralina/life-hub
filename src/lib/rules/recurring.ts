@@ -47,6 +47,9 @@ export type VirtualTx = TxLike & {
   cancelled_at: null
   entry_kind: 'one_off'
   planned_amount_eur: null
+  debt_id: null
+  source_id: null
+  week_no: null
 }
 
 /** The id of a virtual operation: stable for the rule and the occurrence, never a uuid of the base. */
@@ -122,6 +125,9 @@ function virtualOf(rule: RecurringLike, occurrence: ISODate): VirtualTx {
     cancelled_at: null,
     entry_kind: 'one_off',
     planned_amount_eur: null,
+    debt_id: null,
+    source_id: null,
+    week_no: null,
   }
 }
 

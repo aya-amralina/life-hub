@@ -1,9 +1,12 @@
+import { useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { write } from '@/app/offlineQueue'
 import { supabase } from '@/lib/supabase'
 import { fetchAllPages } from '@/lib/paging'
 import type { Tables, TablesInsert, TablesUpdate } from '@/lib/db/types'
-import { addDaysISO, weekStart, type ISODate } from '@/lib/dates'
+import { addDaysISO, todayBerlin, weekStart, type ISODate } from '@/lib/dates'
+import { forecastEnd } from '@/lib/rules/money'
+import { isVirtual, materialize, withRecurring, type VirtualTx } from '@/lib/rules/recurring'
 import type { WeekCategory } from '@/lib/constants'
 import { ensureWeek, weekKeys } from '@/features/weeks/api'
 
@@ -119,6 +122,56 @@ export function useAllTransactions() {
       return fetchAllPages((from, to) => supabase.from('transactions').select('*').order('date').order('id').range(from, to))
     },
   })
+}
+
+export type Recurring = Tables<'recurring'>
+/** An operation of the plan: stored, or a virtual occurrence of a recurring rule. */
+export type PlanTx = Transaction | VirtualTx
+
+export function useRecurring() {
+  return useQuery({
+    queryKey: [...moneyKeys.all, 'recurring'] as const,
+    queryFn: async (): Promise<Recurring[]> => {
+      const { data, error } = await supabase.from('recurring').select('*').order('created_at').order('id')
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+/**
+ * The plan: stored operations plus the virtual occurrences of the recurring rules up to the forecast horizon —
+ * what balance, forecast, months, questions, «Дальше по плану» and the calendar work on.
+ * Without the rules (offline with an old cache) it is the stored operations alone, never an endless skeleton.
+ */
+export function usePlanTransactions() {
+  const txs = useAllTransactions()
+  const rules = useRecurring()
+  const end = forecastEnd(todayBerlin())
+  const data = useMemo(() => (txs.data ? withRecurring(txs.data, rules.data ?? [], end) : undefined), [txs.data, rules.data, end])
+  return { data, isPending: txs.isPending || (rules.isPending && rules.fetchStatus === 'fetching') }
+}
+
+/**
+ * An answer to a planned operation — confirm, another date, out of the plan, an edit. A stored one is patched;
+ * a virtual one becomes a real row with the answer (the occurrence stays answered in any state). Returns the
+ * undo: a stored row gets `undo` back (default — date, amount, confirmation, cancel as they were), a virtual
+ * one is deleted again and the occurrence is back in the plan. Both go through the offline queue, in order.
+ */
+export function useAnswerPlanned() {
+  const update = useUpdateTransaction()
+  const create = useCreateTransaction()
+  const del = useDeleteTransaction()
+  return (tx: PlanTx, patch: TablesUpdate<'transactions'>, undo?: TablesUpdate<'transactions'>): (() => void) => {
+    if (isVirtual(tx)) {
+      const id = crypto.randomUUID()
+      create.mutate(materialize(tx, id, patch) as TablesInsert<'transactions'> & { id: string })
+      return () => del.mutate(id)
+    }
+    const back = undo ?? { date: tx.date, amount_eur: tx.amount_eur, confirmed_at: tx.confirmed_at, cancelled_at: tx.cancelled_at }
+    update.mutate({ id: tx.id, patch })
+    return () => update.mutate({ id: tx.id, patch: back })
+  }
 }
 
 /** Patch an operation (confirm, another date, cancel). Optimistic in every money cache. */

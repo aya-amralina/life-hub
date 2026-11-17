@@ -29,7 +29,7 @@ import {
 import { useIntake } from '@/features/body/activityApi'
 import { useStages } from '@/features/body/api'
 import { useItems } from '@/features/items/api'
-import { useAllTransactions } from '@/features/money/api'
+import { usePlanTransactions } from '@/features/money/api'
 import { useAllWeeks } from '@/features/weeks/api'
 
 const STORE = 'lifehub.calendar.filters'
@@ -72,7 +72,7 @@ export function CalendarScreen() {
   const [filters, setFilters] = useState<CalendarFilter[]>(() => (fromSphere && SPHERES.includes(fromSphere) ? [fromSphere] : readFilters()))
 
   const items = useItems()
-  const txs = useAllTransactions()
+  const txs = usePlanTransactions()
   const weeks = useAllWeeks()
   const stages = useStages()
   const intake = useIntake()

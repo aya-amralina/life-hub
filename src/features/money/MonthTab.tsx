@@ -19,7 +19,7 @@ import { confirmPatch } from '@/lib/rules/operation'
 import { ACCOUNTS } from '@/lib/constants'
 import { Chip } from '@/components/ui/Chip'
 import { joinRu } from '@/lib/format'
-import { useActualBalances, useAllTransactions, useUpdateTransaction, type Transaction } from './api'
+import { useActualBalances, useAnswerPlanned, usePlanTransactions, type PlanTx } from './api'
 import { OperationSheet } from './OperationSheet'
 
 type Filter = 'plan' | 'fact'
@@ -30,7 +30,7 @@ const shiftMonth = (ym: string, n: number) => {
   d.setMonth(d.getMonth() + n)
   return format(d, 'yyyy-MM')
 }
-const signed = (t: Transaction) => {
+const signed = (t: PlanTx) => {
   const c = signedCents(t)
   return c > 0 ? `+${formatEur(c, { whole: true })}` : c < 0 ? `−${formatEur(-c, { whole: true })}` : formatEur(toCents(t.amount_eur), { whole: true })
 }
@@ -38,14 +38,14 @@ const signed = (t: Transaction) => {
 /** Месяц: balance now and the plan to the rolling horizon (rule 1), operations plan/fact, what comes next, months table. */
 export function MonthTab() {
   const today = todayBerlin()
-  const txs = useAllTransactions()
-  const update = useUpdateTransaction()
+  const txs = usePlanTransactions()
+  const answer = useAnswerPlanned()
   const [month, setMonth] = useState(today.slice(0, 7))
   const [filter, setFilter] = useState<Filter[]>([])
   const [showRemoved, setShowRemoved] = useState(false)
   const actual = useActualBalances()
   // the operation sheet: null — closed, 'new' — a new operation, else the one being edited
-  const [editing, setEditing] = useState<Transaction | 'new' | null>(null)
+  const [editing, setEditing] = useState<PlanTx | 'new' | null>(null)
   useAddAction(() => setEditing('new'))
 
   if (txs.isPending) return <SkeletonCard />
@@ -173,7 +173,7 @@ export function MonthTab() {
         ) : (
           <ul className="m-0 flex list-none flex-col p-0">
             {ops.map((t) => (
-              <OperationRow key={t.id} t={t} today={today} onOpen={() => setEditing(t)} onConfirm={() => update.mutate({ id: t.id, patch: confirmPatch(t, null, new Date().toISOString()) })} />
+              <OperationRow key={t.id} t={t} today={today} onOpen={() => setEditing(t)} onConfirm={() => answer(t, confirmPatch(t, null, new Date().toISOString()))} />
             ))}
           </ul>
         )}
@@ -226,7 +226,7 @@ function niceTicks(values: number[]): number[] | undefined {
   return ticks
 }
 
-function OperationRow({ t, today, onConfirm, onOpen }: { t: Transaction; today: ISODate; onConfirm: () => void; onOpen: () => void }) {
+function OperationRow({ t, today, onConfirm, onOpen }: { t: PlanTx; today: ISODate; onConfirm: () => void; onOpen: () => void }) {
   const planned = !isFact(t) && !t.cancelled_at
   const muted = Boolean(t.cancelled_at)
   return (
