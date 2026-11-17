@@ -135,3 +135,39 @@ test('«Уже есть в плане»: похожие операции при�
   await expect.poll(linked).toEqual({ [fact.data!.id]: today, [plan.data!.id]: next })
   await sb.auth.signOut()
 })
+
+// «Сделать регулярным»: the rule from a planned operation; the operation is its first occurrence at once,
+// the similar ones go through «Уже есть в плане»
+test('«Сделать регулярным»: правило из плановой операции, она — первое повторение', async ({ page }) => {
+  test.skip(!live, NEEDS)
+  const today = berlinDate()
+  const first = addDaysISO(today, 3)
+  const sb = await testClient()
+  const row = (date: string) => ({ date, amount_eur: 13.99, kind: 'expense', grp: 'Жизнь', account: 'Revolut', title: 'Netflix e2e', is_planned: true })
+  const a = await sb.from('transactions').insert(row(first)).select('id').single()
+  const b = await sb.from('transactions').insert(row(addDaysISO(addMonthsISO(today, 1), 3))).select('id').single()
+  expect(a.error ?? b.error).toBeNull()
+  const linked = async () =>
+    Object.fromEntries(((await sb.from('transactions').select('id, occurrence_date').in('id', [a.data!.id, b.data!.id])).data ?? []).map((r) => [r.id, r.occurrence_date]))
+
+  await login(page)
+  await tab(page, 'Деньги')
+  await more(page, 'Месяц')
+  if (first.slice(0, 7) !== today.slice(0, 7)) await page.getByRole('button', { name: 'Вперёд' }).click()
+  await page.getByRole('button', { name: /Netflix e2e/ }).click()
+  await page.getByRole('dialog', { name: 'Операция' }).getByRole('button', { name: 'Сделать регулярным' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Новый регулярный платёж' })
+  await expect(sheet.getByLabel('Название')).toHaveValue('Netflix e2e')
+  await expect(sheet.getByLabel('Первая дата')).toHaveValue(first)
+  await expect(sheet.getByRole('button', { name: /Revolut/ })).toHaveAttribute('aria-pressed', 'true')
+  await sheet.getByRole('button', { name: 'Сохранить' }).click()
+
+  const link = page.getByRole('dialog', { name: 'Уже есть в плане' })
+  await expect(link.getByRole('checkbox')).toHaveCount(1) // the operation itself is already the first occurrence
+  await expect.poll(linked).toEqual({ [a.data!.id]: first, [b.data!.id]: null })
+  await link.getByRole('button', { name: 'Привязать 1' }).click()
+  await expect.poll(linked).toEqual({ [a.data!.id]: first, [b.data!.id]: addMonthsISO(first, 1) })
+  const rules = (await sb.from('recurring').select('title, amount_eur, account, grp, anchor_date').eq('title', 'Netflix e2e')).data ?? []
+  expect(rules.map((r) => [Number(r.amount_eur), r.account, r.grp, r.anchor_date])).toEqual([[13.99, 'Revolut', 'Жизнь', first]])
+  await sb.auth.signOut()
+})

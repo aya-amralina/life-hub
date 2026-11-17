@@ -8,6 +8,7 @@ import { formatDayMonth, todayBerlin } from '@/lib/dates'
 import { formatAmount, formatEur, parseEurInput } from '@/lib/format'
 import { forecastEnd } from '@/lib/rules/money'
 import { OPERATION_GROUPS, OPERATION_KIND_LABEL, type OperationKind } from '@/lib/rules/operation'
+import { type Freq } from '@/lib/rules/recurring'
 import {
   FREQ_LABEL,
   anchorForRhythm,
@@ -21,9 +22,8 @@ import {
   recurringValid,
   scheduleWarning,
   suggestedAnchor,
-  type Freq,
   type RecurringForm,
-} from '@/lib/rules/recurring'
+} from '@/lib/rules/recurringEdit'
 import { useEnvelopes, useSaveRecurring, type Recurring, type RecurringStep, type Transaction } from './api'
 import { Choice } from './Choice'
 
@@ -45,6 +45,7 @@ export function RecurringSheet({
   initial,
   onCreated,
   onLink,
+  linkTxId,
 }: {
   open: boolean
   onClose: () => void
@@ -54,10 +55,12 @@ export function RecurringSheet({
   onCreated?: (rule: Recurring) => void
   /** «Уже есть в плане · N» of an existing rule */
   onLink?: (rule: Recurring) => void
+  /** «Сделать регулярным»: this operation becomes the new rule's first occurrence */
+  linkTxId?: string
 }) {
   return (
     <BottomSheet open={open} onClose={onClose} label={rule ? 'Регулярный платёж' : 'Новый регулярный платёж'}>
-      {open && <RecurringFormBody key={rule?.id ?? 'new'} rule={rule} txs={txs} initial={initial} onClose={onClose} onCreated={onCreated} onLink={onLink} />}
+      {open && <RecurringFormBody key={rule?.id ?? 'new'} rule={rule} txs={txs} initial={initial} onClose={onClose} onCreated={onCreated} onLink={onLink} linkTxId={linkTxId} />}
     </BottomSheet>
   )
 }
@@ -69,6 +72,7 @@ function RecurringFormBody({
   onClose,
   onCreated,
   onLink,
+  linkTxId,
 }: {
   rule: Recurring | null
   txs: readonly Transaction[]
@@ -76,6 +80,7 @@ function RecurringFormBody({
   onClose: () => void
   onCreated?: (rule: Recurring) => void
   onLink?: (rule: Recurring) => void
+  linkTxId?: string
 }) {
   const [f, setF] = useState<RecurringForm>(() => (rule ? recurringForm(rule) : (initial ?? blankRecurring(todayBerlin()))))
   const [amount, setAmount] = useState(() => {
@@ -118,7 +123,7 @@ function RecurringFormBody({
     const row = recurringRow(form)
     if (!rule || !plan) {
       const id = crypto.randomUUID()
-      save.mutate({ steps: [{ action: 'insert', values: { id, ...row } }] })
+      save.mutate({ steps: [{ action: 'insert', values: { id, ...row } }], links: linkTxId ? [{ txId: linkTxId, recurringId: id, occurrence: row.anchor_date }] : [] })
       toast({ text: `${row.title} · ${sum} — ${describeRule(row)}` })
       onClose()
       onCreated?.({ ...row, id, source_id: null, user_id: '', created_at: '', updated_at: '' })

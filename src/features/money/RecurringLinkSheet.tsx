@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { formatDayMonth, todayBerlin } from '@/lib/dates'
 import { formatEur, plural, toCents } from '@/lib/format'
 import { forecastEnd, isFact, signedCents } from '@/lib/rules/money'
-import { linkCandidates } from '@/lib/rules/recurring'
+import { linkCandidates } from '@/lib/rules/recurringEdit'
 import { useSaveRecurring, type Recurring, type Transaction } from './api'
 
 /**

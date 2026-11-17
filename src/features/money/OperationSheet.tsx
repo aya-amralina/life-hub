@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Repeat } from 'lucide-react'
 import { useToast } from '@/app/toastContext'
 import { BottomSheet } from '@/components/ui/BottomSheet'
 import { Button } from '@/components/ui/Button'
@@ -6,11 +7,25 @@ import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { ACCOUNTS, WEEK_CATEGORIES } from '@/lib/constants'
 import { todayBerlin } from '@/lib/dates'
 import { formatAmount, formatEur, parseEurInput } from '@/lib/format'
-import { isWeekRow } from '@/lib/rules/money'
+import { forecastEnd, isWeekRow } from '@/lib/rules/money'
 import { DEBT_DIRECTION_LABEL, OPERATION_GROUPS, OPERATION_KIND_LABEL, operationForm, operationRow, operationValid, type DebtDirection, type OperationForm, type OperationKind } from '@/lib/rules/operation'
 import { isVirtual, materialize } from '@/lib/rules/recurring'
+import { canMakeRecurring, linkCandidates, recurringFromOperation } from '@/lib/rules/recurringEdit'
 import { Choice } from './Choice'
-import { useAnswerPlanned, useCreateTransaction, useDebts, useDeleteTransaction, useEnvelopes, useUpdateTransaction, type PlanTx } from './api'
+import { RecurringLinkSheet } from './RecurringLinkSheet'
+import { RecurringSheet } from './RecurringSheet'
+import {
+  useAllTransactions,
+  useAnswerPlanned,
+  useCreateTransaction,
+  useDebts,
+  useDeleteTransaction,
+  useEnvelopes,
+  useUpdateTransaction,
+  type PlanTx,
+  type Recurring,
+  type Transaction,
+} from './api'
 
 const field = 'h-12 w-full rounded-xl border border-line2 bg-card px-4 text-base text-ink outline-none placeholder:text-ink3 focus:border-ink2'
 const KINDS = (Object.keys(OPERATION_KIND_LABEL) as OperationKind[]).map((value) => ({ value, label: OPERATION_KIND_LABEL[value] }))
@@ -28,17 +43,49 @@ const blank = (): OperationForm => ({ kind: 'expense', title: '', cents: null, d
  * keeps the row (it can come back); an operation made in the app can also be deleted.
  * An occurrence of a recurring rule is virtual: saving it or taking it out of the plan makes it a real row
  * answering that occurrence; there is nothing to delete — the rule itself is changed in «Регулярные».
+ * «Сделать регулярным» (a stored planned one): the rule sheet, prefilled from the operation; the operation becomes
+ * the rule's first occurrence, then the usual «Уже есть в плане» for the similar ones.
  */
 export function OperationSheet({ open, onClose, tx }: { open: boolean; onClose: () => void; tx: PlanTx | null }) {
+  const all = useAllTransactions()
+  const [ruleFrom, setRuleFrom] = useState<Transaction | null>(null)
+  const [linking, setLinking] = useState<{ rule: Recurring; txs: Transaction[] } | null>(null)
+  const txs = all.data ?? []
   return (
-    <BottomSheet open={open} onClose={onClose} label={tx ? 'Операция' : 'Новая операция'}>
-      {/* remount per operation: the form starts from the row it edits */}
-      {open && <OperationFormBody key={tx?.id ?? 'new'} tx={tx} onClose={onClose} />}
-    </BottomSheet>
+    <>
+      <BottomSheet open={open} onClose={onClose} label={tx ? 'Операция' : 'Новая операция'}>
+        {/* remount per operation: the form starts from the row it edits */}
+        {open && (
+          <OperationFormBody
+            key={tx?.id ?? 'new'}
+            tx={tx}
+            onClose={onClose}
+            onMakeRecurring={(t) => {
+              onClose()
+              setRuleFrom(t)
+            }}
+          />
+        )}
+      </BottomSheet>
+      <RecurringSheet
+        open={ruleFrom !== null}
+        onClose={() => setRuleFrom(null)}
+        rule={null}
+        txs={txs}
+        initial={ruleFrom ? recurringFromOperation(ruleFrom) : undefined}
+        linkTxId={ruleFrom?.id}
+        onCreated={(rule) => {
+          // the operation already answers the first occurrence: the similar ones are the others
+          const after = txs.map((t) => (t.id === ruleFrom?.id ? { ...t, recurring_id: rule.id, occurrence_date: rule.anchor_date } : t))
+          if (linkCandidates(rule, after, forecastEnd(todayBerlin())).length) setLinking({ rule, txs: after })
+        }}
+      />
+      <RecurringLinkSheet rule={linking?.rule ?? null} txs={linking?.txs ?? []} onClose={() => setLinking(null)} />
+    </>
   )
 }
 
-function OperationFormBody({ tx, onClose }: { tx: PlanTx | null; onClose: () => void }) {
+function OperationFormBody({ tx, onClose, onMakeRecurring }: { tx: PlanTx | null; onClose: () => void; onMakeRecurring: (tx: Transaction) => void }) {
   const [f, setF] = useState<OperationForm>(() => (tx ? operationForm(tx) : blank()))
   const [amount, setAmount] = useState(tx ? formatAmount(Math.round(Number(tx.amount_eur) * 100), { whole: true }) : '')
   const envelopes = useEnvelopes()
@@ -145,6 +192,11 @@ function OperationFormBody({ tx, onClose }: { tx: PlanTx | null; onClose: () => 
       <Button type="submit" disabled={!valid}>
         Сохранить
       </Button>
+      {tx && !isVirtual(tx) && canMakeRecurring(tx) && (
+        <Button variant="secondary" icon={<Repeat size={20} strokeWidth={1.75} aria-hidden="true" />} onClick={() => onMakeRecurring(tx)}>
+          Сделать регулярным
+        </Button>
+      )}
       {tx && (
         <div className="grid grid-cols-2 gap-2">
           <Button

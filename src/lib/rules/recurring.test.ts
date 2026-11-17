@@ -1,28 +1,25 @@
 import { describe, expect, it } from 'vitest'
 import { confirmPatch } from './operation'
 import { balanceAt, monthsTable, plannedQuestions, upcomingPlanned } from './money'
+import { isVirtual, materialize, occurrences, virtualPlanned, withRecurring, type RecurringLike } from './recurring'
 import {
   anchorForRhythm,
   blankRecurring,
+  canMakeRecurring,
   describeRule,
-  isVirtual,
   lastAnswered,
   linkCandidates,
-  materialize,
   nextOccurrence,
-  occurrences,
   planRuleSave,
   recurringForm,
+  recurringFromOperation,
   recurringRow,
   recurringValid,
   ruleState,
   scheduleWarning,
   suggestedAnchor,
-  virtualPlanned,
-  withRecurring,
   type RecurringForm,
-  type RecurringLike,
-} from './recurring'
+} from './recurringEdit'
 
 const rule = (p: Partial<RecurringLike> = {}): RecurringLike => ({
   id: 'r1',
@@ -233,6 +230,23 @@ describe('the rule form', () => {
     expect(b).toMatchObject({ kind: 'expense', freq: 'monthly', interval: 1, anchor: '2026-11-17', end: null, active: true })
     expect(recurringValid(b)).toBe(false)
     expect(recurringValid({ ...b, title: 'Netflix', cents: 1399 })).toBe(true)
+  })
+  it('«Сделать регулярным»: prefilled from the operation, first date — its date', () => {
+    const op = { ...tx('t', '2026-12-03', 'expense', 650), title: 'Miete', grp: 'Обязательное', account: 'Sparkasse' as string | null, envelope_id: 'e1', note: 'Kalt' as string | null, is_planned: true }
+    const f = recurringFromOperation(op)
+    expect(f).toMatchObject({ title: 'Miete', cents: 65000, kind: 'expense', grp: 'Обязательное', account: 'Sparkasse', envelopeId: 'e1', note: 'Kalt', freq: 'monthly', interval: 1, anchor: '2026-12-03', end: null, active: true })
+    expect(recurringValid(f)).toBe(true)
+    expect(recurringFromOperation({ ...op, kind: 'income', grp: 'Доход', note: null })).toMatchObject({ kind: 'income', grp: null, envelopeId: null, note: '' })
+  })
+  it('«Сделать регулярным» only on a stored planned operation not answered, removed or bound', () => {
+    const op = tx('t', '2026-12-03', 'expense', 650, { is_planned: true })
+    expect(canMakeRecurring(op)).toBe(true)
+    expect(canMakeRecurring({ ...op, confirmed_at: '2026-12-03T10:00:00Z' })).toBe(false)
+    expect(canMakeRecurring({ ...op, is_planned: false })).toBe(false)
+    expect(canMakeRecurring({ ...op, cancelled_at: '2026-12-01T10:00:00Z' })).toBe(false)
+    expect(canMakeRecurring({ ...op, recurring_id: 'r1', occurrence_date: '2026-12-01' })).toBe(false)
+    expect(canMakeRecurring({ ...op, entry_kind: 'week_budget' })).toBe(false)
+    expect(canMakeRecurring(virtualPlanned([rule()], [], '2026-12-31')[0]!)).toBe(false)
   })
   it('row: trimmed, group by kind, envelope only for an expense', () => {
     expect(recurringRow(form({ title: ' Miete ', note: ' ' }))).toMatchObject({ title: 'Miete', note: null, amount_eur: 650, interval_n: 1, anchor_date: '2026-12-01' })
