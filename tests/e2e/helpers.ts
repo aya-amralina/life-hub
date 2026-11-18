@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { expect, type Page } from '@playwright/test'
+import { ACCOUNT_SEED } from '../../src/lib/constants'
 import { addDaysISO, hourBerlin, todayBerlin, type ISODate } from '../../src/lib/dates'
 import { supabaseConfigured, testUser } from '../testUser'
 
@@ -93,7 +94,23 @@ export async function cleanupTestUser() {
     const del = await sb.from(table).delete().not('id', 'is', null)
     if (del.error) throw new Error(`cleanup ${table} failed: ${del.error.code}`)
   }
+  await resetAccounts(sb)
   await sb.auth.signOut()
+}
+
+/**
+ * Accounts come from migration 0016, not from the tests: after the operations that point to them are gone, the
+ * accounts a test added are deleted and the nine seeded ones are back as seeded (name, group, order, not archived).
+ */
+async function resetAccounts(sb: Awaited<ReturnType<typeof testClient>>) {
+  const seeded = ACCOUNT_SEED.map((a) => a.source_id)
+  const del = await sb.from('accounts').delete().or(`source_id.is.null,source_id.not.in.(${seeded.join(',')})`)
+  if (del.error) throw new Error(`cleanup accounts failed: ${del.error.code}`)
+  const up = await sb.from('accounts').upsert(
+    ACCOUNT_SEED.map((a) => ({ ...a, archived: false })),
+    { onConflict: 'user_id,source_id' },
+  )
+  if (up.error) throw new Error(`reset accounts failed: ${up.error.code}`)
 }
 
 /** Signed-in client of the TEST user — for seeding rows a scenario needs (RLS keeps them its own). */

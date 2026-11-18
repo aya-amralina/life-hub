@@ -2,6 +2,7 @@
 
 /** Every user table, parents first — the restore goes in this order. */
 export const BACKUP_TABLES = [
+  'accounts',
   'weeks',
   'plan_stages',
   'activity_types',
@@ -26,19 +27,24 @@ export const BACKUP_TABLES = [
 export type BackupTable = (typeof BACKUP_TABLES)[number]
 
 export const BACKUP_FORMAT = 'life-hub-backup'
-/** v2 (16.11.2026) adds `recurring` and the columns of operations that link to it; v1 files are still restored. */
-export const BACKUP_VERSION = 2
+/**
+ * v2 (16.11.2026) adds `recurring` and the columns of operations that link to it; v3 (18.11.2026) adds `accounts`.
+ * Older files are still restored.
+ */
+export const BACKUP_VERSION = 3
 
 /** Tables each readable version may hold. */
 const TABLES_OF_VERSION: Record<number, readonly string[]> = {
-  1: BACKUP_TABLES.filter((t) => t !== 'recurring'),
-  2: BACKUP_TABLES,
+  1: BACKUP_TABLES.filter((t) => t !== 'recurring' && t !== 'accounts'),
+  2: BACKUP_TABLES.filter((t) => t !== 'accounts'),
+  3: BACKUP_TABLES,
 }
 
 export type Row = Record<string, unknown> & { id: string }
 export type Backup = { format: string; version: number; exported_at: string; tables: Partial<Record<BackupTable, Row[]>> }
 
 export const TABLE_LABEL: Record<BackupTable, string> = {
+  accounts: 'Счета',
   weeks: 'Недели',
   plan_stages: 'Этапы',
   activity_types: 'Типы активностей',

@@ -67,6 +67,23 @@ export type WeekCategory = (typeof WEEK_CATEGORIES)[number]
 
 export const ACCOUNTS = ['Revolut', 'Sparkasse', 'Наличные', 'Казахстанская карта'] as const
 
+/** Account groups (decision 18.11.2026): «Баланс» — plan and forecast, «Подушка» — its own forecast, «Отдельно» — overview only. */
+export const ACCOUNT_GROUPS = ['balance', 'cushion', 'separate'] as const
+export type AccountGroup = (typeof ACCOUNT_GROUPS)[number]
+
+/** The accounts migration 0016 creates for every user (the same list as its seed; tests/unit/migrations.test.ts). */
+export const ACCOUNT_SEED: readonly { name: string; grp: AccountGroup; sort_order: number; source_id: string }[] = [
+  { name: 'Revolut · Основной', grp: 'balance', sort_order: 10, source_id: 'acct:revolut-main' },
+  { name: 'Revolut · На месяц', grp: 'balance', sort_order: 20, source_id: 'acct:revolut-month' },
+  { name: 'Sparkasse', grp: 'balance', sort_order: 30, source_id: 'acct:sparkasse' },
+  { name: 'Наличные', grp: 'balance', sort_order: 40, source_id: 'acct:cash' },
+  { name: 'Revolut · Подушка', grp: 'cushion', sort_order: 50, source_id: 'acct:revolut-cushion' },
+  { name: 'Казахстанская карта', grp: 'cushion', sort_order: 60, source_id: 'acct:kz-card' },
+  { name: 'Revolut · Депозит', grp: 'separate', sort_order: 70, source_id: 'acct:revolut-deposit' },
+  { name: 'Revolut · Конверты', grp: 'separate', sort_order: 80, source_id: 'acct:revolut-envelopes' },
+  { name: 'Revolut · Поездки', grp: 'separate', sort_order: 90, source_id: 'acct:revolut-trips' },
+]
+
 /** Statuses that mean «done» in any sphere (in addition to done_at). */
 export const DONE_STATUSES: readonly string[] = ['Erledigt', 'готово', 'Готово']
 /** «Отменить» / «снять»: closed without being done (not counted as done). */

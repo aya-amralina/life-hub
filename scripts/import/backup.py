@@ -16,12 +16,12 @@ from xl import DATA
 
 # Every user table, parents first (the restore goes in this order).
 TABLES = [
-    "weeks", "plan_stages", "activity_types", "envelopes", "debts", "recurring", "people",
+    "accounts", "weeks", "plan_stages", "activity_types", "envelopes", "debts", "recurring", "people",
     "items", "transactions", "actual_balances", "week_limits", "daily_logs", "activities", "intake",
     "strength_sets", "measurements", "notes", "wishlist", "reviews", "import_baseline",
 ]
 FORMAT = "life-hub-backup"
-VERSION = 2  # v2 (16.11.2026): + recurring and transactions.recurring_id / occurrence_date; the app still reads v1
+VERSION = 3  # v2 (16.11.2026): + recurring, transactions.recurring_id / occurrence_date; v3 (18.11.2026): + accounts; the app still reads v1, v2
 
 
 def main() -> int:

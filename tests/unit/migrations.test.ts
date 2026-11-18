@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { BACKUP_TABLES } from '../../src/lib/backup'
+import { ACCOUNT_SEED } from '../../src/lib/constants'
 
 // Static guard for the access rule in CLAUDE.md: the project has «Automatically expose new tables» off,
 // so every public table must state its privileges explicitly in the migrations.
@@ -43,6 +44,12 @@ describe('migrations: explicit access for every public table', () => {
   it('never grants anything to anon or public — except execute on the keep-alive ping()', () => {
     const grants = [...sql.matchAll(/grant [^;]* to [^;]*\b(anon|public)\b[^;]*;/g)].map((m) => m[0].replace(/\s+/g, ' '))
     expect(grants).toEqual(['grant execute on function public.ping() to anon, authenticated;'])
+  })
+
+  it('the accounts seed of 0016 is ACCOUNT_SEED of the app', () => {
+    const seed = /cross join \(values([\s\S]*?)\) as a/.exec(readFileSync(join(dir, '20261118120000_accounts.sql'), 'utf8'))![1]!
+    const rows = [...seed.matchAll(/\('([^']+)',\s*'(\w+)',\s*(\d+),\s*'([^']+)'\)/g)].map((m) => ({ name: m[1], grp: m[2], sort_order: Number(m[3]), source_id: m[4] }))
+    expect(rows).toEqual(ACCOUNT_SEED)
   })
 
   it('ping() reads no table', () => {

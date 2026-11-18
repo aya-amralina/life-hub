@@ -19,12 +19,22 @@ describe('backup', () => {
     expect(parseBackup(JSON.stringify(backup)).ok).toBe(true)
     expect(parseBackup('nope')).toEqual({ ok: false, reason: 'Это не JSON-файл.' })
     expect(parseBackup('{"format":"x"}')).toEqual({ ok: false, reason: 'Это не экспорт Life Hub.' })
-    expect(parseBackup(JSON.stringify({ ...backup, version: 3 }))).toEqual({ ok: false, reason: 'Версия файла 3 — читаются версии 1–2.' })
+    expect(parseBackup(JSON.stringify({ ...backup, version: 4 }))).toEqual({ ok: false, reason: 'Версия файла 4 — читаются версии 1–3.' })
     expect(parseBackup(JSON.stringify({ ...backup, tables: { secrets: [] } }))).toEqual({ ok: false, reason: 'Неизвестная таблица «secrets».' })
     expect(parseBackup(JSON.stringify({ ...backup, tables: { items: [{ title: 'no id' }] } })).ok).toBe(false)
   })
+  it('v3 carries accounts; a v2 file (before them) is still read, but never with that table', () => {
+    expect(BACKUP_VERSION).toBe(3)
+    const v2 = { ...backup, version: 2 }
+    expect(parseBackup(JSON.stringify(v2)).ok).toBe(true)
+    expect(parseBackup(JSON.stringify({ ...v2, tables: { accounts: [{ id: 'a1' }] } }))).toEqual({ ok: false, reason: 'Неизвестная таблица «accounts».' })
+    expect(parseBackup(JSON.stringify({ ...backup, version: 3, tables: { accounts: [{ id: 'a1' }] } })).ok).toBe(true)
+  })
+  it('accounts restore first: envelopes, debts, rules, operations and balances point to them', () => {
+    const order = BACKUP_TABLES as readonly string[]
+    for (const t of ['envelopes', 'debts', 'recurring', 'transactions', 'actual_balances']) expect(order.indexOf('accounts')).toBeLessThan(order.indexOf(t))
+  })
   it('v2 carries recurring rules; a v1 file (before them) is still read, but never with that table', () => {
-    expect(BACKUP_VERSION).toBe(2)
     const v1 = { ...backup, version: 1 }
     expect(parseBackup(JSON.stringify(v1)).ok).toBe(true)
     expect(parseBackup(JSON.stringify({ ...v1, tables: { recurring: [{ id: 'r1' }] } }))).toEqual({ ok: false, reason: 'Неизвестная таблица «recurring».' })
