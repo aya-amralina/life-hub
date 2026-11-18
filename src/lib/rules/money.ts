@@ -134,24 +134,46 @@ function spentLifeInWeek(txs: readonly TxLike[], monday: ISODate): number {
  * spent with weekly categories); later weeks count in full. A confirmed «Неделя N (факт)» from Excel is the week's total: the app's
  * weekly-category expenses of that week stay in the category stats (rule 2) but not in the balance.
  */
-export function balanceAt(txs: readonly TxLike[], date: ISODate, mode: 'fact' | 'plan', today: ISODate = date): number {
+export function balanceAt(txs: readonly TxLike[], date: ISODate, mode: 'fact' | 'plan', today: ISODate = date, scope?: BalanceScope): number {
   const factWeeks = new Set(txs.filter((t) => t.entry_kind === 'week_total' && isFact(t) && isInPlan(t)).map((t) => weekStartISO(t.date)))
   let sum = 0
   for (const t of txs) {
     if (t.date > date || !isInPlan(t)) continue
     if (mode === 'fact' && !isFact(t)) continue
+    if (scope && !inScope(t, scope.from)) continue
+    const signed = scope ? scope.signed(t) : signedCents(t)
+    if (signed === 0) continue
     if (!isWeekRow(t) && t.kind === 'expense' && isWeekCategory(t.category) && factWeeks.has(weekStartISO(t.date))) continue
     if (t.entry_kind === 'week_budget' && !isFact(t)) {
       const monday = weekStartISO(t.date)
       if (addDaysISO(monday, 6) < today) continue
       if (monday <= today) {
+        // the week's expenses before the start are inside the start balances, after it they are rows: what is left
+        // of the budget is the same either way
         sum -= Math.max(0, toCents(t.amount_eur) - spentLifeInWeek(txs, monday))
         continue
       }
     }
-    sum += signedCents(t)
+    sum += signed
   }
   return sum
+}
+
+/**
+ * A part of the money counted from the start by accounts (decision 18.11.2026): the start balances (openings dated
+ * `from`) and what happens after `from`; `signed` — what a row does to that part (a group of accounts).
+ */
+export type BalanceScope = { from: ISODate; signed: (t: TxLike) => number }
+
+/**
+ * Rows of a scope: the openings of the start and rows dated after it. Everything up to the start (the end of its day)
+ * is inside the start balances — except a planned week budget of a week that goes on past the start: what is left of
+ * it is still ahead (rule 26).
+ */
+function inScope(t: TxLike, from: ISODate): boolean {
+  if (t.date > from) return true
+  if (t.kind === 'opening') return t.date === from
+  return t.entry_kind === 'week_budget' && !isFact(t) && addDaysISO(weekStartISO(t.date), 6) > from
 }
 
 export type PlannedQuestion<T> = { tx: T; question: 'Пришло?' | 'Списалось?' }
