@@ -63,6 +63,17 @@ describe('migrations: explicit access for every public table', () => {
     ])
   })
 
+  it('0017: rows of the old version (text «Счёт» only, or the text changed) get account_id in both triggers', () => {
+    const expand = readFileSync(join(dir, '20261118120100_account_links.sql'), 'utf8').replace(/--.*$/gm, '').toLowerCase()
+    for (const [fn, table] of [['check_transaction_accounts', 'transactions'], ['check_recurring_accounts', 'recurring']] as const) {
+      const body = new RegExp(`function private\\.${fn}\\(\\)[\\s\\S]*?\\$\\$;`).exec(expand)![0]
+      expect(body).toContain("tg_op = 'insert' and new.account_id is null and new.account is not null")
+      expect(body).toContain("new.account is distinct from old.account and new.account_id is not distinct from old.account_id")
+      expect(body).toContain("case new.account when 'revolut' then 'revolut · основной' else new.account end")
+      expect(expand).toMatch(new RegExp(`before insert or update of [\\w, ]*\\baccount\\b[\\w, ]* on public\\.${table}\\b`))
+    }
+  })
+
   it('ping() reads no table', () => {
     expect(sql).toMatch(/create or replace function public\.ping\(\)[\s\S]*?as \$\$ select 1 \$\$;/)
   })

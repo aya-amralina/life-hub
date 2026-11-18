@@ -73,6 +73,8 @@ create index actual_balances_account_idx on public.actual_balances (account_id);
 -- Trigger functions in `private` fire without schema USAGE for the caller and read `accounts` under its RLS;
 -- the user_id condition keeps the secret key (no RLS) to the row's owner too.
 
+-- 0018 drops the text «Счёт»: it replaces these two functions without the linking of the old text.
+
 -- operations: own accounts; after the start (18.11) an expense only from «Баланс»; a start below zero only on «Баланс»
 create or replace function private.check_transaction_accounts()
 returns trigger
@@ -82,6 +84,16 @@ as $$
 declare
   g text;
 begin
+  -- the version before this one writes only the old text «Счёт»: link the account by the same mapping as above —
+  -- a new row with the text only, or a row whose text it changed (the new version changes account_id, not the text).
+  -- An unknown text, or none, leaves no account = «Баланс». 0018 drops the text and this linking with it.
+  if (tg_op = 'INSERT' and new.account_id is null and new.account is not null)
+     or (tg_op = 'UPDATE' and new.account is distinct from old.account and new.account_id is not distinct from old.account_id) then
+    new.account_id := (
+      select a.id from public.accounts a
+      where a.user_id = new.user_id and a.name = case new.account when 'Revolut' then 'Revolut · Основной' else new.account end
+    );
+  end if;
   if new.account_id is not null then
     select a.grp into g from public.accounts a where a.id = new.account_id and a.user_id = new.user_id;
     if not found then raise exception 'account not found' using errcode = '23503'; end if;
@@ -100,7 +112,7 @@ begin
 end;
 $$;
 create trigger transactions_check_accounts
-  before insert or update of kind, date, amount_eur, account_id, to_account_id on public.transactions
+  before insert or update of kind, date, amount_eur, account, account_id, to_account_id on public.transactions
   for each row execute function private.check_transaction_accounts();
 
 -- recurring operations: own accounts; an expense only from «Баланс»
@@ -112,6 +124,16 @@ as $$
 declare
   g text;
 begin
+  -- the version before this one writes only the old text «Счёт»: link the account by the same mapping as above —
+  -- a new row with the text only, or a row whose text it changed (the new version changes account_id, not the text).
+  -- An unknown text, or none, leaves no account = «Баланс». 0018 drops the text and this linking with it.
+  if (tg_op = 'INSERT' and new.account_id is null and new.account is not null)
+     or (tg_op = 'UPDATE' and new.account is distinct from old.account and new.account_id is not distinct from old.account_id) then
+    new.account_id := (
+      select a.id from public.accounts a
+      where a.user_id = new.user_id and a.name = case new.account when 'Revolut' then 'Revolut · Основной' else new.account end
+    );
+  end if;
   if new.account_id is not null then
     select a.grp into g from public.accounts a where a.id = new.account_id and a.user_id = new.user_id;
     if not found then raise exception 'account not found' using errcode = '23503'; end if;
@@ -127,7 +149,7 @@ begin
 end;
 $$;
 create trigger recurring_check_accounts
-  before insert or update of kind, account_id, to_account_id on public.recurring
+  before insert or update of kind, account, account_id, to_account_id on public.recurring
   for each row execute function private.check_recurring_accounts();
 
 -- envelopes and goals: own account; a goal only on «Подушка»
