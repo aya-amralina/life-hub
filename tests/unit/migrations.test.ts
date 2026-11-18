@@ -52,6 +52,17 @@ describe('migrations: explicit access for every public table', () => {
     expect(rows).toEqual(ACCOUNT_SEED)
   })
 
+  it('0017 only expands: the old version keeps working until 0018 drops `account` (decision 18.11.2026)', () => {
+    const expand = readFileSync(join(dir, '20261118120100_account_links.sql'), 'utf8').replace(/--.*$/gm, '').toLowerCase()
+    expect(expand).not.toMatch(/drop column|rename|drop table/)
+    // only checks are relaxed or replaced, never a column or the old unique «Остатки» per day and text account
+    expect([...expand.matchAll(/drop constraint (\w+)/g)].map((m) => m[1])).toEqual([
+      'transactions_amount_eur_check',
+      'actual_balances_amount_eur_check',
+      'actual_balances_origin_check',
+    ])
+  })
+
   it('ping() reads no table', () => {
     expect(sql).toMatch(/create or replace function public\.ping\(\)[\s\S]*?as \$\$ select 1 \$\$;/)
   })
