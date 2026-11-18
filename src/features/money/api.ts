@@ -163,7 +163,7 @@ export function useSaveRecurring() {
     onMutate: async ({ steps, links = [] }) => {
       await qc.cancelQueries({ queryKey: moneyKeys.all })
       const prev = qc.getQueriesData({ queryKey: moneyKeys.all })
-      const blank = { grp: null, account: null, envelope_id: null, interval_n: 1, end_date: null, active: true, note: null, source_id: null, user_id: '', created_at: '', updated_at: '' }
+      const blank = { grp: null, account: null, account_id: null, to_account_id: null, envelope_id: null, interval_n: 1, end_date: null, active: true, note: null, source_id: null, user_id: '', created_at: '', updated_at: '' }
       qc.setQueryData<Recurring[]>(key, (old = []) =>
         steps.reduce<Recurring[]>((rows, s) => {
           if (s.action === 'insert') return [...rows, { ...blank, ...s.values } as Recurring]
@@ -340,7 +340,7 @@ export function useCreateTransaction() {
     },
     onMutate: async (tx) => {
       await qc.cancelQueries({ queryKey: moneyKeys.all })
-      const row = { envelope_id: null, note: null, source_id: null, cancelled_at: null, confirmed_at: null, category: null, account: null, grp: null, is_planned: false, entry_kind: 'one_off', week_no: null, debt_id: null, planned_amount_eur: null, recurring_id: null, occurrence_date: null, user_id: '', created_at: '', updated_at: '', ...tx } as Transaction
+      const row = { envelope_id: null, note: null, source_id: null, cancelled_at: null, confirmed_at: null, category: null, account: null, account_id: null, to_account_id: null, grp: null, is_planned: false, entry_kind: 'one_off', week_no: null, debt_id: null, planned_amount_eur: null, recurring_id: null, occurrence_date: null, user_id: '', created_at: '', updated_at: '', ...tx } as Transaction
       qc.setQueryData<Transaction[]>(allKey, (old) => (old ? [...old, row].sort((a, b) => a.date.localeCompare(b.date)) : [row]))
     },
     onSettled: () => qc.invalidateQueries({ queryKey: moneyKeys.all }),

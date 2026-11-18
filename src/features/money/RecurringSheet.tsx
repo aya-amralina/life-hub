@@ -126,7 +126,7 @@ function RecurringFormBody({
       save.mutate({ steps: [{ action: 'insert', values: { id, ...row } }], links: linkTxId ? [{ txId: linkTxId, recurringId: id, occurrence: row.anchor_date }] : [] })
       toast({ text: `${row.title} · ${sum} — ${describeRule(row)}` })
       onClose()
-      onCreated?.({ ...row, id, source_id: null, user_id: '', created_at: '', updated_at: '' })
+      onCreated?.({ ...row, id, account_id: null, to_account_id: null, source_id: null, user_id: '', created_at: '', updated_at: '' })
       return
     }
     let steps: RecurringStep[] = []

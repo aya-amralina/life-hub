@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      accounts: {
+        Row: {
+          archived: boolean
+          created_at: string
+          grp: string
+          id: string
+          name: string
+          sort_order: number
+          source_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archived?: boolean
+          created_at?: string
+          grp: string
+          id?: string
+          name: string
+          sort_order?: number
+          source_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          archived?: boolean
+          created_at?: string
+          grp?: string
+          id?: string
+          name?: string
+          sort_order?: number
+          source_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       activities: {
         Row: {
           created_at: string
@@ -100,11 +136,13 @@ export type Database = {
       actual_balances: {
         Row: {
           account: string
+          account_id: string | null
           amount_eur: number
           created_at: string
           date: string
           envelope_id: string | null
           id: string
+          legacy_account: string | null
           origin: string
           source_id: string | null
           updated_at: string
@@ -112,11 +150,13 @@ export type Database = {
         }
         Insert: {
           account: string
+          account_id?: string | null
           amount_eur: number
           created_at?: string
           date: string
           envelope_id?: string | null
           id?: string
+          legacy_account?: string | null
           origin?: string
           source_id?: string | null
           updated_at?: string
@@ -124,17 +164,26 @@ export type Database = {
         }
         Update: {
           account?: string
+          account_id?: string | null
           amount_eur?: number
           created_at?: string
           date?: string
           envelope_id?: string | null
           id?: string
+          legacy_account?: string | null
           origin?: string
           source_id?: string | null
           updated_at?: string
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "actual_balances_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "actual_balances_envelope_id_fkey"
             columns: ["envelope_id"]
@@ -212,6 +261,7 @@ export type Database = {
       }
       debts: {
         Row: {
+          account_id: string | null
           amount_eur: number
           created_at: string
           direction: string
@@ -227,6 +277,7 @@ export type Database = {
           who: string
         }
         Insert: {
+          account_id?: string | null
           amount_eur: number
           created_at?: string
           direction: string
@@ -242,6 +293,7 @@ export type Database = {
           who: string
         }
         Update: {
+          account_id?: string | null
           amount_eur?: number
           created_at?: string
           direction?: string
@@ -258,6 +310,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "debts_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "debts_pot_id_fkey"
             columns: ["pot_id"]
             isOneToOne: false
@@ -268,6 +327,7 @@ export type Database = {
       }
       envelopes: {
         Row: {
+          account_id: string | null
           archived: boolean
           created_at: string
           goal_date: string | null
@@ -283,6 +343,7 @@ export type Database = {
           when_text: string | null
         }
         Insert: {
+          account_id?: string | null
           archived?: boolean
           created_at?: string
           goal_date?: string | null
@@ -298,6 +359,7 @@ export type Database = {
           when_text?: string | null
         }
         Update: {
+          account_id?: string | null
           archived?: boolean
           created_at?: string
           goal_date?: string | null
@@ -312,7 +374,15 @@ export type Database = {
           user_id?: string
           when_text?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "envelopes_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       import_baseline: {
         Row: {
@@ -682,6 +752,7 @@ export type Database = {
       recurring: {
         Row: {
           account: string | null
+          account_id: string | null
           active: boolean
           amount_eur: number
           anchor_date: string
@@ -696,11 +767,13 @@ export type Database = {
           note: string | null
           source_id: string | null
           title: string
+          to_account_id: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           account?: string | null
+          account_id?: string | null
           active?: boolean
           amount_eur: number
           anchor_date: string
@@ -715,11 +788,13 @@ export type Database = {
           note?: string | null
           source_id?: string | null
           title: string
+          to_account_id?: string | null
           updated_at?: string
           user_id?: string
         }
         Update: {
           account?: string | null
+          account_id?: string | null
           active?: boolean
           amount_eur?: number
           anchor_date?: string
@@ -734,15 +809,30 @@ export type Database = {
           note?: string | null
           source_id?: string | null
           title?: string
+          to_account_id?: string | null
           updated_at?: string
           user_id?: string
         }
         Relationships: [
           {
+            foreignKeyName: "recurring_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "recurring_envelope_id_fkey"
             columns: ["envelope_id"]
             isOneToOne: false
             referencedRelation: "envelopes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_to_account_id_fkey"
+            columns: ["to_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -845,6 +935,7 @@ export type Database = {
       transactions: {
         Row: {
           account: string | null
+          account_id: string | null
           amount_eur: number
           cancelled_at: string | null
           category: string | null
@@ -864,12 +955,14 @@ export type Database = {
           recurring_id: string | null
           source_id: string | null
           title: string
+          to_account_id: string | null
           updated_at: string
           user_id: string
           week_no: number | null
         }
         Insert: {
           account?: string | null
+          account_id?: string | null
           amount_eur: number
           cancelled_at?: string | null
           category?: string | null
@@ -889,12 +982,14 @@ export type Database = {
           recurring_id?: string | null
           source_id?: string | null
           title: string
+          to_account_id?: string | null
           updated_at?: string
           user_id?: string
           week_no?: number | null
         }
         Update: {
           account?: string | null
+          account_id?: string | null
           amount_eur?: number
           cancelled_at?: string | null
           category?: string | null
@@ -914,11 +1009,19 @@ export type Database = {
           recurring_id?: string | null
           source_id?: string | null
           title?: string
+          to_account_id?: string | null
           updated_at?: string
           user_id?: string
           week_no?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "transactions_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "transactions_debt_id_fkey"
             columns: ["debt_id"]
@@ -938,6 +1041,13 @@ export type Database = {
             columns: ["recurring_id"]
             isOneToOne: false
             referencedRelation: "recurring"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_to_account_id_fkey"
+            columns: ["to_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
         ]
