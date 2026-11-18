@@ -225,17 +225,25 @@ export const BALANCE_LINE_POINTS = 70
  * today (confirmed only; null after today — the line stops at «сейчас»). The step in days grows with the range so
  * there are at most `maxPoints` points, the last day and today included.
  */
-export function balanceLine(txs: readonly TxLike[], from: ISODate, to: ISODate, today: ISODate, maxPoints = BALANCE_LINE_POINTS) {
+export function balanceLine(
+  txs: readonly TxLike[],
+  from: ISODate,
+  to: ISODate,
+  today: ISODate,
+  maxPoints = BALANCE_LINE_POINTS,
+  // the balance on a day: the common pot by default; «Баланс» from the start by accounts (`balanceView`)
+  at: (d: ISODate, mode: 'fact' | 'plan') => number = (d, mode) => balanceAt(txs, d, mode, today),
+) {
   // the loop gives ≤ maxPoints − 2 points; the last day and today may add one each
   const step = Math.max(1, Math.ceil(daysBetween(from, to) / Math.max(1, maxPoints - 3)))
   const out: { key: ISODate; label: string; plan: number; fact: number | null }[] = []
   for (let d = from; d <= to; d = addDaysISO(d, step)) {
-    out.push({ key: d, label: formatDayMonth(d), plan: balanceAt(txs, d, 'plan', today) / 100, fact: d <= today ? balanceAt(txs, d, 'fact', today) / 100 : null })
+    out.push({ key: d, label: formatDayMonth(d), plan: at(d, 'plan') / 100, fact: d <= today ? at(d, 'fact') / 100 : null })
   }
-  if (out[out.length - 1]?.key !== to) out.push({ key: to, label: formatDayMonth(to), plan: balanceAt(txs, to, 'plan', today) / 100, fact: null })
+  if (out[out.length - 1]?.key !== to) out.push({ key: to, label: formatDayMonth(to), plan: at(to, 'plan') / 100, fact: null })
   // the «сейчас» point sits exactly on today
   if (today >= from && today <= to && !out.some((p) => p.key === today)) {
-    out.push({ key: today, label: formatDayMonth(today), plan: balanceAt(txs, today, 'plan', today) / 100, fact: balanceAt(txs, today, 'fact', today) / 100 })
+    out.push({ key: today, label: formatDayMonth(today), plan: at(today, 'plan') / 100, fact: at(today, 'fact') / 100 })
     out.sort((a, b) => a.key.localeCompare(b.key))
   }
   return out

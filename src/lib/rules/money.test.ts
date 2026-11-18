@@ -203,14 +203,14 @@ describe('months table', async () => {
       t('2026-11-02', 'expense', 50, { is_planned: true, cancelled_at: '2026-11-03T00:00:00Z' }),
     ], '2026-10-20', '2026-11-30')
     expect(rows).toEqual([
-      { month: '2026-10', incomeCents: 0, expenseCents: 10000, endCents: 90000, hasPlan: false },
-      { month: '2026-11', incomeCents: 50000, expenseCents: 0, endCents: 140000, hasPlan: true },
+      { month: '2026-10', incomeCents: 0, expenseCents: 10000, endCents: 90000, hasPlan: false, accountsFrom: null },
+      { month: '2026-11', incomeCents: 50000, expenseCents: 0, endCents: 140000, hasPlan: true, accountsFrom: null },
     ])
   })
   it('runs from the start through the horizon, empty months included, past the end of 2026', () => {
     const rows = monthsTable([t('2026-10-13', 'opening', 1000), t('2027-02-28', 'expense', 100, { is_planned: true })], '2026-11-16')
     expect(rows.map((r) => r.month)).toEqual(['2026-10', '2026-11', '2026-12', '2027-01', '2027-02', '2027-03', '2027-04', '2027-05'])
-    expect(rows.find((r) => r.month === '2027-01')).toEqual({ month: '2027-01', incomeCents: 0, expenseCents: 0, endCents: 100000, hasPlan: false })
+    expect(rows.find((r) => r.month === '2027-01')).toEqual({ month: '2027-01', incomeCents: 0, expenseCents: 0, endCents: 100000, hasPlan: false, accountsFrom: null })
     // the balance is taken on the real last day: 28.02 counts in February
     expect(rows.find((r) => r.month === '2027-02')!.endCents).toBe(90000)
     expect(rows.at(-1)!.endCents).toBe(90000)

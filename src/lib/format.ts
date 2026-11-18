@@ -40,6 +40,14 @@ export function parseEurInput(input: string): number | null {
   return Math.round(Number(s) * 100)
 }
 
+/** Like `parseEurInput`, with a sign: «−12,50» or «-12,50» (Dispo) → −1250. */
+export function parseSignedEurInput(input: string): number | null {
+  const s = input.trim().replace(/\s/g, '')
+  const negative = /^[-−]/.test(s)
+  const cents = parseEurInput(negative ? s.slice(1) : s)
+  return cents === null ? null : negative ? -cents : cents
+}
+
 /** 27.5 → '27,5 ч' */
 export function formatHours(h: number): string {
   return `${decimal1.format(h)}\u00a0ч`

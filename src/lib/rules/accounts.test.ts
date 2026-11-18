@@ -5,15 +5,19 @@ import {
   accountOptions,
   accountsProblem,
   accountsStart,
+  balanceView,
+  goalAccountNow,
   goalAccountProblem,
   groupBalanceAt,
   groupDelta,
   groupOfAccount,
   legacyAccountName,
+  reconcileAccounts,
   type AccTx,
   type AccountLike,
 } from './accounts'
-import { balanceAt } from './money'
+import { balanceLine } from './charts'
+import { balanceAt, monthsTable } from './money'
 
 const acc = (id: string, grp: string, sort_order = 0, archived = false): AccountLike => ({ id, name: id, grp, sort_order, archived })
 const accounts = [acc('main', 'balance', 10), acc('month', 'balance', 20), acc('spark', 'balance', 30), acc('cushion', 'cushion', 50), acc('dep', 'separate', 70)]
@@ -146,5 +150,76 @@ describe('accounts: what the forms allow', () => {
     expect(accountOptions(list).map((a) => a.id)).toEqual(['a', 'b', 'c'])
     expect(accountOptions(list, { keep: 'old' }).map((a) => a.id)).toEqual(['old', 'a', 'b', 'c'])
     expect(accountOptions(list, { group: 'cushion' }).map((a) => a.id)).toEqual(['c'])
+  })
+})
+
+describe('accounts: how «Деньги» see the balance', () => {
+  const view = balanceView(txs, accounts, '2026-11-19')
+  it('up to the start the common pot, from it «Баланс»', () => {
+    expect(view.start).toBe(START)
+    expect(view.at('2026-11-17', 'fact')).toBe(99500)
+    expect(view.at('2026-11-20', 'fact')).toBe(34000)
+  })
+  it('without a start — the pot, as before', () => {
+    const pot = txs.filter((t) => !(t.kind === 'opening' && t.account_id))
+    const v = balanceView(pot, accounts, '2026-11-19')
+    expect(v.start).toBeNull()
+    expect(v.at('2026-11-20', 'fact')).toBe(balanceAt(pot, '2026-11-20', 'fact', '2026-11-19'))
+  })
+  it('months: after the start only rows of «Баланс»; the end of a month is «Баланс»; the start month is marked', () => {
+    const extra = [...txs, tx({ date: '2026-11-25', kind: 'income', amount_eur: 2, account_id: 'cushion' }), tx({ date: '2026-11-10', kind: 'income', amount_eur: 7 })]
+    const v = balanceView(extra, accounts, '2026-11-19')
+    const nov = monthsTable(extra, '2026-11-19', '2026-11-30', v).find((m) => m.month === '2026-11')!
+    // income: 7 (pot, 10.11); 2 + 2 to «Подушка» after the start do not count
+    expect(nov.incomeCents).toBe(700)
+    expect(nov.endCents).toBe(v.at('2026-11-30', 'plan'))
+    expect(nov.accountsFrom).toBe(START)
+    expect(monthsTable(extra, '2026-11-19', '2026-11-30').find((m) => m.month === '2026-11')!.accountsFrom).toBeNull()
+  })
+  it('the balance line takes the same view', () => {
+    const line = balanceLine(txs, START, '2026-11-30', '2026-11-19', 70, view.at)
+    expect(line.find((p) => p.key === '2026-11-19')).toMatchObject({ fact: 340, plan: 330 }) // the fact has no week budget, the plan takes what is left of it
+  })
+})
+
+describe('accounts: reconciliation by account', () => {
+  const row = (account_id: string, amount_eur: number, date = '2026-11-22') => ({ date, account_id, amount_eur })
+  const all = [row('main', 185), row('month', 150), row('spark', -50), row('cash', 0), row('cushion', 557)]
+  it('the latest day; every account within 1 €; «Баланс» as a whole when complete', () => {
+    const r = reconcileAccounts([row('main', 1, '2026-11-19'), ...all], txs, accounts)!
+    expect(r.date).toBe('2026-11-22')
+    expect(r.balance).toEqual({ actualCents: 28500, calculatedCents: 28500, diffCents: 0 })
+    expect(r.off).toEqual([])
+    expect(r.missing).toEqual(['dep'])
+    expect(r.matches).toBe(true)
+  })
+  it('an account off by 1 € or more is named; «Баланс» incomplete — no whole', () => {
+    const r = reconcileAccounts([row('main', 186.5), row('cushion', 557)], txs, accounts)!
+    expect(r.off.map((c) => [c.account.id, c.diffCents])).toEqual([['main', 150]])
+    expect(r.balance).toBeNull()
+    expect(r.matches).toBe(false)
+  })
+  it('rows before the start, legacy rows without an account, or no start — nothing to reconcile', () => {
+    expect(reconcileAccounts([{ date: '2026-11-12', account_id: 'main', amount_eur: 1 }], txs, accounts)).toBeNull()
+    expect(reconcileAccounts([{ date: '2026-11-22', account_id: null, amount_eur: 1 }], txs, accounts)).toBeNull()
+    expect(reconcileAccounts(all, txs.filter((t) => !(t.kind === 'opening' && t.account_id)), accounts)).toBeNull()
+  })
+})
+
+describe('accounts: «сейчас» of a goal', () => {
+  const goals = [
+    { id: 'g1', type: 'goal', archived: false, account_id: 'cushion' },
+    { id: 'g2', type: 'goal', archived: false, account_id: 'kz' },
+    { id: 'g3', type: 'goal', archived: false, account_id: 'kz' },
+    { id: 'g4', type: 'goal', archived: true, account_id: 'cushion' },
+  ]
+  const accs = [...accounts, acc('kz', 'cushion', 60)]
+  it('the only goal on its account — the account balance (archived goals do not share)', () => {
+    expect(goalAccountNow(goals[0]!, goals, accs, txs, '2026-11-22')).toEqual({ cents: 55700, account: accs.find((a) => a.id === 'cushion') })
+  })
+  it('a shared account, no account, or no start — null («Внести остаток» counts)', () => {
+    expect(goalAccountNow(goals[1]!, goals, accs, txs, '2026-11-22')).toBeNull()
+    expect(goalAccountNow({ id: 'g5', account_id: null }, goals, accs, txs, '2026-11-22')).toBeNull()
+    expect(goalAccountNow(goals[0]!, goals, accs, txs, '2026-11-17')).toBeNull()
   })
 })

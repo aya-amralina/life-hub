@@ -124,3 +124,90 @@ export function accountOptions(accounts: readonly AccountLike[], opts: { group?:
     .filter((a) => (!a.archived || a.id === opts.keep) && (!opts.group || a.grp === opts.group || a.id === opts.keep))
     .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
 }
+
+/**
+ * How «Деньги» see the balance (decision 18.11.2026): up to the start the common pot (rule 1), from the start on
+ * the group «Баланс». `at` — the balance on a day; `counts` — whether a row after the start belongs in the months'
+ * income and expenses (only «Баланс»; a row without an account is «Баланс»). Without a start — the pot as before.
+ */
+export function balanceView(txs: readonly AccTx[], accounts: readonly AccountLike[], today: ISODate) {
+  const start = accountsStart(txs)
+  const groupOf = groupOfAccount(accounts)
+  return {
+    start,
+    at: (d: ISODate, mode: 'fact' | 'plan') => groupBalanceAt(txs, accounts, 'balance', d, mode, today) ?? balanceAt(txs, d, mode, today),
+    counts: (t: AccTx) => groupOf(t.account_id) === 'balance',
+  }
+}
+
+export type AccountCheck = { account: AccountLike; actualCents: number; calculatedCents: number; diffCents: number }
+export type AccountsReconciliation = {
+  date: ISODate
+  /** «Баланс» as a whole — only when every account of it was entered that day */
+  balance: { actualCents: number; calculatedCents: number; diffCents: number } | null
+  accounts: AccountCheck[]
+  /** accounts off by 1 € or more */
+  off: AccountCheck[]
+  /** accounts (not archived) without a balance that day */
+  missing: string[]
+  matches: boolean
+}
+
+/**
+ * Real balances by account («Остатки» with an account, on the start or later) against the calculation on the same
+ * date: the latest day with any entry; each account within 1 € «сходится»; «Баланс» as a whole when it is complete.
+ */
+export function reconcileAccounts(
+  rows: readonly { date: ISODate; account_id: string | null; amount_eur: number | string }[],
+  txs: readonly AccTx[],
+  accounts: readonly AccountLike[],
+): AccountsReconciliation | null {
+  const start = accountsStart(txs)
+  if (start === null) return null
+  const known = new Map(accounts.map((a) => [a.id, a]))
+  const entered = rows.filter((r) => r.account_id && known.has(r.account_id) && r.date >= start)
+  if (!entered.length) return null
+  const date = entered.reduce((m, r) => (r.date > m ? r.date : m), entered[0]!.date)
+  const checks = entered
+    .filter((r) => r.date === date)
+    .map((r): AccountCheck => {
+      const account = known.get(r.account_id!)!
+      const actualCents = toCents(r.amount_eur)
+      const calculatedCents = accountBalanceAt(txs, account.id, date) ?? 0
+      return { account, actualCents, calculatedCents, diffCents: actualCents - calculatedCents }
+    })
+    .sort((a, b) => a.account.sort_order - b.account.sort_order)
+  const balanceAccounts = accounts.filter((a) => a.grp === 'balance' && !a.archived)
+  const complete = balanceAccounts.every((a) => checks.some((c) => c.account.id === a.id))
+  const actual = checks.filter((c) => c.account.grp === 'balance').reduce((s, c) => s + c.actualCents, 0)
+  const calculated = groupBalanceAt(txs, accounts, 'balance', date, 'fact')!
+  const balance = complete ? { actualCents: actual, calculatedCents: calculated, diffCents: actual - calculated } : null
+  const off = checks.filter((c) => Math.abs(c.diffCents) >= 100)
+  return {
+    date,
+    balance,
+    accounts: checks,
+    off,
+    missing: accounts.filter((a) => !a.archived && !checks.some((c) => c.account.id === a.id)).sort((a, b) => a.sort_order - b.sort_order).map((a) => a.name),
+    matches: off.length === 0 && (balance === null || Math.abs(balance.diffCents) < 100),
+  }
+}
+
+/**
+ * «Сейчас» of a goal that is the only one on its account: that account's balance today (decision 18.11.2026).
+ * Null when the goal shares its account, has none, or there is no start yet — then «Внести остаток» counts.
+ */
+export function goalAccountNow(
+  goal: { id: string; account_id: string | null },
+  goals: readonly { id: string; type: string; archived: boolean; account_id: string | null }[],
+  accounts: readonly AccountLike[],
+  txs: readonly AccTx[],
+  today: ISODate,
+): { cents: number; account: AccountLike } | null {
+  const account = accounts.find((a) => a.id === goal.account_id)
+  if (!account) return null
+  const others = goals.filter((g) => g.type === 'goal' && !g.archived && g.account_id === account.id && g.id !== goal.id)
+  if (others.length) return null
+  const cents = accountBalanceAt(txs, account.id, today)
+  return cents === null ? null : { cents, account }
+}

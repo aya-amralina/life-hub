@@ -223,27 +223,34 @@ export function envelopeSummary(envelope: EnvelopeLike, txs: readonly TxLike[]) 
   return { plannedCents, spentCents, leftCents: Math.max(0, plannedCents - spentCents), overCents: Math.max(0, spentCents - plannedCents) }
 }
 
-export type MonthRow = { month: string; incomeCents: number; expenseCents: number; endCents: number; hasPlan: boolean }
+export type MonthRow = { month: string; incomeCents: number; expenseCents: number; endCents: number; hasPlan: boolean; accountsFrom: ISODate | null }
+
+/** A view of the balance from the start by accounts (`balanceView` in accounts.ts); without it — the common pot. */
+export type MonthsScope<T> = { start: ISODate | null; at: (d: ISODate, mode: 'fact' | 'plan') => number; counts: (t: T) => boolean }
 
 /**
  * Months table (like the «Обзор» sheet): every calendar month from the first operation (the start) through `to`,
  * empty months included — income and expenses (planned ones included, cancelled ones not) and the balance at its
- * last day with the plan. `to` defaults to the forecast horizon.
+ * last day with the plan. `to` defaults to the forecast horizon. With a scope, rows after the start by accounts count
+ * only when they belong to «Баланс», the end of a month is «Баланс» from the start; `accountsFrom` marks that month.
  */
-export function monthsTable(txs: readonly TxLike[], today: ISODate, to: ISODate = forecastEnd(today)): MonthRow[] {
+export function monthsTable<T extends TxLike>(txs: readonly T[], today: ISODate, to: ISODate = forecastEnd(today), scope?: MonthsScope<T>): MonthRow[] {
   if (txs.length === 0) return []
   const first = txs.reduce((m, t) => (t.date < m ? t.date : m), txs[0]!.date)
+  const start = scope?.start ?? null
   const rows: MonthRow[] = []
   for (let day = `${first.slice(0, 7)}-01`; day <= to; day = addMonthsISO(day, 1)) {
     const month = day.slice(0, 7)
-    const inMonth = txs.filter((t) => t.date.startsWith(month) && isInPlan(t) && t.kind !== 'opening')
+    const inMonth = txs.filter((t) => t.date.startsWith(month) && isInPlan(t) && t.kind !== 'opening' && (start === null || t.date <= start || scope!.counts(t)))
     const sum = (kind: string) => inMonth.filter((t) => t.kind === kind).reduce((s, t) => s + toCents(t.amount_eur), 0)
+    const end = endOfMonthISO(day)
     rows.push({
       month,
       incomeCents: sum('income'),
       expenseCents: sum('expense'),
-      endCents: balanceAt(txs, endOfMonthISO(day), 'plan', today),
+      endCents: scope ? scope.at(end, 'plan') : balanceAt(txs, end, 'plan', today),
       hasPlan: inMonth.some((t) => !isFact(t)),
+      accountsFrom: start !== null && start.startsWith(month) ? start : null,
     })
   }
   return rows

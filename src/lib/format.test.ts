@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatAmount, formatEur, formatHours, parseEurInput, toCents } from './format'
+import { formatAmount, formatEur, formatHours, parseEurInput, parseSignedEurInput, toCents } from './format'
 
 const NB = ' '
 
@@ -62,5 +62,15 @@ describe('formatChartNumber', async () => {
     expect(formatChartNumber(1277)).toBe('1 277')
     expect(formatChartNumber(-3)).toBe('−3')
     expect(formatChartNumber(null)).toBe('—')
+  })
+})
+
+describe('parseSignedEurInput (Dispo)', () => {
+  it('a leading minus or U+2212, comma or point', () => {
+    expect(parseSignedEurInput('−12,50')).toBe(-1250)
+    expect(parseSignedEurInput('-3.1')).toBe(-310)
+    expect(parseSignedEurInput(' 40 ')).toBe(4000)
+    expect(parseSignedEurInput('--1')).toBeNull()
+    expect(parseSignedEurInput('')).toBeNull()
   })
 })
