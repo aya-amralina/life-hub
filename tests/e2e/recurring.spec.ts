@@ -143,7 +143,8 @@ test('«Сделать регулярным»: правило из планов�
   const today = berlinDate()
   const first = addDaysISO(today, 3)
   const sb = await testClient()
-  const row = (date: string) => ({ date, amount_eur: 13.99, kind: 'expense', grp: 'Жизнь', account: 'Revolut', title: 'Netflix e2e', is_planned: true })
+  const main = (await sb.from('accounts').select('id').eq('source_id', 'acct:revolut-main').single()).data!.id
+  const row = (date: string) => ({ date, amount_eur: 13.99, kind: 'expense', grp: 'Жизнь', account_id: main, title: 'Netflix e2e', is_planned: true })
   const a = await sb.from('transactions').insert(row(first)).select('id').single()
   const b = await sb.from('transactions').insert(row(addDaysISO(addMonthsISO(today, 1), 3))).select('id').single()
   expect(a.error ?? b.error).toBeNull()
@@ -159,7 +160,7 @@ test('«Сделать регулярным»: правило из планов�
   const sheet = page.getByRole('dialog', { name: 'Новый регулярный платёж' })
   await expect(sheet.getByLabel('Название')).toHaveValue('Netflix e2e')
   await expect(sheet.getByLabel('Первая дата')).toHaveValue(first)
-  // the old text «Revolut» of the operation is Revolut · Основной (0017); the rule takes the account from it
+  // the rule takes the operation's account
   await expect(sheet.getByRole('button', { name: 'Revolut · Основной' })).toHaveAttribute('aria-pressed', 'true')
   await sheet.getByRole('button', { name: 'Сохранить' }).click()
 

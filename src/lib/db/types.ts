@@ -135,7 +135,6 @@ export type Database = {
       }
       actual_balances: {
         Row: {
-          account: string | null
           account_id: string | null
           amount_eur: number
           created_at: string
@@ -149,7 +148,6 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          account?: string | null
           account_id?: string | null
           amount_eur: number
           created_at?: string
@@ -163,7 +161,6 @@ export type Database = {
           user_id?: string
         }
         Update: {
-          account?: string | null
           account_id?: string | null
           amount_eur?: number
           created_at?: string
@@ -751,7 +748,6 @@ export type Database = {
       }
       recurring: {
         Row: {
-          account: string | null
           account_id: string | null
           active: boolean
           amount_eur: number
@@ -772,7 +768,6 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          account?: string | null
           account_id?: string | null
           active?: boolean
           amount_eur: number
@@ -793,7 +788,6 @@ export type Database = {
           user_id?: string
         }
         Update: {
-          account?: string | null
           account_id?: string | null
           active?: boolean
           amount_eur?: number
@@ -934,7 +928,6 @@ export type Database = {
       }
       transactions: {
         Row: {
-          account: string | null
           account_id: string | null
           amount_eur: number
           cancelled_at: string | null
@@ -961,7 +954,6 @@ export type Database = {
           week_no: number | null
         }
         Insert: {
-          account?: string | null
           account_id?: string | null
           amount_eur: number
           cancelled_at?: string | null
@@ -988,7 +980,6 @@ export type Database = {
           week_no?: number | null
         }
         Update: {
-          account?: string | null
           account_id?: string | null
           amount_eur?: number
           cancelled_at?: string | null

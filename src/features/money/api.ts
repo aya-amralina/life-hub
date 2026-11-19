@@ -62,12 +62,12 @@ export function useAccounts() {
   })
 }
 
-/** The account's name of an operation: by account_id; rows of the version before it carry only the old text. */
+/** The account's name of an operation (by account_id; none — no account). */
 export function useAccountName() {
   const accounts = useAccounts()
   return useMemo(() => {
     const names = new Map((accounts.data ?? []).map((a) => [a.id, a.name]))
-    return (t: { account_id?: string | null; account?: string | null }) => (t.account_id ? (names.get(t.account_id) ?? null) : (t.account ?? null))
+    return (t: { account_id?: string | null }) => (t.account_id ? (names.get(t.account_id) ?? null) : null)
   }, [accounts.data])
 }
 
@@ -85,7 +85,7 @@ export function useAddExpense() {
       // show it in the week at once (offline the refetch waits for the network)
       await qc.cancelQueries({ queryKey: moneyKeys.all })
       const monday = weekStart(tx.date)
-      const row = { account: null, to_account_id: null, envelope_id: null, note: null, source_id: null, cancelled_at: null, entry_kind: 'one_off', week_no: null, debt_id: null, planned_amount_eur: null, recurring_id: null, occurrence_date: null, user_id: '', created_at: '', updated_at: '', ...tx, kind: 'expense', grp: 'Жизнь', is_planned: false, confirmed_at: new Date().toISOString() } as Transaction
+      const row = { to_account_id: null, envelope_id: null, note: null, source_id: null, cancelled_at: null, entry_kind: 'one_off', week_no: null, debt_id: null, planned_amount_eur: null, recurring_id: null, occurrence_date: null, user_id: '', created_at: '', updated_at: '', ...tx, kind: 'expense', grp: 'Жизнь', is_planned: false, confirmed_at: new Date().toISOString() } as Transaction
       qc.setQueryData<Transaction[]>(moneyKeys.week(monday), (old) => (old ? [row, ...old] : [row]))
     },
     onSettled: () => qc.invalidateQueries({ queryKey: moneyKeys.all }),
@@ -185,7 +185,7 @@ export function useSaveRecurring() {
     onMutate: async ({ steps, links = [] }) => {
       await qc.cancelQueries({ queryKey: moneyKeys.all })
       const prev = qc.getQueriesData({ queryKey: moneyKeys.all })
-      const blank = { grp: null, account: null, account_id: null, to_account_id: null, envelope_id: null, interval_n: 1, end_date: null, active: true, note: null, source_id: null, user_id: '', created_at: '', updated_at: '' }
+      const blank = { grp: null, account_id: null, to_account_id: null, envelope_id: null, interval_n: 1, end_date: null, active: true, note: null, source_id: null, user_id: '', created_at: '', updated_at: '' }
       qc.setQueryData<Recurring[]>(key, (old = []) =>
         steps.reduce<Recurring[]>((rows, s) => {
           if (s.action === 'insert') return [...rows, { ...blank, ...s.values } as Recurring]
@@ -359,7 +359,7 @@ export function useCreateTransaction() {
     },
     onMutate: async (tx) => {
       await qc.cancelQueries({ queryKey: moneyKeys.all })
-      const row = { envelope_id: null, note: null, source_id: null, cancelled_at: null, confirmed_at: null, category: null, account: null, account_id: null, to_account_id: null, grp: null, is_planned: false, entry_kind: 'one_off', week_no: null, debt_id: null, planned_amount_eur: null, recurring_id: null, occurrence_date: null, user_id: '', created_at: '', updated_at: '', ...tx } as Transaction
+      const row = { envelope_id: null, note: null, source_id: null, cancelled_at: null, confirmed_at: null, category: null, account_id: null, to_account_id: null, grp: null, is_planned: false, entry_kind: 'one_off', week_no: null, debt_id: null, planned_amount_eur: null, recurring_id: null, occurrence_date: null, user_id: '', created_at: '', updated_at: '', ...tx } as Transaction
       qc.setQueryData<Transaction[]>(allKey, (old) => (old ? [...old, row].sort((a, b) => a.date.localeCompare(b.date)) : [row]))
     },
     onSettled: () => qc.invalidateQueries({ queryKey: moneyKeys.all }),

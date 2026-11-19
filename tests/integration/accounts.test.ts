@@ -3,8 +3,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { ACCOUNT_SEED } from '../../src/lib/constants'
 import { supabaseConfigured, testUser } from '../testUser'
 
-// Migrations 0016 / 0017 on the live base: the seeded accounts, the links of the old text «Счёт» and the checks of
-// the triggers. Writes only as the test user and removes its rows; the secret key only reads counts.
+// Migrations 0016–0019 on the live base: the seeded accounts, the checks of the triggers and of transfers, the old
+// text «Счёт» gone. Writes only as the test user and removes its rows; the secret key only reads counts.
 const url = process.env.VITE_SUPABASE_URL
 const publishable = process.env.VITE_SUPABASE_PUBLISHABLE_KEY
 const secret = process.env.SUPABASE_SECRET_KEY
@@ -13,7 +13,7 @@ const user = testUser()
 const ready = supabaseConfigured() && Boolean(publishable && user)
 const noSession = { auth: { persistSession: false, autoRefreshToken: false } } as const
 
-describe.skipIf(!ready)('live: accounts (0016, 0017)', () => {
+describe.skipIf(!ready)('live: accounts (0016–0019)', () => {
   let sb: SupabaseClient
   const id: Record<string, string> = {}
   const made: { table: string; id: string }[] = []
@@ -39,28 +39,20 @@ describe.skipIf(!ready)('live: accounts (0016, 0017)', () => {
     expect(Object.keys(id).sort()).toEqual(ACCOUNT_SEED.map((a) => a.source_id).sort())
   })
 
-  it('a row of the old version (text «Счёт» only) is linked: Revolut → Основной, the rest by name, unknown → none', async () => {
-    const add = async (account: string) =>
-      keep('transactions', (await sb.from('transactions').insert({ date: '2026-11-20', amount_eur: 1, kind: 'expense', title: 'it-accounts', account }).select('id, account_id').single()).data)
-    expect((await add('Revolut'))!.account_id).toBe(id['acct:revolut-main'])
-    expect((await add('Sparkasse'))!.account_id).toBe(id['acct:sparkasse'])
-    expect((await add('Банк X'))!.account_id).toBeNull()
+  it('the old text «Счёт» is gone (0019): a row cannot carry it', async () => {
+    const r = await sb.from('transactions').insert({ date: '2026-11-20', amount_eur: 1, kind: 'expense', title: 'it-accounts', account: 'Revolut' } as never)
+    expect(r.error?.code).toBe('PGRST204') // no such column
   })
 
-  it('the old version changing the text relinks; the new version changing account_id keeps it', async () => {
-    const row = keep('transactions', (await sb.from('transactions').insert({ date: '2026-11-20', amount_eur: 1, kind: 'expense', title: 'it-accounts', account: 'Revolut' }).select('id').single()).data)!
-    const relinked = await sb.from('transactions').update({ account: 'Наличные' }).eq('id', row.id).select('account_id').single()
-    expect(relinked.data!.account_id).toBe(id['acct:cash'])
-    const moved = await sb.from('transactions').update({ account_id: id['acct:revolut-month'] }).eq('id', row.id).select('account, account_id').single()
-    expect(moved.data).toEqual({ account: 'Наличные', account_id: id['acct:revolut-month'] })
-  })
-
-  it('a recurring rule of the old version is linked too', async () => {
-    const rule = keep(
-      'recurring',
-      (await sb.from('recurring').insert({ title: 'it-accounts', amount_eur: 1, kind: 'expense', freq: 'monthly', anchor_date: '2026-12-01', account: 'Revolut' }).select('id, account_id').single()).data,
-    )
-    expect(rule!.account_id).toBe(id['acct:revolut-main'])
+  it('a transfer after the start is «откуда → куда» in the base too (0019); history is free', async () => {
+    const transfer = (date: string, to: string | null, from = id['acct:revolut-main']!) =>
+      sb.from('transactions').insert({ date, amount_eur: 1, kind: 'transfer', title: 'it-accounts', account_id: from, to_account_id: to }).select('id').single()
+    expect((await transfer('2026-11-20', null)).error?.code).toBe('23514')
+    expect((await transfer('2026-11-20', id['acct:revolut-main']!)).error?.code).toBe('23514')
+    keep('transactions', (await transfer('2026-11-20', id['acct:revolut-cushion']!)).data)
+    keep('transactions', (await transfer('2026-11-18', null)).data)
+    const rule = await sb.from('recurring').insert({ title: 'it-accounts', amount_eur: 1, kind: 'transfer', freq: 'monthly', anchor_date: '2026-12-01', account_id: id['acct:revolut-main'] }).select('id').single()
+    expect(rule.error?.code).toBe('23514')
   })
 
   it('after the start an expense only from «Баланс»; history and income are free', async () => {
@@ -68,7 +60,7 @@ describe.skipIf(!ready)('live: accounts (0016, 0017)', () => {
     expect((await expense('2026-11-20', id['acct:revolut-cushion']!)).error?.code).toBe('23514')
     keep('transactions', (await expense('2026-11-18', id['acct:revolut-cushion']!)).data)
     keep('transactions', (await expense('2026-11-20', id['acct:revolut-cushion']!, 'income')).data)
-    expect(made.filter((m) => m.table === 'transactions')).toHaveLength(6)
+    expect(made.filter((m) => m.table === 'transactions')).toHaveLength(4)
   })
 
   it('a goal only on «Подушка»; below zero only on «Баланс»', async () => {
@@ -82,16 +74,14 @@ describe.skipIf(!ready)('live: accounts (0016, 0017)', () => {
     expect(made.filter((m) => m.table !== 'transactions')).toHaveLength(3)
   })
 
-  it.skipIf(!secret || !realEmail)('the real user: nine accounts, every text «Счёт» linked (counts only)', async () => {
+  it.skipIf(!secret || !realEmail)('the real user: nine accounts, every transfer after the start «откуда → куда» (counts only)', async () => {
     const admin = createClient(url!, secret!, noSession)
     const users = await admin.auth.admin.listUsers({ perPage: 100 })
     const realId = users.data.users.find((u) => u.email?.toLowerCase() === realEmail!.toLowerCase())!.id
     const accounts = await admin.from('accounts').select('id', { count: 'exact', head: true }).eq('user_id', realId)
     expect(accounts.count).toBe(9)
-    for (const table of ['transactions', 'recurring']) {
-      const unlinked = await admin.from(table).select('id', { count: 'exact', head: true }).eq('user_id', realId).not('account', 'is', null).is('account_id', null)
-      expect(unlinked.error).toBeNull()
-      expect(unlinked.count).toBe(0)
-    }
+    const loose = await admin.from('transactions').select('id', { count: 'exact', head: true }).eq('user_id', realId).eq('kind', 'transfer').gt('date', '2026-11-18').or('account_id.is.null,to_account_id.is.null')
+    expect(loose.error).toBeNull()
+    expect(loose.count).toBe(0)
   })
 })

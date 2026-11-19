@@ -85,7 +85,7 @@ export function MonthTab() {
   const pendingCents = pending.reduce((s, q) => s + signedCents(q.tx), 0)
   // real balances against the calculation on that day: by account from the start, before it the old rows («Revolut» …)
   const byAccount = view.start ? reconcileAccounts(actual.data ?? [], all, accountList) : null
-  const check = view.start ? null : reconcile(balancesByDate((actual.data ?? []).flatMap((r) => (!r.account_id && (r.legacy_account ?? r.account) ? [{ date: r.date, account: (r.legacy_account ?? r.account)!, amount_eur: Number(r.amount_eur) }] : []))), all, ACCOUNTS)
+  const check = view.start ? null : reconcile(balancesByDate((actual.data ?? []).flatMap((r) => (!r.account_id && r.legacy_account ? [{ date: r.date, account: r.legacy_account, amount_eur: Number(r.amount_eur) }] : []))), all, ACCOUNTS)
   const inMonth = all.filter((t) => t.date.startsWith(month) && t.kind !== 'opening')
   const removed = inMonth.filter((t) => t.cancelled_at)
   const ops = inMonth

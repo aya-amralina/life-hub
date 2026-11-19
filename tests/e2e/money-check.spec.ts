@@ -14,7 +14,7 @@ test('Месяц: «сейчас» по факту, ждут подтвержд�
   await ins({ date: berlinDate(-2), amount_eur: 100, kind: 'expense', grp: 'Жизнь', title: 'Einkauf', confirmed_at: new Date().toISOString() })
   await ins({ date: berlinDate(), amount_eur: 50, kind: 'expense', grp: 'Обязательное', title: 'Abo e2e', is_planned: true })
   await ins({ date: berlinDate(), amount_eur: 70, kind: 'expense', grp: 'Буфер', title: 'Буфер e2e', is_planned: true, cancelled_at: new Date().toISOString() })
-  expect((await sb.from('actual_balances').insert({ date: berlinDate(), account: 'Revolut', amount_eur: 900 })).error).toBeNull()
+  expect((await sb.from('actual_balances').insert({ date: berlinDate(), legacy_account: 'Revolut', amount_eur: 900 })).error).toBeNull()
   await sb.auth.signOut()
 
   await login(page)

@@ -30,7 +30,7 @@ test('Месяц: «Баланс» со старта по счетам, свер
   // real balances of every account of «Баланс» today: 300 − 20 − 50 = 230 on the main one
   for (const a of accs.filter((x) => ['acct:revolut-main', 'acct:revolut-month', 'acct:sparkasse', 'acct:cash'].includes(x.source_id!))) {
     const amount = a.source_id === 'acct:revolut-main' ? 230 : 0
-    expect((await sb.from('actual_balances').insert({ date: berlinDate(), account_id: a.id, account: a.name, amount_eur: amount })).error).toBeNull()
+    expect((await sb.from('actual_balances').insert({ date: berlinDate(), account_id: a.id, amount_eur: amount })).error).toBeNull()
   }
   await sb.auth.signOut()
 

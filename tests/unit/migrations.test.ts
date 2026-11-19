@@ -79,6 +79,16 @@ describe('migrations: explicit access for every public table', () => {
     expect(relax).toBe('alter table public.actual_balances alter column account drop not null;')
   })
 
+  it('0019 contracts: the old text, its linking in the triggers, «откуда → куда» of transfers', () => {
+    const contract = readFileSync(join(dir, '20261119140000_accounts_contract.sql'), 'utf8').replace(/--.*$/gm, '').toLowerCase()
+    expect(contract).not.toMatch(/new\.account\b|old\.account\b/)
+    expect([...contract.matchAll(/before insert or update of ([\w, ]+) on/g)].map((m) => m[1])).toEqual(['kind, date, amount_eur, account_id, to_account_id', 'kind, account_id, to_account_id'])
+    for (const t of ['transactions', 'recurring', 'actual_balances']) expect(contract).toContain(`alter table public.${t} drop column account;`)
+    expect(contract.indexOf('create trigger recurring_check_accounts')).toBeLessThan(contract.indexOf('drop column account'))
+    expect(contract).toMatch(/transactions_transfer_check check \(\s*kind <> 'transfer' or date <= date '2026-11-18'/)
+    expect(contract).toContain('recurring_transfer_check')
+  })
+
   it('ping() reads no table', () => {
     expect(sql).toMatch(/create or replace function public\.ping\(\)[\s\S]*?as \$\$ select 1 \$\$;/)
   })

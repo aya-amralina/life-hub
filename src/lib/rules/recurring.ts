@@ -19,8 +19,6 @@ export type RecurringLike = {
   amount_eur: number | string
   kind: string
   grp: string | null
-  /** the old text «Счёт» (until migration 0019 drops it) */
-  account?: string | null
   /** expense — «откуда», income — «куда», transfer — «откуда» (decision 18.11.2026) */
   account_id?: string | null
   /** transfer only — «куда» */
@@ -44,7 +42,6 @@ export type VirtualTx = TxLike & {
   recurring_id: string
   occurrence_date: ISODate
   title: string
-  account: string | null
   account_id: string | null
   to_account_id: string | null
   grp: string | null
@@ -124,7 +121,6 @@ function virtualOf(rule: RecurringLike, occurrence: ISODate): VirtualTx {
     kind,
     grp: kind === 'income' ? 'Доход' : kind === 'transfer' ? null : rule.grp,
     category: null,
-    account: rule.account ?? null,
     account_id: rule.account_id ?? null,
     to_account_id: kind === 'transfer' ? (rule.to_account_id ?? null) : null,
     envelope_id: kind === 'expense' ? rule.envelope_id : null,
