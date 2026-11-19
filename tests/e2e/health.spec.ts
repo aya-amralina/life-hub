@@ -9,7 +9,7 @@ test('приём: «+ Добавить» → строка → карточка �
   await login(page)
   await tab(page, 'Тело')
   await bodyTab(page, 'Здоровье', 'Приём')
-  await page.getByRole('button', { name: 'Добавить' }).click()
+  await page.getByRole('button', { name: 'Добавить приём' }).click()
   const sheet = page.getByRole('dialog', { name: 'Приём' })
   await sheet.getByLabel('Название').fill('Магний e2e')
   await sheet.getByLabel('Доза').fill('200 мг')

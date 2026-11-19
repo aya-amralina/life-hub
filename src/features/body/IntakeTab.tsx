@@ -57,7 +57,7 @@ export function IntakeTab() {
           </ul>
         </Card>
       )}
-      <button type="button" onClick={() => setOpen('new')} className="flex min-h-11 items-center gap-1 self-start px-1 text-base text-ink2">
+      <button type="button" aria-label="Добавить приём" onClick={() => setOpen('new')} className="flex min-h-11 items-center gap-1 self-start px-1 text-base text-ink2">
         <Plus size={18} strokeWidth={1.75} aria-hidden="true" />
         Добавить
       </button>
