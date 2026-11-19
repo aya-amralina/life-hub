@@ -224,7 +224,7 @@ describe('forecast: «Месяцы» and the chart', () => {
     expect(line.length).toBeLessThanOrEqual(8)
     for (const k of [TODAY, '2026-11-26', END]) expect(line.some((p) => p.key === k)).toBe(true)
     const today = line.find((p) => p.key === TODAY)!
-    expect(today).toMatchObject({ fact: 293.04, plan: f.days[0]!.plan / 100 })
+    expect(today).toMatchObject({ fact: 293, plan: Math.round(f.days[0]!.plan / 100) }) // whole euros: an estimate
     expect(line.find((p) => p.key === START)).toMatchObject({ fact: 300, plan: null, low: null, high: null })
     for (const p of line.filter((x) => x.key >= TODAY)) expect(p.low! <= p.plan! && p.plan! <= p.high!).toBe(true)
   })

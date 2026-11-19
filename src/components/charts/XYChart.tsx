@@ -164,11 +164,8 @@ export function XYChart({
             <Tooltip
               cursor={{ stroke: 'var(--ink3)', strokeWidth: 1 }}
               labelFormatter={(k) => labelOf.get(String(k)) ?? String(k)}
-              formatter={(v, name, item) => {
-                const unit = (item as { unit?: string }).unit ?? ''
-                // a range (the corridor) as «low–high»
-                return [Array.isArray(v) ? `${chartNumber(Number(v[0]))}–${chartNumber(Number(v[1]))}${unit}` : `${chartNumber(Number(v))}${unit}`, name]
-              }}
+              // the unit is added by Recharts itself (from the series' `unit`); a range (the corridor) as «low–high»
+              formatter={(v, name) => [Array.isArray(v) ? `${chartNumber(Number(v[0]))}–${chartNumber(Number(v[1]))}` : chartNumber(Number(v)), name]}
               contentStyle={{ background: 'var(--inv)', border: 0, borderRadius: 8, boxShadow: 'var(--shadow)', padding: '6px 10px', fontSize: 13 }}
               labelStyle={{ color: 'var(--on-inv)', fontWeight: 600 }}
               itemStyle={{ color: 'var(--on-inv)', padding: 0 }}

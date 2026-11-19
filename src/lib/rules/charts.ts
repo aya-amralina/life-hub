@@ -271,7 +271,8 @@ export function niceTicks(values: number[]): number[] | undefined {
 /**
  * The corridor of the forecast (stage 2) on the «Месяц» chart: the fact up to today, then «по плану» (dashed) and the
  * corridor from «осторожный» (always the lowest) to the higher of «по плану» and «по темпу»; no tempo — no corridor.
- * At most `maxPoints` points; today, the lowest days of the scenarios and the horizon are always among them. Euros.
+ * At most `maxPoints` points; today, the lowest days of the scenarios and the horizon are always among them. Whole
+ * euros — an estimate.
  */
 export function forecastLine(
   f: { days: readonly { date: ISODate; plan: number; tempo: number | null; careful: number | null }[]; end: ISODate; scenarios: Record<string, { pit: { date: ISODate } } | null> },
@@ -285,14 +286,14 @@ export function forecastLine(
   for (let d = from; d <= f.end; d = addDaysISO(d, step)) keys.add(d)
   for (const d of [today, f.end, ...Object.values(f.scenarios).map((s) => s?.pit.date)]) if (d && d >= from && d <= f.end) keys.add(d)
   const dayOf = new Map(f.days.map((d) => [d.date, d]))
-  const eur = (c: number | null | undefined) => (c == null ? null : c / 100)
+  const eur = (c: number | null | undefined) => (c == null ? null : Math.round(c / 100))
   return [...keys].sort().map((key) => {
     const d = dayOf.get(key)
     const high = d && d.tempo !== null ? Math.max(d.plan, d.tempo) : null
     return {
       key,
       label: formatDayMonth(key),
-      fact: key <= today ? factAt(key) / 100 : null,
+      fact: key <= today ? Math.round(factAt(key) / 100) : null,
       plan: eur(d?.plan),
       low: d && high !== null ? eur(d.careful) : null,
       high: eur(high),
