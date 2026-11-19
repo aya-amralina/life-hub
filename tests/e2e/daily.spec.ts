@@ -30,7 +30,7 @@ test('день отмечается: привычка в 1 тап, энерги�
   await sheet.getByRole('button', { name: '30', exact: true }).click()
   await sheet.getByRole('button', { name: 'Добавить · +6' }).click()
   await expect(sheet).toBeHidden()
-  await expect(page.getByText('Прогулка · 30 мин')).toBeVisible()
+  await expect(page.getByText('Прогулка · 30 мин', { exact: true })).toBeVisible()
   await expect(page.getByText('+6', { exact: true })).toBeVisible()
 
   // «Вечер» (after 18:00): a care group keeps one choice, a plain item toggles
@@ -47,7 +47,7 @@ test('день отмечается: привычка в 1 тап, энерги�
   await expect(page.getByRole('checkbox', { name: /Вода/ })).toHaveAttribute('aria-checked', 'true')
   await expect(page.getByRole('button', { name: 'Энергия: 4' })).toHaveAttribute('aria-pressed', 'true')
   await tab(page, 'Тело')
-  await expect(page.getByText('Прогулка · 30 мин')).toBeVisible()
+  await expect(page.getByText('Прогулка · 30 мин', { exact: true })).toBeVisible()
   await tab(page, 'Сегодня')
 
   // Second tap unmarks
@@ -89,8 +89,8 @@ test('«Кор»: «Начать» → отметки, «Домик был?», �
 test('сервер не принял отметку: она возвращается как была, и об этом сказано', async ({ page }) => {
   test.skip(!live, NEEDS)
   await login(page)
-  // a server rejection (not a missing network): the check of the base says no
-  await page.route('**/rest/v1/daily_logs*', (route) =>
+  // a server rejection (not a missing network): the check of the base says no (habits are marked in habit_marks)
+  await page.route('**/rest/v1/habit_marks*', (route) =>
     route.request().method() === 'POST'
       ? route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ code: '23514', message: 'check violation', details: null, hint: null }) })
       : route.fallback(),
@@ -100,7 +100,7 @@ test('сервер не принял отметку: она возвращает
   await expect(page.getByText('Не сохранилось: сервер не принял изменение. На экране — то, что на сервере')).toBeVisible()
   await expect(habit).toHaveAttribute('aria-checked', 'false')
   await expect(page.getByText(/ждут? сети/)).toHaveCount(0) // rejected, not queued
-  await page.unroute('**/rest/v1/daily_logs*')
+  await page.unroute('**/rest/v1/habit_marks*')
   await page.reload()
   await expect(page.getByRole('checkbox', { name: /Вода/ })).toHaveAttribute('aria-checked', 'false')
 })

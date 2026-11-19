@@ -9,7 +9,7 @@ test('заметка дня: «Сохранить» только после пр
   // many steps (a reload for the draft, the journal) plus the cleanup of beforeEach: ~30 s in a full run — triple time
   test.slow()
   const sb = await testClient()
-  expect((await sb.from('daily_logs').insert({ date: berlinDate(-2), note: 'Старая запись про сон', mood: 6, sleep_h: 7 })).error).toBeNull()
+  expect((await sb.from('daily_logs').insert({ date: berlinDate(-2), note: 'Старая запись про сон', mood: 3, sleep_h: 7 })).error).toBeNull()
   await sb.auth.signOut()
 
   await login(page)
@@ -33,7 +33,7 @@ test('заметка дня: «Сохранить» только после пр
   const entries = page.getByRole('article')
   await expect(entries).toHaveCount(2)
   await expect(entries.first()).toContainText('Тревожка с утра')
-  await expect(entries.nth(1)).toContainText('настроение 6 · сон 7 ч')
+  await expect(entries.nth(1)).toContainText('настроение 3 · сон 7 ч')
   await expect(page.getByText(/Сегодня ещё без записи/)).toBeHidden()
 
   // edit a past entry in place

@@ -84,7 +84,7 @@ export function BodyScreen() {
         }
       />
       <HeaderLine date={path === '' ? date : today} />
-      {path !== 'settings' && <RouteTabs tabs={TABS} label="Разделы «Тела»" />}
+      {path !== 'settings' && <RouteTabs tabs={TABS} label="Вкладки «Тела»" />}
       {path === '' && <BodyToday date={date} setDate={setDate} />}
       {tab === 'training' && <RouteTabs tabs={TRAINING} label="Тренировки" variant="sub" />}
       {path === 'training/strength' && <StrengthTab />}

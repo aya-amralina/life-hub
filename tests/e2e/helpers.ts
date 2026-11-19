@@ -32,7 +32,7 @@ export async function tab(page: Page, name: 'Сегодня' | 'Деньги' | 
 
 /** «Тело» (step 3): a tab under the header, then — inside Тренировки / Здоровье — a screen of the second row. */
 export async function bodyTab(page: Page, name: 'Сегодня' | 'Тренировки' | 'Здоровье' | 'Динамика', screen?: string) {
-  await page.getByRole('navigation', { name: 'Разделы «Тела»' }).getByRole('link', { name, exact: true }).click()
+  await page.getByRole('navigation', { name: 'Вкладки «Тела»' }).getByRole('link', { name, exact: true }).click()
   if (screen) await page.getByRole('navigation', { name }).getByRole('link', { name: screen, exact: true }).click()
 }
 

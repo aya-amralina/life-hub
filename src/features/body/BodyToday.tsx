@@ -110,6 +110,13 @@ export function BodyToday({ date, setDate }: { date: ISODate; setDate: (d: ISODa
         <DayBlockView block="evening" done={eveningBlock.done} total={eveningBlock.total} foldable={false}>
           {eveningBlock.node}
           <CheckIn date={date} />
+          <div className="flex items-baseline justify-between">
+            <span className="text-base">Заметка дня</span>
+            {/* the journal opens only from the day's note (decision 12.11.2026) */}
+            <Link to="/journal" aria-label="Заметка дня — журнал" className="flex min-h-11 items-center text-cap text-ink2 underline underline-offset-4">
+              журнал
+            </Link>
+          </div>
           <NoteEditor date={date} />
         </DayBlockView>
       ) : (
