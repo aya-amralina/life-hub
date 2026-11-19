@@ -146,3 +146,15 @@ describe('core: words', () => {
     expect([0, 1, 1.5, 2, 5].map(fingersText)).toEqual(['0 пальцев', '1 палец', '1,5 пальца', '2 пальца', '5 пальцев'])
   })
 })
+
+describe('core: a minimal session («Тяжёлый день»)', () => {
+  it('counts in the week, not in the move to the next stage', () => {
+    const minimal = (date: string) => ({ ...session(date, null), minimal: true })
+    expect(weekSessions([minimal('2026-11-19'), session('2026-11-20', false)], '2026-11-20')).toBe(2)
+    // 7 sessions without the «домик», one of them minimal → only 6 full ones
+    const s = [...days('2026-12-10', 6), minimal('2026-12-04')]
+    expect(domeFree(s, '2026-12-10')).toEqual({ free: 6, of: 6 })
+    expect(nextStage(program(), s, '2026-12-10').kind).toBe('dome')
+    expect(nextStage(program(), [...s, session('2026-12-03', false)], '2026-12-10').kind).toBe('offer')
+  })
+})

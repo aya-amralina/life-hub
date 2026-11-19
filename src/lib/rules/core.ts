@@ -14,7 +14,8 @@ export type CoreProgramLike = {
   stage_since: ISODate
   offer_after: ISODate | null
 }
-export type CoreSessionLike = { date: ISODate; dome: boolean | null; done_at: string | null }
+/** `minimal` — the «Тяжёлый день» version: counts in the week, not in the move to the next stage (rule 39). */
+export type CoreSessionLike = { date: ISODate; dome: boolean | null; done_at: string | null; minimal?: boolean }
 
 /** Sessions in a row without the «домик» before the next stage is offered. */
 export const DOME_FREE_SESSIONS = 7
@@ -57,10 +58,10 @@ export function earliestNext(program: Pick<CoreProgramLike, 'stages' | 'stage' |
   return weeks ? addDaysISO(program.stage_since, weeks * 7) : null
 }
 
-/** The last `n` finished sessions up to the day, newest first. */
+/** The last `n` finished full sessions up to the day, newest first (minimal ones do not count for the next stage). */
 export function lastSessions<S extends CoreSessionLike>(sessions: readonly S[], today: ISODate, n = DOME_FREE_SESSIONS): S[] {
   return sessions
-    .filter((s) => isSessionDone(s) && s.date <= today)
+    .filter((s) => isSessionDone(s) && !s.minimal && s.date <= today)
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, n)
 }

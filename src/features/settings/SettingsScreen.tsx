@@ -12,7 +12,6 @@ import { supabase } from '@/lib/supabase'
 import { ActivitiesSettings } from './ActivitiesSettings'
 import { BackupCard } from './BackupCard'
 import { InstallHint } from './InstallHint'
-import { StagesSettings } from './StagesSettings'
 
 const THEMES = [
   { value: 'system', label: 'Авто' },
@@ -52,7 +51,9 @@ export function SettingsScreen() {
         />
       </Card>
       <ActivitiesSettings />
-      <StagesSettings />
+      <Card>
+        <CardHeader title="Привычки и этапы" to="/body/settings" context="в «Теле»" />
+      </Card>
       <BackupCard />
       <Card>
         <CardHeader title="Установка" />

@@ -1,101 +1,137 @@
 import { useState } from 'react'
-import { CalendarClock, ChartLine, Dumbbell, Flag, NotebookPen, PersonStanding, Pill, Ruler, Stethoscope, X } from 'lucide-react'
-import { Navigate, useParams } from 'react-router'
+import { CalendarClock, Settings } from 'lucide-react'
+import { Link, Navigate, useParams } from 'react-router'
 import { useAddAction, useOpenAdd } from '@/app/addSheetContext'
-import { IconButton } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
-import { Chip } from '@/components/ui/Chip'
 import { EmptyState, SkeletonCard } from '@/components/ui/Feedback'
 import { GroupHeader } from '@/components/ui/GroupHeader'
-import { ProgressBar } from '@/components/ui/ProgressBar'
-import { Switch } from '@/components/ui/Switch'
-import { WeekSwitcher } from '@/components/ui/WeekSwitcher'
 import { CalendarLink } from '@/components/layout/CalendarLink'
-import { MoreList, SectionHeader, type MoreLink } from '@/components/layout/MoreList'
+import { RouteTabs, type RouteTab } from '@/components/layout/RouteTabs'
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
-import { addDaysISO, formatDayMonth, formatRelativeDay, formatWeekdayDate, todayBerlin, weekStart, type ISODate } from '@/lib/dates'
-import { activityPoints, dayPoints, weekPoints, weekPointsTarget } from '@/lib/rules/activities'
-import { careChoice, careDone, careEntries, careToggle, isCareDone } from '@/lib/rules/care'
+import { addDaysISO, formatDayMonth, formatLongDate, formatWeekdayDate, todayBerlin, weekStart, weekdayShort, type ISODate } from '@/lib/dates'
+import { strengthWeek, weekLine } from '@/lib/rules/bodyDay'
+import { weekDaysActive, weekSessions } from '@/lib/rules/core'
 import { activeOn, dayMarks, daySet, minimumOn, minimumPhrase, stageForDate, weekHabitShare } from '@/lib/rules/habits'
 import { isItemOpen, isUpcoming } from '@/lib/rules/items'
-import { plural } from '@/lib/format'
 import { NotesSection } from '@/features/notes/NotesCard'
 import { useItems, useUpdateItem } from '@/features/items/api'
 import { donePatch, reopenPatch } from '@/features/items/donePatch'
-import { ItemQuestions } from '@/features/items/ItemQuestions'
 import { ItemRow } from '@/features/items/ItemRow'
+import { StagesSettings } from '@/features/settings/StagesSettings'
 import { ActivitySheet } from './ActivitySheet'
 import { BodyCharts } from './BodyCharts'
-import { DayNoteCard } from '@/features/journal/DayNoteCard'
-import { bodyDataKeys, useActivities, useActivityTypes, useWrite } from './activityApi'
-import { CORE_PATH } from './coreApi'
-import { CoreCard } from './CoreCard'
+import { BodyToday } from './BodyToday'
+import { useStrengthSets } from './activityApi'
+import { useCoreProgram, useCoreSessions } from './coreApi'
 import { CoreSession } from './CoreSession'
-import { useDailyLog, useSaveDailyLog, useStages, useWeekLogs } from './api'
-import { EveningCard } from './EveningCard'
-import { useHabitDay, useHabits, useMarks, useSetMarks } from './habitsApi'
-import { HabitsCard } from './HabitsCard'
+import { useStages, useWeekLogs } from './api'
+import { useHabits, useMarks, useWorkouts } from './habitsApi'
 import { IntakeTab } from './IntakeTab'
 import { MeasurementsTab } from './MeasurementsTab'
 import { StrengthTab } from './StrengthTab'
 
-const BACK = '/body'
-const SECTIONS = {
-  core: 'Кор',
-  tasks: 'Задачи и визиты',
-  charts: 'Графики',
-  strength: 'Сила',
-  measure: 'Замеры',
-  intake: 'Приём',
-  stage: 'Этап',
-  notes: 'Справка и заметки',
-} as const
-type Section = keyof typeof SECTIONS
-
-const MORE: readonly MoreLink[] = [
-  { to: CORE_PATH, label: 'Кор', icon: PersonStanding },
-  { to: '/body/tasks', label: 'Задачи и визиты', icon: Stethoscope },
-  { to: '/body/charts', label: 'Графики', icon: ChartLine },
-  { to: '/body/strength', label: 'Сила', icon: Dumbbell },
-  { to: '/body/measure', label: 'Замеры', icon: Ruler },
-  { to: '/body/intake', label: 'Приём', icon: Pill },
-  { to: '/body/stage', label: 'Этап', icon: Flag },
-  { to: '/body/notes', label: 'Справка и заметки', icon: NotebookPen },
+const TABS: readonly RouteTab[] = [
+  { to: '/body', label: 'Сегодня', end: true },
+  { to: '/body/training', label: 'Тренировки' },
+  { to: '/body/health', label: 'Здоровье' },
+  { to: '/body/charts', label: 'Динамика' },
+]
+const TRAINING: readonly RouteTab[] = [
+  { to: '/body/training/strength', label: 'Сила' },
+  { to: '/body/training/core', label: 'Кор' },
+]
+const HEALTH: readonly RouteTab[] = [
+  { to: '/body/health/intake', label: 'Приём' },
+  { to: '/body/health/tasks', label: 'Задачи' },
+  { to: '/body/health/measure', label: 'Замеры' },
+  { to: '/body/health/notes', label: 'Справка' },
 ]
 
-/** Тело: the day on the main view; tasks, charts, journals, the stage and notes one tap deeper. */
+/** The addresses before the tabs (step 3) — old links and bookmarks still land on their screen. */
+const MOVED: Record<string, string> = {
+  core: '/body/training/core',
+  strength: '/body/training/strength',
+  training: '/body/training/strength',
+  intake: '/body/health/intake',
+  tasks: '/body/health/tasks',
+  measure: '/body/health/measure',
+  notes: '/body/health/notes',
+  health: '/body/health/intake',
+  stage: '/body/settings',
+}
+
+/**
+ * Тело (step 3): tabs Сегодня · Тренировки · Здоровье · Динамика, the gear — stages and habits. The screens inside the
+ * tabs only moved here; their redesign comes later.
+ */
 export function BodyScreen() {
-  const section = useParams()['*'] ?? ''
-  if (section === '') {
-    return (
-      <>
-        <ScreenHeader title="Тело" right={<CalendarLink sphere="body" />} />
-        <DayTab />
-        <MoreList links={MORE} />
-      </>
-    )
-  }
-  if (!(section in SECTIONS)) return <Navigate to={BACK} replace />
-  const s = section as Section
+  const path = useParams()['*'] ?? ''
+  const today = todayBerlin()
+  const [date, setDate] = useState<ISODate>(today)
+  if (path in MOVED) return <Navigate to={MOVED[path]!} replace />
+  const [tab, sub] = path.split('/')
+  const known =
+    path === '' || path === 'charts' || path === 'settings' || (tab === 'training' && (sub === 'strength' || sub === 'core')) || (tab === 'health' && ['intake', 'tasks', 'measure', 'notes'].includes(sub ?? ''))
+  if (!known) return <Navigate to="/body" replace />
   return (
     <>
-      <SectionHeader title={SECTIONS[s]} back={BACK} sphere="Тело" right={s === 'tasks' ? <CalendarLink sphere="body" /> : undefined} />
-      {s === 'core' && <CoreSession />}
-      {s === 'tasks' && <BodyTasks />}
-      {s === 'charts' && (
+      <ScreenHeader
+        title="Тело"
+        right={
+          <Link to="/body/settings" aria-label="Настройки привычек и этапы" className="flex size-11 flex-none items-center justify-center rounded-full text-ink active:bg-sub">
+            <Settings size={22} strokeWidth={1.75} aria-hidden="true" />
+          </Link>
+        }
+      />
+      <HeaderLine date={path === '' ? date : today} />
+      {path !== 'settings' && <RouteTabs tabs={TABS} label="Разделы «Тела»" />}
+      {path === '' && <BodyToday date={date} setDate={setDate} />}
+      {tab === 'training' && <RouteTabs tabs={TRAINING} label="Тренировки" variant="sub" />}
+      {path === 'training/strength' && <StrengthTab />}
+      {path === 'training/core' && <CoreSession />}
+      {tab === 'health' && <RouteTabs tabs={HEALTH} label="Здоровье" variant="sub" />}
+      {path === 'health/intake' && <IntakeTab />}
+      {path === 'health/tasks' && (
+        <>
+          <div className="flex justify-end">
+            <CalendarLink sphere="body" />
+          </div>
+          <BodyTasks />
+        </>
+      )}
+      {path === 'health/measure' && <MeasurementsTab />}
+      {path === 'health/notes' && <NotesSection sphere="body" />}
+      {path === 'charts' && (
         <>
           <AddActivity />
-          <WeekShare date={todayBerlin()} />
+          <WeekShare date={today} />
           <BodyCharts />
         </>
       )}
-      {s === 'strength' && <StrengthTab />}
-      {s === 'measure' && <MeasurementsTab />}
-      {s === 'intake' && <IntakeTab />}
-      {s === 'stage' && <StageCard />}
-      {s === 'notes' && <NotesSection sphere="body" />}
+      {path === 'settings' && (
+        <>
+          <Link to="/body" className="flex min-h-11 items-center self-start text-base text-ink2 no-underline">
+            ← Тело
+          </Link>
+          <StageCard />
+          <StagesSettings />
+        </>
+      )}
     </>
   )
+}
+
+/** «Чт, 19 ноября. Силовые 1 из 2, кор 3 из 7» — the week of the day shown. */
+function HeaderLine({ date }: { date: ISODate }) {
+  const workouts = useWorkouts()
+  const sets = useStrengthSets()
+  const program = useCoreProgram()
+  const sessions = useCoreSessions()
+  const p = program.data
+  const strength = strengthWeek(workouts.data?.queue ?? [], (sets.data ?? []).map((s) => s.date), date)
+  const core = p && date >= p.start_date ? { done: weekSessions(sessions.data ?? [], date), of: weekDaysActive(p.start_date, date) } : null
+  const line = weekLine(strength, core)
+  return <p className="m-0 -mt-3 text-cap text-ink2">{[`${weekdayShort(date)}, ${formatLongDate(date)}`, line].filter(Boolean).join('. ')}</p>
 }
 
 /** «+» of a section that shows movement: a new activity today. */
@@ -105,168 +141,10 @@ function AddActivity() {
   return <ActivitySheet open={adding} onClose={() => setAdding(false)} date={todayBerlin()} />
 }
 
-function DayTab() {
-  const today = todayBerlin()
-  const [date, setDate] = useState<ISODate>(today)
-  const log = useDailyLog(date)
-  const minimum = log.data?.minimum_mode ?? false
-  // «+» on the day: an activity on the day shown (in «минимум» too)
-  const [adding, setAdding] = useState(false)
-  useAddAction(() => setAdding(true))
-  return (
-    <>
-      <WeekSwitcher
-        label={`${formatRelativeDay(date, today)}${date === today ? `, ${formatDayMonth(date)}` : ''}`}
-        onPrev={() => setDate(addDaysISO(date, -1))}
-        onNext={() => setDate(addDaysISO(date, 1))}
-        nextDisabled={date >= today}
-        onReset={date !== today ? () => setDate(today) : undefined}
-        resetLabel="Сегодня"
-      />
-      <ItemQuestions sphere="body" />
-      <MinimumCard date={date} />
-      <HabitsCard date={date} />
-      {date === today && <CoreCard today={today} />}
-      {minimum ? (
-        <MinimumRest />
-      ) : (
-        <>
-          <MovementCard date={date} />
-          <CareCard date={date} />
-        </>
-      )}
-      <EveningCard date={date} />
-      <DayNoteCard date={date} />
-      <ActivitySheet open={adding} onClose={() => setAdding(false)} date={date} />
-    </>
-  )
-}
-
 function useStageFor(date: ISODate) {
   const stages = useStages()
   const stage = stages.data?.length ? stageForDate(stages.data, date) : null
   return { stages, stage }
-}
-
-/** Rule 13: the switch names the minimum set (habits marked «в минимуме»). */
-function MinimumCard({ date }: { date: ISODate }) {
-  const log = useDailyLog(date)
-  const save = useSaveDailyLog(date)
-  const habits = useHabits()
-  if (log.isPending || habits.isPending) return <SkeletonCard />
-  const on = log.data?.minimum_mode ?? false
-  const phrase = minimumPhrase(minimumOn(habits.data?.habits ?? [], habits.data?.plans ?? [], date))
-  return (
-    <Card>
-      <div className="flex items-center gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="text-base font-semibold">Режим минимум</div>
-          <div className="text-cap text-ink2">Только {phrase} — для тяжёлых дней</div>
-        </div>
-        <Switch checked={on} onChange={(v) => save.mutate({ minimum_mode: v })} label="Режим минимум" />
-      </div>
-    </Card>
-  )
-}
-
-function MinimumRest() {
-  return (
-    <section className="flex flex-col gap-1 rounded-2xl border border-dashed border-line2 p-4">
-      <div className="text-base font-semibold">Сегодня — минимум</div>
-      <p className="m-0 text-cap text-ink2">
-        Движение и уход подождут. Хватит привычек минимума и пары слов о самочувствии. Пропуск — это сигнал, а не провал.
-      </p>
-    </section>
-  )
-}
-
-/** «Движение»: several activities a day with a score (rule 25), the week against the stage target. */
-function MovementCard({ date }: { date: ISODate }) {
-  const types = useActivityTypes()
-  const activities = useActivities()
-  const write = useWrite('activities', bodyDataKeys.activities)
-  const { stage } = useStageFor(date)
-  if (types.isPending || activities.isPending) return <SkeletonCard />
-  const all = activities.data ?? []
-  const typeList = types.data ?? []
-  const today = all.filter((a) => a.date === date)
-  const day = dayPoints(all, typeList, date)
-  const week = weekPoints(all, typeList, weekStart(date))
-  const target = weekPointsTarget(stage)
-  const num = (n: number) => String(n).replace('.', ',')
-  const points = (n: number) => (Number.isInteger(n) ? plural(n, ['очко', 'очка', 'очков']) : 'очка')
-
-  return (
-    <Card>
-      <CardHeader title="Движение" dotClass="bg-body" context={today.length ? `скор дня ${num(day)}` : undefined} />
-      {today.length === 0 ? (
-        <p className="m-0 text-cap text-ink2">Пока ничего. Прогулка тоже считается — запиши через «+».</p>
-      ) : (
-        <ul className="m-0 flex list-none flex-col p-0">
-          {today.map((a) => {
-            const t = typeList.find((x) => x.id === a.type_id)
-            return (
-              <li key={a.id} className="flex min-h-12 items-center gap-3 border-t border-line first:border-t-0">
-                <span className="min-w-0 flex-1">
-                  <span className="block text-base">{t?.name ?? 'Активность'}</span>
-                  <span className="block text-cap text-ink2">{[a.minutes ? `${a.minutes} мин` : 'минуты не указаны', t?.intensity, a.note].filter(Boolean).join(' · ')}</span>
-                </span>
-                <span className="text-base font-semibold tabular-nums">+{num(t ? activityPoints(a.minutes, t.points_per_10min) : 0)}</span>
-                <IconButton shape="square" label={`Удалить ${t?.name ?? 'активность'}`} className="border-transparent text-ink3" onClick={() => write.remove.mutate(a.id)}>
-                  <X size={20} strokeWidth={1.75} aria-hidden="true" />
-                </IconButton>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-      <div className="flex flex-col gap-2">
-        <div className="text-cap text-ink2 tabular-nums">{target ? `Неделя: ${num(week)} из ${num(target)} ${points(target)}` : `Неделя: ${num(week)} ${points(week)}`}</div>
-        {target && <ProgressBar value={Math.min(week, target)} max={target} fillClass="bg-body" label="Очки недели" />}
-      </div>
-    </Card>
-  )
-}
-
-/** «Уход»: care habits of the day (groups — one choice); a past «Вечер: лицо» mark is shown as it was. */
-function CareCard({ date }: { date: ISODate }) {
-  const log = useDailyLog(date)
-  const { isPending, habits, plans, day } = useHabitDay(date, log.data?.minimum_mode ?? false)
-  const mark = useSetMarks(date)
-  if (log.isPending || isPending) return <SkeletonCard />
-  const entries = careEntries(habits, plans, date)
-  const plain = entries.filter((e) => !e.options)
-  const groups = entries.filter((e) => e.options)
-  // a past «Вечер: лицо» mark is shown only when no evening group holds it
-  const face = log.data?.face_evening ?? null
-  const faceShown = face && !groups.some((g) => careChoice(day, g)?.name === face)
-  return (
-    <Card>
-      <CardHeader title="Уход" dotClass="bg-body" context={`${careDone(day, entries)} из ${entries.length}`} />
-      {groups.map((g) => (
-        <fieldset key={g.key} className="m-0 flex flex-col gap-2 border-0 p-0">
-          <legend className="mb-2 text-cap text-ink2">{g.label}</legend>
-          <div className="flex flex-wrap gap-2">
-            {g.options!.map((o) => (
-              <Chip key={o.id} selected={careChoice(day, g)?.id === o.id} onClick={() => mark.mutate(careToggle(day, g, o.id))}>
-                {o.name}
-              </Chip>
-            ))}
-          </div>
-        </fieldset>
-      ))}
-      {plain.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {plain.map((e) => (
-            <Chip key={e.key} selected={isCareDone(day, e)} onClick={() => mark.mutate(careToggle(day, e))}>
-              {e.label}
-            </Chip>
-          ))}
-        </div>
-      )}
-      {faceShown && <p className="m-0 text-cap text-ink2">Вечер: лицо — {face} (старая отметка)</p>}
-    </Card>
-  )
 }
 
 function WeekShare({ date }: { date: ISODate }) {
@@ -290,7 +168,6 @@ function WeekShare({ date }: { date: ISODate }) {
         <span className="text-big font-semibold">{Math.round(share * 100)} %</span>
         <span className="text-base text-ink2">отмечено</span>
       </div>
-      <p className="m-0 text-cap text-ink2">Без стриков — каждый день с чистого листа.</p>
     </Card>
   )
 }

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { NEEDS, berlinDate, berlinMonday, cleanupTestUser, live, login, more, tab, testClient } from './helpers'
+import { NEEDS, bodyTab, berlinDate, berlinMonday, cleanupTestUser, live, login, more, tab, testClient } from './helpers'
 
 test.beforeEach(cleanupTestUser)
 test.afterAll(cleanupTestUser)
@@ -42,12 +42,12 @@ test('графики: Тело → Графики и тепловая карта
   const week = await sb.from('weeks').insert({ start_date: berlinMonday(0), study_week: 'Н04', capacity_base_h: 27, capacity_max_h: 36 }).select('id').single()
   expect(week.error).toBeNull()
   expect((await sb.from('items').insert({ sphere: 'study', title: 'Blatt e2e', area: 'GLET', week_id: week.data!.id, hours_est: 30, status: 'открыто' })).error).toBeNull()
-  for (let d = 0; d < 4; d++) expect((await sb.from('daily_logs').insert({ date: berlinDate(-d), mood: 6 + d, energy: 5, sleep_h: 7, water: true })).error).toBeNull()
+  for (let d = 0; d < 4; d++) expect((await sb.from('daily_logs').insert({ date: berlinDate(-d), mood: 2 + d, energy: 3, sleep_h: 7, water: true })).error).toBeNull()
   await sb.auth.signOut()
 
   await login(page)
   await tab(page, 'Тело')
-  await more(page, 'Графики')
+  await bodyTab(page, 'Динамика')
   await expect(page.getByRole('figure', { name: 'Настроение, энергия и сон' })).toBeVisible()
   await expect(page.getByText('Мало данных', { exact: false }).first()).toBeVisible() // reps/activity are empty
   await page.getByRole('tab', { name: 'Неделя' }).first().click() // «Самочувствие»; «Кофе» has its own period

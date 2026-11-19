@@ -249,6 +249,7 @@ export type Database = {
           done: string[]
           done_at: string | null
           id: string
+          minimal: boolean
           program_id: string
           source_id: string | null
           stage: number
@@ -262,6 +263,7 @@ export type Database = {
           done?: string[]
           done_at?: string | null
           id?: string
+          minimal?: boolean
           program_id: string
           source_id?: string | null
           stage: number
@@ -275,6 +277,7 @@ export type Database = {
           done?: string[]
           done_at?: string | null
           id?: string
+          minimal?: boolean
           program_id?: string
           source_id?: string | null
           stage?: number
@@ -345,6 +348,7 @@ export type Database = {
           energy: number | null
           face_evening: string | null
           id: string
+          intake_skipped: boolean
           minimum_mode: boolean
           mood: number | null
           morning: boolean
@@ -366,6 +370,7 @@ export type Database = {
           energy?: number | null
           face_evening?: string | null
           id?: string
+          intake_skipped?: boolean
           minimum_mode?: boolean
           mood?: number | null
           morning?: boolean
@@ -387,6 +392,7 @@ export type Database = {
           energy?: number | null
           face_evening?: string | null
           id?: string
+          intake_skipped?: boolean
           minimum_mode?: boolean
           mood?: number | null
           morning?: boolean

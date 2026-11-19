@@ -28,7 +28,7 @@ export function HeatGrid({
   cell?: [number, number]
   color: SphereColor
   mix?: number[]
-  legend?: { level: number | null; text: string }[]
+  legend?: { level: number | null; text: string; minimum?: boolean }[]
   rowLabels?: string[]
   hint: string
   label: string
@@ -83,6 +83,7 @@ export function HeatGrid({
                 style={c.current ? { ...fill(c.level), border: undefined } : fill(c.level)}
               >
                 {c.label}
+                {c.minimum && !c.label && <span className={cn('size-1.5 rounded-full', top ? 'bg-on-sphere' : 'bg-ink')} aria-hidden="true" />}
               </button>
             )
           })}
@@ -93,7 +94,9 @@ export function HeatGrid({
         <ul className="m-0 flex list-none flex-wrap gap-x-4 gap-y-1 p-0 text-cap text-ink2">
           {legend.map((l) => (
             <li key={l.text} className="flex items-center gap-1">
-              <span className="size-3 rounded-[3px]" style={fill(l.level)} />
+              <span className="flex size-3 items-center justify-center rounded-[3px]" style={fill(l.level)}>
+                {l.minimum && <span className="size-1 rounded-full bg-ink" />}
+              </span>
               {l.text}
             </li>
           ))}

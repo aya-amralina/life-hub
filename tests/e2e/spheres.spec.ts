@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { NEEDS, cleanupTestUser, live, login, more, plus, tab } from './helpers'
+import { NEEDS, bodyTab, cleanupTestUser, live, login, plus, tab } from './helpers'
 
 test.beforeAll(cleanupTestUser)
 test.afterAll(cleanupTestUser)
@@ -55,7 +55,7 @@ test('Заметка из «+» в разделе заметок сферы', as
   const title = `e2e заметка ${Date.now()}`
   await login(page)
   await tab(page, 'Тело')
-  await more(page, 'Справка и заметки')
+  await bodyTab(page, 'Здоровье', 'Справка')
   await expect(page.getByText('Заметок пока нет')).toBeVisible()
   await plus(page)
   const add = page.getByRole('dialog', { name: 'Заметка' })

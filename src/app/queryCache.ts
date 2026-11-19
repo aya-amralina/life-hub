@@ -6,7 +6,7 @@ const MAX_AGE = 7 * 24 * 3_600_000
 // Shape of the cached rows. Bump when a migration adds a column the screens rely on (entry_kind, coffee_cups …):
 // a cache saved before it is dropped, not shown — otherwise old rows look like something else for a moment
 // (a week budget without entry_kind asked «Списалось?»).
-const VERSION = 3
+const VERSION = 4
 
 /**
  * Read cache for offline (SPEC §1): successful queries are kept in IndexedDB, so the app opens without network

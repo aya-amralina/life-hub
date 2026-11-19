@@ -122,6 +122,14 @@ describe('habit calendar, activity weeks, reps', () => {
     const full = calendar([...marks, { habit_id: 'water', date: today, done: true }], [today])
     expect(full.find((c) => c.key === today)!.level).toBe(3) // a complete minimum day counts fully
   })
+  it('a «Тяжёлый день» is marked apart, never as a miss', () => {
+    const cells = calendar([], ['2026-11-10'])
+    const hard = cells.find((c) => c.key === '2026-11-10')!
+    expect(hard).toMatchObject({ level: 0, minimum: true })
+    expect(hard.tip).toContain('тяжёлый день')
+    expect(hard.tip).not.toContain('пропуск')
+    expect(cells.find((c) => c.key === '2026-11-09')!.minimum).toBeUndefined()
+  })
   it('the calendar counts only done = true', () => {
     const cells = calendar([
       { habit_id: 'water', date: '2026-11-10', done: false },

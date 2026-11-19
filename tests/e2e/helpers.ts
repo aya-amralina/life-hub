@@ -30,6 +30,12 @@ export async function tab(page: Page, name: 'Сегодня' | 'Деньги' | 
   await page.getByRole('navigation', { name: 'Разделы' }).getByRole('link', { name, exact: true }).click()
 }
 
+/** «Тело» (step 3): a tab under the header, then — inside Тренировки / Здоровье — a screen of the second row. */
+export async function bodyTab(page: Page, name: 'Сегодня' | 'Тренировки' | 'Здоровье' | 'Динамика', screen?: string) {
+  await page.getByRole('navigation', { name: 'Разделы «Тела»' }).getByRole('link', { name, exact: true }).click()
+  if (screen) await page.getByRole('navigation', { name }).getByRole('link', { name: screen, exact: true }).click()
+}
+
 /** Open a section of the current sphere from its «Ещё» list (a row may carry a hint after the name). */
 export async function more(page: Page, name: string) {
   await page.getByRole('navigation', { name: 'Ещё' }).getByRole('link', { name: new RegExp(`^${name}`) }).click()

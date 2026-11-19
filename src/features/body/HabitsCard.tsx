@@ -61,9 +61,9 @@ export function HabitsCard({ date, to }: { date: ISODate; to?: string }) {
   )
 }
 
-function SleepRow({ value, last, onChange }: { value: number | null; last: number | null; onChange: (v: number | null) => void }) {
+export function SleepRow({ value, last, onChange, bare = false }: { value: number | null; last: number | null; onChange: (v: number | null) => void; bare?: boolean }) {
   return (
-    <div role="group" aria-label="Сон" className="flex items-center gap-3 border-t border-line pt-3">
+    <div role="group" aria-label="Сон" className={bare ? 'flex min-h-11 items-center gap-3' : 'flex items-center gap-3 border-t border-line pt-3'}>
       <BedDouble size={20} strokeWidth={1.75} aria-hidden="true" className="flex-none text-ink2" />
       <span className="min-w-0 flex-1">
         <span className="block text-base">Сон</span>

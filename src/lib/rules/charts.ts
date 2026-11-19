@@ -120,7 +120,8 @@ export function intakeBands(
   return out
 }
 
-export type GridCell = { key: ISODate; level: number | null; tip: string; current?: boolean; label?: string }
+/** `minimum` — a «Тяжёлый день»: marked apart, never shown as a miss. */
+export type GridCell = { key: ISODate; level: number | null; tip: string; current?: boolean; label?: string; minimum?: boolean }
 
 /**
  * Habit calendar like GitHub: 13 weeks × 7 days, column per week. Level = habits counted that day (rule 13/14:
@@ -146,12 +147,14 @@ export function habitCalendar(
     const marks = day(d)
     const done = habitsDone(marks, active, minimum)
     const named = active.filter((id) => marks?.done.has(id)).map(label).filter(Boolean)
+    const hard = Boolean(marks?.minimum_mode)
     cells.push({
       key: d,
       level: done,
       total,
       current: d === today,
-      tip: `${formatDayMonth(d)} · ${done} из ${total}${named.length ? ` · ${named.join(', ')}` : ''}${done === 0 ? ' · пропуск — это сигнал, а не провал' : ''}`,
+      ...(hard ? { minimum: true } : {}),
+      tip: `${formatDayMonth(d)} · ${done} из ${total}${named.length ? ` · ${named.join(', ')}` : ''}${hard ? ' · тяжёлый день' : done === 0 ? ' · пропуск — это сигнал, а не провал' : ''}`,
     })
   }
   return cells

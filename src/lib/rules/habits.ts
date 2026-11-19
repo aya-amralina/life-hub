@@ -1,4 +1,4 @@
-import { addDaysISO, daysBetween, todayBerlin, type ISODate } from '../dates'
+import { addDaysISO, daysBetween, parseISODate, todayBerlin, weekStart, type ISODate } from '../dates'
 import { joinRu } from '../format'
 
 /**
@@ -18,7 +18,11 @@ export type HabitLike = {
   phrase?: string | null
   icon?: string | null
   program_id?: string | null
-}
+  time_of_day?: string
+  minimum_note?: string | null
+} & Partial<FreqLike>
+/** Frequency (stored since 0021, applied since step 3): daily · weekdays · every other day from starts_on · N a week. */
+export type FreqLike = { freq: string; freq_weekdays: number[] | null; freq_per_week: number | null; starts_on: ISODate }
 export type PlanLike = { habit_id: string; from_date: ISODate | null; to_date: ISODate | null }
 export type MarkLike = { habit_id: string; date: ISODate; done: boolean }
 
@@ -43,11 +47,48 @@ export function activeOn<H extends HabitLike>(habits: readonly H[], plans: reado
   return habits.filter((h) => h.kind === kind && isActiveOn(h, plans, date)).sort(byOrder)
 }
 
-/** Rule 13: the minimum set of the day — active daily habits marked «в минимуме»; none marked — all of them. */
-export function minimumOn<H extends HabitLike>(habits: readonly H[], plans: readonly PlanLike[], date: ISODate): H[] {
+/**
+ * Rule 13: the minimum set of the day — active daily habits marked «в минимуме» (none marked — all of them); with
+ * programs — also the programs «в минимуме» («Кор» in its minimal version).
+ */
+export function minimumOn<H extends HabitLike>(habits: readonly H[], plans: readonly PlanLike[], date: ISODate, withPrograms = false): H[] {
   const daily = activeOn(habits, plans, date)
   const set = daily.filter((h) => h.in_minimum)
-  return set.length ? set : daily
+  const programs = withPrograms ? activeOn(habits, plans, date, 'program').filter((h) => h.in_minimum) : []
+  return [...(set.length ? set : daily), ...programs]
+}
+
+/** ISO weekday: 1 = Пн … 7 = Вс. */
+export const isoWeekday = (date: ISODate) => ((parseISODate(date).getDay() + 6) % 7) + 1
+
+/**
+ * Due on the day by its frequency: daily — always; weekdays — on those days; every other day — on even days from
+ * starts_on (back in time too); N a week — until N marks this week (`weekDone`, the day itself not counted) or when
+ * marked that day.
+ */
+export function isDueOn(h: Partial<FreqLike>, date: ISODate, weekDone = 0, doneToday = false): boolean {
+  switch (h.freq ?? 'daily') {
+    case 'weekdays':
+      return (h.freq_weekdays ?? []).includes(isoWeekday(date))
+    case 'every_other_day':
+      return h.starts_on ? ((daysBetween(h.starts_on, date) % 2) + 2) % 2 === 0 : true
+    case 'per_week':
+      return doneToday || weekDone < (h.freq_per_week ?? 7)
+    default:
+      return true
+  }
+}
+
+/** Marks of a habit this week before the day (for «N раз в неделю»). */
+export function weekDoneBefore(marks: readonly MarkLike[], habitId: string, date: ISODate): number {
+  const monday = weekStart(date)
+  return new Set(marks.filter((m) => m.done && m.habit_id === habitId && m.date >= monday && m.date < date).map((m) => m.date)).size
+}
+
+/** What the screen shows on the day: active by the plan AND due by the frequency (`marks` should hold the week). */
+export function dueOn<H extends HabitLike>(habits: readonly H[], plans: readonly PlanLike[], date: ISODate, kind: HabitKind, marks: readonly MarkLike[]): H[] {
+  const today = dayMarks(marks, date, false)
+  return activeOn(habits, plans, date, kind).filter((h) => isDueOn(h, date, weekDoneBefore(marks, h.id, date), today.done.has(h.id)))
 }
 
 /** Habits shown for the day: in «минимум» only the minimum set, otherwise all active daily habits. */
@@ -55,10 +96,14 @@ export function visibleOn<H extends HabitLike>(habits: readonly H[], plans: read
   return minimumMode ? minimumOn(habits, plans, date) : activeOn(habits, plans, date)
 }
 
-/** What counts on a day: daily habits (and programs, for the calendar) with the minimum set. */
-export function daySet(habits: readonly HabitLike[], plans: readonly PlanLike[], date: ISODate, withPrograms = false): DaySet {
-  const active = [...activeOn(habits, plans, date), ...(withPrograms ? activeOn(habits, plans, date, 'program') : [])]
-  return { active: active.map((h) => h.id), minimum: minimumOn(habits, plans, date).map((h) => h.id) }
+/**
+ * What counts on a day: daily habits due by their frequency (and programs, for the calendar) with the minimum set.
+ * A habit «N раз в неделю» counts only on a day it is marked — it is never a miss.
+ */
+export function daySet(habits: readonly HabitLike[], plans: readonly PlanLike[], date: ISODate, withPrograms = false, marked?: ReadonlySet<string>): DaySet {
+  const due = (h: HabitLike) => (h.freq === 'per_week' ? Boolean(marked?.has(h.id)) : isDueOn(h, date))
+  const active = [...activeOn(habits, plans, date), ...(withPrograms ? activeOn(habits, plans, date, 'program') : [])].filter(due)
+  return { active: active.map((h) => h.id), minimum: minimumOn(habits, plans, date, withPrograms).filter(due).map((h) => h.id) }
 }
 
 /** Marks of one day as a set (a later «done = false» unmarks); `extra` — more done ids (finished program sessions). */

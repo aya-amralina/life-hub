@@ -9,7 +9,7 @@ export type CoreSession = Tables<'core_sessions'>
 export type CoreTest = Tables<'core_tests'>
 
 /** The session screen of «Кор» (Тело → Кор). */
-export const CORE_PATH = '/body/core'
+export const CORE_PATH = '/body/training/core'
 
 export const coreKeys = {
   program: ['core_programs'] as const,
@@ -53,7 +53,7 @@ export function useCoreTests() {
   })
 }
 
-type SessionPatch = Partial<Pick<CoreSession, 'done' | 'dome' | 'done_at'>>
+type SessionPatch = Partial<Pick<CoreSession, 'done' | 'dome' | 'done_at' | 'minimal'>>
 
 /**
  * The session of a day: upsert by (program, date) with only the changed fields, through the offline queue.
@@ -80,7 +80,7 @@ export function useSaveCoreSession(program: Pick<CoreProgram, 'id' | 'stage'>, d
       qc.setQueryData<CoreSession[]>(coreKeys.sessions, (old = []) => {
         const i = old.findIndex((s) => s.program_id === program.id && s.date === date)
         if (i >= 0) return old.map((s, j) => (j === i ? { ...s, ...patch } : s))
-        const row = { id: `local-${date}`, program_id: program.id, date, stage: program.stage, done: [], dome: null, done_at: null, ...patch }
+        const row = { id: `local-${date}`, program_id: program.id, date, stage: program.stage, done: [], dome: null, done_at: null, minimal: false, ...patch }
         return [...old, row as CoreSession].sort((a, b) => a.date.localeCompare(b.date))
       })
       return { prev }

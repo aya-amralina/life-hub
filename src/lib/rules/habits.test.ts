@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   activeOn,
+  dueOn,
+  isDueOn,
+  isoWeekday,
+  weekDoneBefore,
   dayMarks,
   daySet,
   habitsDone,
@@ -107,5 +111,45 @@ describe('only done = true counts — everywhere a mark is read', () => {
     expect(habitsDone(dayMarks(off, '2026-11-19', true), set.active, set.minimum)).toBe(0)
     expect(minimumDone(dayMarks(off, '2026-11-19', true), set.minimum)).toBe(false)
     expect(weekHabitShare((d) => dayMarks(off, d, false), (d) => daySet(habits, plans, d), '2026-11-16', '2026-11-19')).toBe(0)
+  })
+})
+
+describe('frequency (applied since step 3)', () => {
+  it('daily, weekdays, every other day from starts_on (back in time too), N a week', () => {
+    expect(isDueOn({ freq: 'daily' }, '2026-11-19')).toBe(true)
+    expect(isDueOn({}, '2026-11-19')).toBe(true)
+    expect(isDueOn({ freq: 'weekdays', freq_weekdays: [1, 4] }, '2026-11-19')).toBe(true) // Thu
+    expect(isDueOn({ freq: 'weekdays', freq_weekdays: [1, 4] }, '2026-11-20')).toBe(false)
+    const eod = { freq: 'every_other_day', starts_on: '2026-11-23' }
+    expect([isDueOn(eod, '2026-11-23'), isDueOn(eod, '2026-11-24'), isDueOn(eod, '2026-11-25'), isDueOn(eod, '2026-11-21'), isDueOn(eod, '2026-11-20')]).toEqual([true, false, true, true, false])
+    const weekly = { freq: 'per_week', freq_per_week: 1 }
+    expect(isDueOn(weekly, '2027-01-05', 0)).toBe(true)
+    expect(isDueOn(weekly, '2027-01-06', 1)).toBe(false)
+    expect(isDueOn(weekly, '2027-01-06', 1, true)).toBe(true)
+    expect(isoWeekday('2026-11-22')).toBe(7)
+  })
+  it('the screen shows what is due; the week counts marks before the day', () => {
+    const stick = habit('stick', { kind: 'care', freq: 'per_week', freq_per_week: 1, starts_on: '2027-01-01' })
+    const p = [{ habit_id: 'stick', from_date: '2027-01-01', to_date: null }]
+    const done = [mark('stick', '2027-01-04')] // Mon
+    expect(weekDoneBefore(done, 'stick', '2027-01-06')).toBe(1)
+    expect(dueOn([stick], p, '2027-01-04', 'care', done).map((h) => h.id)).toEqual(['stick']) // marked that day
+    expect(dueOn([stick], p, '2027-01-06', 'care', done)).toEqual([])
+    expect(dueOn([stick], p, '2027-01-11', 'care', done).map((h) => h.id)).toEqual(['stick']) // a new week
+    expect(dueOn([stick], p, '2026-12-30', 'care', [])).toEqual([]) // before its period
+  })
+  it('counts: a habit not due is not a miss; «N a week» counts only on a marked day', () => {
+    const eod = habit('eod', { freq: 'every_other_day', starts_on: '2026-11-19', sort_order: 40 })
+    const weekly = habit('weekly', { freq: 'per_week', freq_per_week: 2, sort_order: 50 })
+    const p = [...plans, { habit_id: 'eod', from_date: null, to_date: null }, { habit_id: 'weekly', from_date: null, to_date: null }]
+    const all = [...habits, eod, weekly]
+    expect(daySet(all, p, '2026-11-19').active).toEqual(['outside', 'water', 'eod'])
+    expect(daySet(all, p, '2026-11-20').active).toEqual(['outside', 'water'])
+    expect(daySet(all, p, '2026-11-20', false, new Set(['weekly'])).active).toEqual(['outside', 'water', 'weekly'])
+  })
+  it('the minimum with programs: «Кор» in the minimum', () => {
+    const coreMin = { ...core, in_minimum: true }
+    expect(minimumOn([outside, water, coreMin], plans, '2026-11-19', true).map((h) => h.id)).toEqual(['water', 'core'])
+    expect(minimumOn([outside, water, coreMin], plans, '2026-11-19').map((h) => h.id)).toEqual(['water'])
   })
 })

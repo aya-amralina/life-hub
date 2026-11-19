@@ -88,6 +88,7 @@ function emptyLog(date: ISODate): Partial<DailyLog> {
     body_cream: false,
     care: [],
     minimum_mode: false,
+    intake_skipped: false,
     face_evening: null,
     energy: null,
     slump: null,

@@ -60,7 +60,7 @@ function WellbeingCard() {
           { key: 'energy', name: 'Энергия', color: 'body', dash: true },
         ]}
         bars={[{ key: 'sleep', name: 'Сон', color: 'body', axis: 'right', unit: ' ч' }]}
-        yLeft={{ domain: [1, 10], ticks: [1, 5, 10] }}
+        yLeft={{ domain: [1, 5], ticks: [1, 3, 5] }}
         yRight={{ domain: [0, 12], ticks: [0, 6, 12], unit: ' ч' }}
         bands={bands}
         todayKey={period === 'day' ? today : undefined}
@@ -148,10 +148,11 @@ function HabitsGridCard() {
   const programs = all.filter((h) => h.kind === 'program')
   const sessionDone = sessionDays(sessions.data ?? [])
   const minimumOf = new Map((logs.data ?? []).map((l) => [l.date, l.minimum_mode]))
+  // a program is marked by its finished session (one program today — «Кор»)
+  const dayOf = (d: string) => dayMarks(marks.data ?? [], d, minimumOf.get(d) ?? false, sessionDone.has(d) ? programs.map((p) => p.id) : [])
   const cells = habitCalendar(
-    // a program is marked by its finished session (one program today — «Кор»)
-    (d) => dayMarks(marks.data ?? [], d, minimumOf.get(d) ?? false, sessionDone.has(d) ? programs.map((p) => p.id) : []),
-    (d) => daySet(all, plans, d, true),
+    dayOf,
+    (d) => daySet(all, plans, d, true, dayOf(d).done),
     today,
     (id) => programs.find((p) => p.id === id)?.phrase ?? '',
   )
@@ -172,7 +173,7 @@ function HabitsGridCard() {
         mix={mix}
         rowLabels={['Пн', '', 'Ср', '', 'Пт', '', 'Вс']}
         hint="Нажми на день — покажу, что отмечено"
-        legend={Array.from({ length: top + 1 }, (_, i) => ({ level: i, text: i === top ? `${i} из ${top}` : String(i) }))}
+        legend={[...Array.from({ length: top + 1 }, (_, i) => ({ level: i, text: i === top ? `${i} из ${top}` : String(i) })), { level: 0, text: 'тяжёлый день', minimum: true }]}
       />
     </ChartCard>
   )

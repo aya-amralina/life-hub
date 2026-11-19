@@ -74,12 +74,17 @@ test('карточка пункта: дедлайн → «С даты» убир
   await expect(page.getByRole('checkbox', { name: title })).toBeHidden()
 })
 
-test('режим «минимум»: видны только привычки набора, текст их называет', async ({ page }) => {
+test('«Тяжёлый день»: видны только привычки минимума и «Кор» в минимальной версии', async ({ page }) => {
   test.skip(!live, NEEDS)
   await login(page)
   await tab(page, 'Тело')
-  await page.getByRole('switch', { name: 'Режим минимум' }).click()
-  await expect(page.getByText('Сегодня — минимум')).toBeVisible()
+  await page.getByRole('button', { name: 'Тяжёлый день' }).click()
+  await expect(page.getByText('Тяжёлый день — только главное.')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Кор · минимум' })).toBeVisible()
+  await expect(page.getByText('Дыхание 360° — 10 вдохов')).toBeVisible()
+  await page.getByRole('button', { name: 'Сделала' }).click()
+  await expect(page.getByRole('button', { name: /Кор минимум засчитан/ })).toBeVisible()
+  await expect(page.getByText(/^\+ Движение$/)).toBeHidden()
   await tab(page, 'Сегодня')
   await expect(page.getByText('Минимум: 10 минут на улице и вода. Остальное подождёт.')).toBeVisible()
   await expect(page.getByRole('checkbox', { name: /Утренний старт/ })).toBeHidden()

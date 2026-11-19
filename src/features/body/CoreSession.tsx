@@ -105,7 +105,7 @@ export function CoreSession() {
                 // the toast waits for the answer: «засчитан» only when the server has it (or it honestly waits for the network);
                 // a rejection rolls the mark back and says so (useSaveCoreSession)
                 save
-                  .mutateAsync({ done_at: new Date().toISOString() })
+                  .mutateAsync({ done_at: new Date().toISOString(), minimal: false })
                   .then((r) =>
                     toast({
                       text: r === 'queued' ? 'Кор засчитан на телефоне — отправится, когда будет сеть' : 'Кор засчитан',

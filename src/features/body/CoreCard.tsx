@@ -8,7 +8,8 @@ import { SkeletonCard } from '@/components/ui/Feedback'
 import type { ISODate } from '@/lib/dates'
 import { coreLine, isSessionDone, isTestDay, nextStage, snoozePatch, switchPatch, weekDaysActive, weekSessions, type NextStage } from '@/lib/rules/core'
 import { useDailyLog } from './api'
-import { CORE_PATH, useCoreProgram, useCoreSessions, useCoreTests, useUpdateCoreProgram, type CoreProgram } from './coreApi'
+import { CORE_PATH, useCoreProgram, useCoreSessions, useCoreTests, useSaveCoreSession, useUpdateCoreProgram, type CoreProgram } from './coreApi'
+import { useHabits } from './habitsApi'
 import { CoreTestSheet } from './CoreTestSheet'
 
 const linkButton = 'inline-flex h-12 flex-none items-center justify-center rounded-xl border border-line2 bg-card px-4 text-base font-semibold text-ink no-underline active:scale-[.98] active:bg-sub'
@@ -22,12 +23,20 @@ export function CoreCard({ today }: { today: ISODate }) {
   const sessions = useCoreSessions()
   const tests = useCoreTests()
   const log = useDailyLog(today)
+  const habits = useHabits()
   const [testing, setTesting] = useState(false)
-  if (program.isPending || sessions.isPending) return <SkeletonCard />
+  const save = useSaveCoreSession({ id: program.data?.id ?? '', stage: program.data?.stage ?? 1 }, today)
+  if (program.isPending || sessions.isPending || habits.isPending) return <SkeletonCard />
   const p = program.data
-  // «минимум»: only the minimum set; «Кор» stays one tap deeper (Тело → Кор)
-  if (!p || today < p.start_date || log.data?.minimum_mode) return null
+  if (!p || today < p.start_date) return null
   const all = sessions.data ?? []
+  // «Тяжёлый день»: the minimal version of the habit («Дыхание 360° — 10 вдохов»), a session marked minimal
+  const habit = habits.data?.habits.find((h) => h.kind === 'program' && h.program_id === p.id)
+  if (log.data?.minimum_mode) {
+    if (!habit?.in_minimum) return null
+    const session = all.find((s) => s.program_id === p.id && s.date === today)
+    return <CoreMinimal note={habit.minimum_note} done={isSessionDone(session)} full={isSessionDone(session) && !session?.minimal} onDone={() => save.mutate({ done_at: new Date().toISOString(), minimal: true })} onUndo={() => save.mutate({ done_at: null, minimal: false })} />
+  }
   const done = isSessionDone(all.find((s) => s.program_id === p.id && s.date === today))
   const next = nextStage(p, all, today)
   const testDue = isTestDay(p, today) && !(tests.data ?? []).some((t) => t.date === today)
@@ -68,6 +77,33 @@ export function CoreCard({ today }: { today: ISODate }) {
         </div>
       )}
       <CoreTestSheet open={testing} onClose={() => setTesting(false)} programId={p.id} date={today} />
+    </Card>
+  )
+}
+
+/** «Кор» on a «Тяжёлый день»: only the minimal version, one tap. A full session of the day stays full. */
+function CoreMinimal({ note, done, full, onDone, onUndo }: { note: string | null; done: boolean; full: boolean; onDone: () => void; onUndo: () => void }) {
+  return (
+    <Card>
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="size-2 flex-none rounded-full bg-body" />
+            <h2 className={cn('m-0 text-base font-semibold', done && 'text-ink3')}>Кор · минимум</h2>
+          </div>
+          <div className={cn('text-cap', done ? 'text-ink3' : 'text-ink2')}>{note ?? 'Сколько получится'}</div>
+        </div>
+        {done ? (
+          <button type="button" onClick={full ? undefined : onUndo} disabled={full} className={cn(linkButton, 'gap-2 border-transparent bg-transparent font-normal text-ink2')} aria-label={full ? 'Кор засчитан' : 'Кор минимум засчитан — отменить'}>
+            <CircleCheck size={20} strokeWidth={1.75} aria-hidden="true" className="text-body" />
+            Засчитано
+          </button>
+        ) : (
+          <Button variant="secondary" onClick={onDone}>
+            Сделала
+          </Button>
+        )}
+      </div>
     </Card>
   )
 }

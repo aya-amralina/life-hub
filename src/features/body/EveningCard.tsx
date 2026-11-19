@@ -11,7 +11,8 @@ import { plural } from '@/lib/format'
 import { EVENING_FROM, eveningAnswered, isEvening } from '@/lib/rules/day'
 import { useDailyLog, useSaveDailyLog } from './api'
 
-const ONE_TO_TEN = Array.from({ length: 10 }, (_, i) => ({ value: i + 1 }))
+/** Energy and mood: one row 1–5 (since step 3; older answers were halved by migration 0022). */
+const ONE_TO_FIVE = Array.from({ length: 5 }, (_, i) => ({ value: i + 1 }))
 
 const MAX_CUPS = 20
 const cupsWord = (n: number) => plural(n, ['чашка', 'чашки', 'чашек'])
@@ -52,31 +53,35 @@ export function EveningCard({ date, foldable = false, context }: { date: ISODate
         <CardHeader title="Вечер" icon={MOON} context={context ?? (answered > 0 && answered < total ? `${answered} из ${total}` : undefined)} />
       )}
       <div className="flex flex-col gap-6">
-        <Scale
-          label="Энергия"
-          options={ONE_TO_TEN}
-          value={log.data?.energy ?? null}
-          onChange={(v) => save.mutate({ energy: v })}
-          hintLow="1 — без сил"
-          hintHigh="10 — полон сил"
-        />
-        <Scale
-          label="Настроение"
-          options={ONE_TO_TEN}
-          value={log.data?.mood ?? null}
-          onChange={(v) => save.mutate({ mood: v })}
-          disabled={early}
-          disabledHint={`откроется после ${EVENING_FROM}:00`}
-        />
-        <YesNo label="Провал после обеда" value={log.data?.slump ?? null} onChange={(v) => save.mutate({ slump: v })} clearable />
+        <CheckIn date={date} disabledMood={early} />
         <CoffeeField cups={log.data?.coffee_cups ?? 0} onChange={(v) => save.mutate({ coffee_cups: v })} />
       </div>
     </Card>
   )
 }
 
+/** The evening check-in: energy and mood (a row 1–5), the slump [Нет | Да]. `disabledMood` — before 18:00 on «Сегодня». */
+export function CheckIn({ date, disabledMood = false }: { date: ISODate; disabledMood?: boolean }) {
+  const log = useDailyLog(date)
+  const save = useSaveDailyLog(date)
+  return (
+    <>
+      <Scale label="Энергия" options={ONE_TO_FIVE} value={log.data?.energy ?? null} onChange={(v) => save.mutate({ energy: v })} />
+      <Scale
+        label="Настроение"
+        options={ONE_TO_FIVE}
+        value={log.data?.mood ?? null}
+        onChange={(v) => save.mutate({ mood: v })}
+        disabled={disabledMood}
+        disabledHint={`откроется после ${EVENING_FROM}:00`}
+      />
+      <YesNo label="Провал после обеда" value={log.data?.slump ?? null} onChange={(v) => save.mutate({ slump: v })} clearable />
+    </>
+  )
+}
+
 /** «Кофе»: [Нет | Да], «Нет» by default (no mark = 0 cups); «Да» opens a cups counter from 1, up to 20. */
-function CoffeeField({ cups, onChange }: { cups: number; onChange: (v: number) => void }) {
+export function CoffeeField({ cups, onChange }: { cups: number; onChange: (v: number) => void }) {
   const drank = cups > 0
   return (
     <div className="flex flex-col gap-2">
