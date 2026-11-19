@@ -76,7 +76,6 @@ function WellbeingCard() {
         <Chip selected={withIntake} onClick={() => setWithIntake(!withIntake)} className="flex-none">
           Показать приём
         </Chip>
-        <span className="text-cap text-ink2">Шкала 1–10. Разрыв — день без отметки, не ноль.</span>
       </div>
       {withIntake && !bands.length && <p className="m-0 text-cap text-ink2">В этом периоде приёма нет.</p>}
     </ChartCard>

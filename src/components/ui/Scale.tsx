@@ -3,7 +3,7 @@ import { cn } from './cn'
 export type ScaleOption<T extends string | number> = { value: T; label?: string }
 
 /**
- * Row of keys (≥ 44px), two rows of five for 1–10. One tap = one answer; tapping the selected
+ * Row of keys (≥ 44px): one row of five for 1–5 (energy, mood). One tap = one answer; tapping the selected
  * key again clears it. Disabled state shows a hint instead of the value (e.g. «откроется после 18:00»).
  */
 export function Scale<T extends string | number>({
