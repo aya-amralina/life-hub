@@ -34,11 +34,13 @@ export type Item = Pick<
   | 'done_at'
   | 'sort_order'
   | 'updated_at'
+  | 'series_id'
+  | 'step'
 >
 
 // List fields only: long texts (notes, links) are loaded on the item card. `outcome` is one line («что это дало»).
 const LIST_FIELDS =
-  'id, sphere, title, type, status, priority, area, due_date, due_time, ready_by, starts_on, happens_on, happens_time, is_fixed, rollover_count, week_id, hours_est, waiting_on, people, synergy, trap, data_status, next_step, outcome, source_id, done_at, sort_order, updated_at'
+  'id, sphere, title, type, status, priority, area, due_date, due_time, ready_by, starts_on, happens_on, happens_time, is_fixed, rollover_count, week_id, hours_est, waiting_on, people, synergy, trap, data_status, next_step, outcome, source_id, done_at, sort_order, updated_at, series_id, step'
 
 export type FullItem = Tables<'items'>
 

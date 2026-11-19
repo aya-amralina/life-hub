@@ -735,6 +735,7 @@ export type Database = {
       }
       intake: {
         Row: {
+          course_until: string | null
           created_at: string
           dose: string | null
           end_date: string | null
@@ -745,10 +746,12 @@ export type Database = {
           schedule: string | null
           source_id: string | null
           start_date: string
+          time_of_day: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          course_until?: string | null
           created_at?: string
           dose?: string | null
           end_date?: string | null
@@ -759,10 +762,12 @@ export type Database = {
           schedule?: string | null
           source_id?: string | null
           start_date: string
+          time_of_day?: string | null
           updated_at?: string
           user_id?: string
         }
         Update: {
+          course_until?: string | null
           created_at?: string
           dose?: string | null
           end_date?: string | null
@@ -773,6 +778,49 @@ export type Database = {
           schedule?: string | null
           source_id?: string | null
           start_date?: string
+          time_of_day?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      item_series: {
+        Row: {
+          archived_at: string | null
+          cadence: string | null
+          created_at: string
+          id: string
+          kind: string
+          sort_order: number
+          source_id: string | null
+          sphere: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archived_at?: string | null
+          cadence?: string | null
+          created_at?: string
+          id?: string
+          kind: string
+          sort_order?: number
+          source_id?: string | null
+          sphere?: string
+          title: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          archived_at?: string | null
+          cadence?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          sort_order?: number
+          source_id?: string | null
+          sphere?: string
+          title?: string
           updated_at?: string
           user_id?: string
         }
@@ -800,11 +848,13 @@ export type Database = {
           priority: string | null
           ready_by: string | null
           rollover_count: number
+          series_id: string | null
           sort_order: number
           source_id: string | null
           sphere: string
           starts_on: string | null
           status: string | null
+          step: string | null
           synergy: string | null
           title: string
           trap: string | null
@@ -835,11 +885,13 @@ export type Database = {
           priority?: string | null
           ready_by?: string | null
           rollover_count?: number
+          series_id?: string | null
           sort_order?: number
           source_id?: string | null
           sphere: string
           starts_on?: string | null
           status?: string | null
+          step?: string | null
           synergy?: string | null
           title: string
           trap?: string | null
@@ -870,11 +922,13 @@ export type Database = {
           priority?: string | null
           ready_by?: string | null
           rollover_count?: number
+          series_id?: string | null
           sort_order?: number
           source_id?: string | null
           sphere?: string
           starts_on?: string | null
           status?: string | null
+          step?: string | null
           synergy?: string | null
           title?: string
           trap?: string | null
@@ -885,6 +939,13 @@ export type Database = {
           week_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "items_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "item_series"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "items_week_id_fkey"
             columns: ["week_id"]

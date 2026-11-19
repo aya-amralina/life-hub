@@ -13,6 +13,7 @@ import { BLOCK_TITLE, blockFolded, blockOf, strengthCard, templateTitle, type Bl
 import { careChoice, careEntries, careToggle, isCareDone, type CareEntry } from '@/lib/rules/care'
 import { isEvening, lastBefore } from '@/lib/rules/day'
 import { dayMarks, dueOn, minimumOn, type DayMarks } from '@/lib/rules/habits'
+import { courseEnding } from '@/lib/rules/health'
 import { isIntakeActive } from '@/lib/rules/intake'
 import { strengthDates } from '@/lib/rules/workouts'
 import { happenedQuestions } from '@/lib/rules/items'
@@ -234,7 +235,15 @@ function CareRows({ entry, day, onMark }: { entry: CareEntry; day: DayMarks; onM
 function IntakeRow({ date, skipped, onChange }: { date: ISODate; skipped: boolean; onChange: (v: boolean) => void }) {
   const intake = useIntake()
   if (!(intake.data ?? []).some((i) => isIntakeActive(i, date))) return null
+  const ending = courseEnding(intake.data ?? [], date)
   return (
+    <>
+    {ending.map((i) => (
+      <Link key={i.id} to="/body/health/intake" className="flex min-h-11 items-center gap-3 rounded-xl bg-amber-soft px-3 text-base text-amber-ink no-underline">
+        <Pill size={20} strokeWidth={1.75} aria-hidden="true" className="flex-none" />
+        <span className="min-w-0 flex-1">{`Курс ${i.name} — до ${formatDayMonth(i.course_until!)}`}</span>
+      </Link>
+    ))}
     <div className="flex min-h-11 items-center gap-3 text-base">
       <Pill size={22} strokeWidth={1.75} aria-hidden="true" className="flex-none text-ink3" />
       <span className={cn('min-w-0 flex-1', skipped ? 'text-ink' : 'text-ink3')}>{skipped ? 'Приём пропущен.' : 'Приём отмечен.'}</span>
@@ -242,6 +251,7 @@ function IntakeRow({ date, skipped, onChange }: { date: ISODate; skipped: boolea
         {skipped ? 'Вернуть' : 'Пропустила'}
       </button>
     </div>
+    </>
   )
 }
 

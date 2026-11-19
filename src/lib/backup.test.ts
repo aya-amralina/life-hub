@@ -19,18 +19,19 @@ describe('backup', () => {
     expect(parseBackup(JSON.stringify(backup)).ok).toBe(true)
     expect(parseBackup('nope')).toEqual({ ok: false, reason: 'Это не JSON-файл.' })
     expect(parseBackup('{"format":"x"}')).toEqual({ ok: false, reason: 'Это не экспорт Life Hub.' })
-    expect(parseBackup(JSON.stringify({ ...backup, version: 7 }))).toEqual({ ok: false, reason: 'Версия файла 7 — читаются версии 1–6.' })
+    expect(parseBackup(JSON.stringify({ ...backup, version: 8 }))).toEqual({ ok: false, reason: 'Версия файла 8 — читаются версии 1–7.' })
     expect(parseBackup(JSON.stringify({ ...backup, tables: { secrets: [] } }))).toEqual({ ok: false, reason: 'Неизвестная таблица «secrets».' })
     expect(parseBackup(JSON.stringify({ ...backup, tables: { items: [{ title: 'no id' }] } })).ok).toBe(false)
   })
   it('v5 carries habits and workouts; a v4 file is read without them; marks restore before days, by their natural key', () => {
-    expect(BACKUP_VERSION).toBe(6)
+    expect(BACKUP_VERSION).toBe(7)
+    expect(parseBackup(JSON.stringify({ ...backup, version: 6, tables: { item_series: [{ id: 's1' }] } }))).toEqual({ ok: false, reason: 'Неизвестная таблица «item_series».' })
     expect(parseBackup(JSON.stringify({ ...backup, version: 5, tables: { workout_sessions: [{ id: 'w1' }] } }))).toEqual({ ok: false, reason: 'Неизвестная таблица «workout_sessions».' })
     const v4 = { ...backup, version: 4 }
     expect(parseBackup(JSON.stringify({ ...v4, tables: { habit_marks: [{ id: 'm1' }] } }))).toEqual({ ok: false, reason: 'Неизвестная таблица «habit_marks».' })
     expect(parseBackup(JSON.stringify({ ...backup, version: 5, tables: { habits: [{ id: 'h1' }], workout_queue: [{ id: 'q1' }] } })).ok).toBe(true)
     const order = BACKUP_TABLES as readonly string[]
-    for (const [parent, child] of [['core_programs', 'habits'], ['habits', 'habit_plan'], ['habits', 'habit_marks'], ['habit_marks', 'daily_logs'], ['workout_templates', 'workout_queue'], ['workout_sessions', 'strength_sets'], ['activities', 'workout_sessions']]) {
+    for (const [parent, child] of [['core_programs', 'habits'], ['habits', 'habit_plan'], ['habits', 'habit_marks'], ['habit_marks', 'daily_logs'], ['workout_templates', 'workout_queue'], ['workout_sessions', 'strength_sets'], ['activities', 'workout_sessions'], ['item_series', 'items']]) {
       expect(order.indexOf(parent!)).toBeLessThan(order.indexOf(child!))
     }
     expect(RESTORE_CONFLICT).toEqual({ daily_logs: 'user_id,date', habit_marks: 'user_id,habit_id,date' })

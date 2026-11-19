@@ -42,6 +42,7 @@ const TABLES = [
   'workout_templates',
   'workout_queue',
   'workout_sessions',
+  'item_series',
 ] as const
 
 async function adminFindUserId(email: string): Promise<string | undefined> {

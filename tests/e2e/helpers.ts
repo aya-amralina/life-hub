@@ -71,6 +71,7 @@ const TABLES = [
   'recurring',
   'debts',
   'items',
+  'item_series',
   'daily_logs',
   'strength_sets',
   'workout_sessions',

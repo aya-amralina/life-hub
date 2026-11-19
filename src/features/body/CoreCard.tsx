@@ -10,6 +10,9 @@ import { coreLine, isSessionDone, isTestDay, nextStage, snoozePatch, switchPatch
 import { useDailyLog } from './api'
 import { CORE_PATH, useCoreProgram, useCoreSessions, useCoreTests, useSaveCoreSession, useUpdateCoreProgram, type CoreProgram } from './coreApi'
 import { useHabits } from './habitsApi'
+import { useItemSeries } from './healthApi'
+import { useItems } from '@/features/items/api'
+import { seriesItemOn } from '@/lib/rules/health'
 import { CoreTestSheet } from './CoreTestSheet'
 
 const linkButton = 'inline-flex h-12 flex-none items-center justify-center rounded-xl border border-line2 bg-card px-4 text-base font-semibold text-ink no-underline active:scale-[.98] active:bg-sub'
@@ -24,6 +27,8 @@ export function CoreCard({ today }: { today: ISODate }) {
   const tests = useCoreTests()
   const log = useDailyLog(today)
   const habits = useHabits()
+  const items = useItems()
+  const series = useItemSeries()
   const [testing, setTesting] = useState(false)
   const save = useSaveCoreSession({ id: program.data?.id ?? '', stage: program.data?.stage ?? 1 }, today)
   if (program.isPending || sessions.isPending || habits.isPending) return <SkeletonCard />
@@ -39,7 +44,9 @@ export function CoreCard({ today }: { today: ISODate }) {
   }
   const done = isSessionDone(all.find((s) => s.program_id === p.id && s.date === today))
   const next = nextStage(p, all, today)
-  const testDue = isTestDay(p, today) && !(tests.data ?? []).some((t) => t.date === today)
+  // on a «Замеры» day the test is part of the measurement form — no reminder of its own
+  const measureDay = Boolean(seriesItemOn(series.data ?? [], (items.data ?? []).filter((i) => i.sphere === 'body'), 'Замеры', today))
+  const testDue = isTestDay(p, today) && !measureDay && !(tests.data ?? []).some((t) => t.date === today)
 
   return (
     <Card>

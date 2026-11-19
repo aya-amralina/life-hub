@@ -1,23 +1,18 @@
 import { useState } from 'react'
-import { CalendarClock, Settings } from 'lucide-react'
+import { Settings } from 'lucide-react'
 import { Link, Navigate, useParams } from 'react-router'
 import { useAddAction, useOpenAdd } from '@/app/addSheetContext'
 import { Card, CardHeader } from '@/components/ui/Card'
-import { EmptyState, SkeletonCard } from '@/components/ui/Feedback'
-import { GroupHeader } from '@/components/ui/GroupHeader'
+import { EmptyState } from '@/components/ui/Feedback'
 import { CalendarLink } from '@/components/layout/CalendarLink'
 import { RouteTabs, type RouteTab } from '@/components/layout/RouteTabs'
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
-import { addDaysISO, formatDayMonth, formatLongDate, formatWeekdayDate, todayBerlin, weekStart, weekdayShort, type ISODate } from '@/lib/dates'
+import { addDaysISO, formatDayMonth, formatLongDate, todayBerlin, weekStart, weekdayShort, type ISODate } from '@/lib/dates'
 import { strengthWeek, weekLine } from '@/lib/rules/bodyDay'
 import { weekDaysActive, weekSessions } from '@/lib/rules/core'
 import { strengthDates } from '@/lib/rules/workouts'
 import { activeOn, dayMarks, daySet, minimumOn, minimumPhrase, stageForDate, weekHabitShare } from '@/lib/rules/habits'
-import { isItemOpen, isUpcoming } from '@/lib/rules/items'
 import { NotesSection } from '@/features/notes/NotesCard'
-import { useItems, useUpdateItem } from '@/features/items/api'
-import { donePatch, reopenPatch } from '@/features/items/donePatch'
-import { ItemRow } from '@/features/items/ItemRow'
 import { StagesSettings } from '@/features/settings/StagesSettings'
 import { ActivitySheet } from './ActivitySheet'
 import { BodyCharts } from './BodyCharts'
@@ -27,6 +22,7 @@ import { useCoreProgram, useCoreSessions } from './coreApi'
 import { CoreSession } from './CoreSession'
 import { useStages, useWeekLogs } from './api'
 import { useHabits, useMarks, useWorkoutSessions, useWorkouts } from './habitsApi'
+import { HealthTasks } from './HealthTasks'
 import { IntakeTab } from './IntakeTab'
 import { MeasurementsTab } from './MeasurementsTab'
 import { StrengthTab } from './StrengthTab'
@@ -100,7 +96,7 @@ export function BodyScreen() {
           <div className="flex justify-end">
             <CalendarLink sphere="body" />
           </div>
-          <BodyTasks />
+          <HealthTasks />
         </>
       )}
       {path === 'health/measure' && <MeasurementsTab />}
@@ -173,51 +169,6 @@ function WeekShare({ date }: { date: ISODate }) {
         <span className="text-big font-semibold">{Math.round(share * 100)} %</span>
         <span className="text-base text-ink2">отмечено</span>
       </div>
-    </Card>
-  )
-}
-
-/** Задачи и визиты: body items with deadline kinds; «Скоро» folded. */
-function BodyTasks() {
-  const today = todayBerlin()
-  const items = useItems()
-  const update = useUpdateItem()
-  const [soonOpen, setSoonOpen] = useState(false)
-  const openAdd = useOpenAdd()
-  useAddAction(() => openAdd('body'))
-  if (items.isPending) return <SkeletonCard />
-  const body = (items.data ?? []).filter((i) => i.sphere === 'body' && isItemOpen(i))
-  const now = body.filter((i) => !isUpcoming(i, today))
-  const soon = body.filter((i) => isUpcoming(i, today))
-  if (!body.length) return <EmptyState title="Открытых задач нет">Визит к врачу или покупка к сроку — через «+».</EmptyState>
-  return (
-    <Card>
-      <CardHeader title="Задачи и визиты" dotClass="bg-body" context={`${now.length}`} />
-      <div className="flex flex-col gap-2">
-        {now.map((i) => (
-          <ItemRow
-            key={i.id}
-            item={i}
-            today={today}
-            showSphere={false}
-            meta={i.type ?? undefined}
-            onToggle={() => update.mutate({ id: i.id, patch: i.done_at ? reopenPatch(null, 'body') : donePatch('body') })}
-          />
-        ))}
-      </div>
-      {soon.length > 0 && (
-        <>
-          <GroupHeader
-            mark={<CalendarClock size={16} strokeWidth={1.75} aria-hidden="true" className="text-ink2" />}
-            title="Скоро"
-            count={soon.length}
-            summary={`ближайшее ${formatWeekdayDate(soon.map((i) => i.starts_on!).sort()[0]!)}`}
-            open={soonOpen}
-            onToggle={() => setSoonOpen(!soonOpen)}
-          />
-          {soonOpen && soon.map((i) => <ItemRow key={i.id} item={i} today={today} showSphere={false} onToggle={() => update.mutate({ id: i.id, patch: donePatch('body') })} />)}
-        </>
-      )}
     </Card>
   )
 }
