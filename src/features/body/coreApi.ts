@@ -63,6 +63,9 @@ export function useSaveCoreSession(program: Pick<CoreProgram, 'id' | 'stage'>, d
   const qc = useQueryClient()
   return useMutation({
     networkMode: 'always',
+    // ticks of one session go out one by one (each sends the whole `done` list — the last one must win)
+    scope: { id: `core_sessions:${date}` },
+    mutationKey: ['core_sessions', 'save', date],
     mutationFn: async (patch: SessionPatch) => {
       await write({
         table: 'core_sessions',
@@ -83,7 +86,7 @@ export function useSaveCoreSession(program: Pick<CoreProgram, 'id' | 'stage'>, d
       return { prev }
     },
     onError: (_e, _v, ctx) => qc.setQueryData(coreKeys.sessions, ctx?.prev),
-    onSettled: () => qc.invalidateQueries({ queryKey: coreKeys.sessions }),
+    onSettled: () => (qc.isMutating({ mutationKey: ['core_sessions', 'save', date] }) <= 1 ? qc.invalidateQueries({ queryKey: coreKeys.sessions }) : undefined),
   })
 }
 

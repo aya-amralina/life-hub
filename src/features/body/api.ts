@@ -59,6 +59,9 @@ export function useStages() {
 export function useSaveDailyLog(date: ISODate) {
   const qc = useQueryClient()
   return useMutation({
+    // one day's changes go out one by one: two quick taps (1 → 2 cups) never reach the server in reverse order
+    scope: { id: `daily_logs:${date}` },
+    mutationKey: ['daily_logs', 'save', date],
     // offline: queued and sent when the network is back
     mutationFn: async (patch: DailyPatch) => {
       await write({ table: 'daily_logs', action: 'upsert', values: { date, ...patch }, onConflict: 'user_id,date' })
@@ -70,7 +73,8 @@ export function useSaveDailyLog(date: ISODate) {
       return { prev }
     },
     onError: (_e, _v, ctx) => qc.setQueryData(bodyKeys.day(date), ctx?.prev ?? null),
-    onSettled: () => qc.invalidateQueries({ queryKey: ['daily_logs'] }),
+    // refetch after the last change of the queue only — an earlier answer must not flash the older value
+    onSettled: () => (qc.isMutating({ mutationKey: ['daily_logs', 'save', date] }) <= 1 ? qc.invalidateQueries({ queryKey: ['daily_logs'] }) : undefined),
   })
 }
 
