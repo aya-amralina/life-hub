@@ -3,9 +3,9 @@ import { useToast } from '@/app/toastContext'
 import { BottomSheet } from '@/components/ui/BottomSheet'
 import { Button } from '@/components/ui/Button'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
-import { ACCOUNTS } from '@/lib/constants'
 import { formatDayMonth, todayBerlin } from '@/lib/dates'
 import { formatAmount, formatEur, parseEurInput } from '@/lib/format'
+import { accountOptions, accountsProblem } from '@/lib/rules/accounts'
 import { forecastEnd } from '@/lib/rules/money'
 import { OPERATION_GROUPS, OPERATION_KIND_LABEL, type OperationKind } from '@/lib/rules/operation'
 import { type Freq } from '@/lib/rules/recurring'
@@ -24,7 +24,7 @@ import {
   suggestedAnchor,
   type RecurringForm,
 } from '@/lib/rules/recurringEdit'
-import { useEnvelopes, useSaveRecurring, type Recurring, type RecurringStep, type Transaction } from './api'
+import { useAccounts, useEnvelopes, useSaveRecurring, type Recurring, type RecurringStep, type Transaction } from './api'
 import { Choice } from './Choice'
 
 const field = 'h-12 w-full rounded-xl border border-line2 bg-card px-4 text-base text-ink outline-none placeholder:text-ink3 focus:border-ink2'
@@ -91,17 +91,23 @@ function RecurringFormBody({
   // the first date was moved past the last answer by the form itself (not typed): undone when the schedule is back
   const [autoAnchor, setAutoAnchor] = useState(false)
   const envelopes = useEnvelopes()
+  const accounts = useAccounts()
   const save = useSaveRecurring()
   const toast = useToast()
   const set = (p: Partial<RecurringForm>) => setF((old) => ({ ...old, ...p }))
 
   const answered = rule ? lastAnswered(rule.id, txs) : null
   const interval = /^\d+$/.test(every.trim()) ? Number(every.trim()) : 0
-  const form: RecurringForm = { ...f, cents: parseEurInput(amount), interval }
+  const accountList = accounts.data ?? []
+  // a new rule starts from Revolut · Основной, as a new operation; an existing one keeps what it has (none = «Баланс»)
+  const mainId = accountList.find((a) => a.source_id === 'acct:revolut-main')?.id ?? null
+  const form: RecurringForm = { ...f, accountId: f.accountId ?? (rule ? null : mainId), cents: parseEurInput(amount), interval }
+  // every occurrence is ahead of the start by accounts: always checked (decision 18.11.2026)
+  const problem = accountsProblem({ kind: form.kind, date: form.anchor, account_id: form.accountId, to_account_id: form.kind === 'transfer' ? form.toAccountId : null }, accountList, null)
   const plan = rule ? planRuleSave(rule, form, txs) : null
   const warning = rule ? scheduleWarning(rule, form, txs) : null
   const split = plan?.mode === 'split'
-  const valid = recurringValid(form) && plan?.mode !== 'invalid'
+  const valid = recurringValid(form) && plan?.mode !== 'invalid' && problem === null
   const similar = rule && onLink ? linkCandidates(rule, txs, forecastEnd(todayBerlin())).length : 0
   const pots = (envelopes.data ?? []).filter((e) => e.type === 'envelope' || e.id === f.envelopeId)
 
@@ -126,7 +132,7 @@ function RecurringFormBody({
       save.mutate({ steps: [{ action: 'insert', values: { id, ...row } }], links: linkTxId ? [{ txId: linkTxId, recurringId: id, occurrence: row.anchor_date }] : [] })
       toast({ text: `${row.title} · ${sum} — ${describeRule(row)}` })
       onClose()
-      onCreated?.({ ...row, id, account_id: null, to_account_id: null, source_id: null, user_id: '', created_at: '', updated_at: '' })
+      onCreated?.({ ...row, id, account: null, source_id: null, user_id: '', created_at: '', updated_at: '' })
       return
     }
     let steps: RecurringStep[] = []
@@ -201,7 +207,23 @@ function RecurringFormBody({
         <input type="date" value={f.end ?? ''} onChange={(e) => set({ end: e.target.value || null })} aria-label="Последняя дата" className={field} />
       </label>
       {f.kind === 'expense' && <Choice label="Группа" options={OPERATION_GROUPS.map((g) => ({ value: g, label: g }))} value={f.grp} onChange={(grp) => set({ grp })} />}
-      <Choice label="Счёт" options={ACCOUNTS.map((a) => ({ value: a, label: a }))} value={f.account} onChange={(account) => set({ account })} />
+      <Choice
+        label={f.kind === 'income' ? 'Куда' : f.kind === 'transfer' ? 'Откуда' : 'Откуда — только счета «Баланса»'}
+        options={accountOptions(accountList, { group: f.kind === 'expense' ? 'balance' : undefined, keep: form.accountId }).map((a) => ({ value: a.id, label: a.name }))}
+        value={form.accountId}
+        onChange={(accountId) => set({ accountId })}
+      />
+      {f.kind === 'transfer' && (
+        <Choice
+          label="Куда"
+          options={accountOptions(accountList, { keep: f.toAccountId })
+            .filter((a) => a.id !== form.accountId)
+            .map((a) => ({ value: a.id, label: a.name }))}
+          value={f.toAccountId}
+          onChange={(toAccountId) => set({ toAccountId })}
+        />
+      )}
+      {problem && <p className="m-0 text-cap font-semibold text-amber-ink">{problem}</p>}
       {f.kind === 'expense' && pots.length > 0 && (
         <Choice label="Из конверта" options={pots.map((e) => ({ value: e.id, label: e.name }))} value={f.envelopeId} onChange={(envelopeId) => set({ envelopeId })} />
       )}

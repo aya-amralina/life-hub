@@ -4,8 +4,10 @@ import { BottomSheet } from '@/components/ui/BottomSheet'
 import { Button } from '@/components/ui/Button'
 import { Chip } from '@/components/ui/Chip'
 import { formatAmount, formatEur, parseEurInput } from '@/lib/format'
+import { accountOptions } from '@/lib/rules/accounts'
 import { DEBT_DIRECTION_LABEL, debtRow, debtValid, type DebtDirection, type DebtForm } from '@/lib/rules/operation'
-import { useDeleteDebt, useSaveDebt, type Debt, type Envelope } from './api'
+import { Choice } from './Choice'
+import { useAccounts, useDeleteDebt, useSaveDebt, type Debt, type Envelope } from './api'
 
 const field = 'h-12 w-full rounded-xl border border-line2 bg-card px-4 text-base text-ink outline-none placeholder:text-ink3 focus:border-ink2'
 const DIRECTIONS = Object.keys(DEBT_DIRECTION_LABEL) as DebtDirection[]
@@ -28,10 +30,12 @@ function DebtFormBody({ debt, goals, onClose }: { debt: Debt | null; goals: Enve
   const [due, setDue] = useState(debt?.due_date ?? '')
   const [potId, setPotId] = useState<string | null>(debt?.pot_id ?? null)
   const [note, setNote] = useState(debt?.note ?? '')
+  const [accountId, setAccountId] = useState<string | null>(debt?.account_id ?? null)
+  const accounts = useAccounts()
   const save = useSaveDebt()
   const del = useDeleteDebt()
   const toast = useToast()
-  const form: DebtForm = { who, direction, cents: parseEurInput(amount), repaidCents: repaid.trim() === '' ? null : parseEurInput(repaid), due: due || null, potId, note }
+  const form: DebtForm = { who, direction, cents: parseEurInput(amount), repaidCents: repaid.trim() === '' ? null : parseEurInput(repaid), due: due || null, potId, accountId, note }
   const valid = debtValid(form) && (repaid.trim() === '' || form.repaidCents !== null)
 
   return (
@@ -82,6 +86,14 @@ function DebtFormBody({ debt, goals, onClose }: { debt: Debt | null; goals: Enve
         <span className="text-cap text-ink2">Срок, если есть</span>
         <input type="date" value={due} onChange={(e) => setDue(e.target.value)} aria-label="Срок" className={field} />
       </label>
+      {direction === 'i_owe' && (
+        <Choice
+          label="Где отложены деньги на возврат, если отложены"
+          options={accountOptions(accounts.data ?? [], { keep: accountId }).map((a) => ({ value: a.id, label: a.name }))}
+          value={accountId}
+          onChange={setAccountId}
+        />
+      )}
       <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Заметка" aria-label="Заметка" className={field} />
       <Button type="submit" disabled={!valid}>
         Сохранить

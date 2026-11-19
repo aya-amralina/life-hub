@@ -27,7 +27,8 @@ const rule = (p: Partial<RecurringLike> = {}): RecurringLike => ({
   amount_eur: 650,
   kind: 'expense',
   grp: 'Обязательное',
-  account: 'Sparkasse',
+  account_id: 'spark',
+  to_account_id: null,
   envelope_id: null,
   freq: 'monthly',
   interval_n: 1,
@@ -109,6 +110,11 @@ describe('virtual planned operations', () => {
   })
   it('kind decides group and envelope as for an operation', () => {
     expect(virtualPlanned([rule({ kind: 'income', grp: 'Жизнь', envelope_id: 'e' })], [], '2026-12-31')[0]).toMatchObject({ grp: 'Доход', envelope_id: null })
+    // accounts go with every occurrence (decision 18.11.2026): «куда» only for a transfer
+    expect(virtualPlanned([rule({ to_account_id: 'main' })], [], '2026-12-31')[0]).toMatchObject({ account_id: 'spark', to_account_id: null })
+    const t = virtualPlanned([rule({ kind: 'transfer', account_id: 'main', to_account_id: 'cushion' })], [], '2026-12-31')[0]!
+    expect(t).toMatchObject({ account_id: 'main', to_account_id: 'cushion' })
+    expect(materialize(t, 'id1', {})).toMatchObject({ account_id: 'main', to_account_id: 'cushion' })
     expect(virtualPlanned([rule({ kind: 'transfer', grp: 'Жизнь' })], [], '2026-12-31')[0]!.grp).toBeNull()
   })
 })
@@ -232,9 +238,9 @@ describe('the rule form', () => {
     expect(recurringValid({ ...b, title: 'Netflix', cents: 1399 })).toBe(true)
   })
   it('«Сделать регулярным»: prefilled from the operation, first date — its date', () => {
-    const op = { ...tx('t', '2026-12-03', 'expense', 650), title: 'Miete', grp: 'Обязательное', account: 'Sparkasse' as string | null, envelope_id: 'e1', note: 'Kalt' as string | null, is_planned: true }
+    const op = { ...tx('t', '2026-12-03', 'expense', 650), title: 'Miete', grp: 'Обязательное', account_id: 'spark' as string | null, envelope_id: 'e1', note: 'Kalt' as string | null, is_planned: true }
     const f = recurringFromOperation(op)
-    expect(f).toMatchObject({ title: 'Miete', cents: 65000, kind: 'expense', grp: 'Обязательное', account: 'Sparkasse', envelopeId: 'e1', note: 'Kalt', freq: 'monthly', interval: 1, anchor: '2026-12-03', end: null, active: true })
+    expect(f).toMatchObject({ title: 'Miete', cents: 65000, kind: 'expense', grp: 'Обязательное', accountId: 'spark', toAccountId: null, envelopeId: 'e1', note: 'Kalt', freq: 'monthly', interval: 1, anchor: '2026-12-03', end: null, active: true })
     expect(recurringValid(f)).toBe(true)
     expect(recurringFromOperation({ ...op, kind: 'income', grp: 'Доход', note: null })).toMatchObject({ kind: 'income', grp: null, envelopeId: null, note: '' })
   })

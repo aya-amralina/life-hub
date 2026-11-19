@@ -51,7 +51,10 @@ export type RecurringForm = {
   cents: number | null
   kind: OperationKind
   grp: string | null
-  account: string | null
+  /** expense — «откуда», income — «куда», transfer — «откуда» */
+  accountId: string | null
+  /** transfer only — «куда» */
+  toAccountId: string | null
   envelopeId: string | null
   freq: Freq
   interval: number
@@ -65,7 +68,7 @@ const ISO = /^\d{4}-\d{2}-\d{2}$/
 
 /** A new rule: a monthly expense from today. */
 export function blankRecurring(today: ISODate): RecurringForm {
-  return { title: '', cents: null, kind: 'expense', grp: 'Обязательное', account: null, envelopeId: null, freq: 'monthly', interval: 1, anchor: today, end: null, active: true, note: '' }
+  return { title: '', cents: null, kind: 'expense', grp: 'Обязательное', accountId: null, toAccountId: null, envelopeId: null, freq: 'monthly', interval: 1, anchor: today, end: null, active: true, note: '' }
 }
 
 export function recurringValid(f: RecurringForm): boolean {
@@ -86,7 +89,9 @@ export function canMakeRecurring(t: TxLike & OccurrenceLink & { virtual?: boolea
 }
 
 /** A new rule prefilled from a planned operation: its name, sum, kind, group, account, envelope, note; first date — its date. */
-export function recurringFromOperation(t: Pick<TxLike, 'date' | 'amount_eur' | 'kind' | 'envelope_id' | 'grp'> & { title: string; account: string | null; note: string | null }): RecurringForm {
+export function recurringFromOperation(
+  t: Pick<TxLike, 'date' | 'amount_eur' | 'kind' | 'envelope_id' | 'grp'> & { title: string; account_id: string | null; to_account_id?: string | null; note: string | null },
+): RecurringForm {
   const kind: OperationKind = t.kind === 'income' ? 'income' : t.kind === 'transfer' ? 'transfer' : 'expense'
   return {
     ...blankRecurring(t.date),
@@ -94,7 +99,8 @@ export function recurringFromOperation(t: Pick<TxLike, 'date' | 'amount_eur' | '
     cents: toCents(t.amount_eur),
     kind,
     grp: kind === 'expense' ? (t.grp ?? null) : null,
-    account: t.account,
+    accountId: t.account_id,
+    toAccountId: kind === 'transfer' ? (t.to_account_id ?? null) : null,
     envelopeId: kind === 'expense' ? t.envelope_id : null,
     note: t.note ?? '',
   }
@@ -107,7 +113,8 @@ export function recurringRow(f: RecurringForm) {
     amount_eur: (f.cents ?? 0) / 100,
     kind: f.kind,
     grp: f.kind === 'income' ? 'Доход' : f.kind === 'transfer' ? null : f.grp,
-    account: f.account,
+    account_id: f.accountId,
+    to_account_id: f.kind === 'transfer' ? f.toAccountId : null,
     envelope_id: f.kind === 'expense' ? f.envelopeId : null,
     freq: f.freq,
     interval_n: f.interval,
@@ -125,7 +132,8 @@ export function recurringForm(r: RecurringLike): RecurringForm {
     cents: Math.round(Number(r.amount_eur) * 100),
     kind: r.kind === 'income' ? 'income' : r.kind === 'transfer' ? 'transfer' : 'expense',
     grp: r.grp,
-    account: r.account,
+    accountId: r.account_id ?? null,
+    toAccountId: r.to_account_id ?? null,
     envelopeId: r.envelope_id,
     freq: freqOf(r.freq),
     interval: r.interval_n,

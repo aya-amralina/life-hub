@@ -13,8 +13,9 @@ import { ProgressBar } from '@/components/ui/ProgressBar'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { formatDayMonth, formatWeekdayDate, todayBerlin } from '@/lib/dates'
 import { formatEur, parseEurInput, plural } from '@/lib/format'
-import { goalAccountNow } from '@/lib/rules/accounts'
+import { accountOptions, goalAccountNow, goalAccountProblem } from '@/lib/rules/accounts'
 import { debtSummary, envelopeSummary, envelopesLeft, goalProgress } from '@/lib/rules/money'
+import { Choice } from './Choice'
 import { DebtSheet } from './DebtSheet'
 import { useAccounts, useActualBalances, useAllTransactions, useCreateEnvelope, useDebts, useEnvelopes, useSaveGoalBalance, useUpdateEnvelope, type Debt, type Envelope } from './api'
 
@@ -244,12 +245,17 @@ function EnvelopeForm({ env, onClose }: { env: Envelope | null; onClose: () => v
   const [goal, setGoal] = useState(amountText(env?.goal_eur ?? null))
   const [due, setDue] = useState(env?.goal_date ?? '')
   const [type, setType] = useState<'envelope' | 'goal'>(env?.type === 'goal' ? 'goal' : 'envelope')
+  const [accountId, setAccountId] = useState<string | null>(env?.account_id ?? null)
+  const accounts = useAccounts()
+  const accountList = accounts.data ?? []
+  // a goal lives only on «Подушка»; an envelope — on any account (decision 18.11.2026)
+  const accountProblem = type === 'goal' ? goalAccountProblem(accountId, accountList) : null
   const create = useCreateEnvelope()
   const update = useUpdateEnvelope()
   const toast = useToast()
   const cents = parseEurInput(amount)
   const goalCents = parseEurInput(goal)
-  const valid = name.trim() && (amount === '' || cents !== null) && (type === 'envelope' || (goalCents !== null && goalCents > 0))
+  const valid = name.trim() && (amount === '' || cents !== null) && (type === 'envelope' || (goalCents !== null && goalCents > 0)) && accountProblem === null
   return (
     <form
       className="flex flex-col gap-4"
@@ -263,6 +269,7 @@ function EnvelopeForm({ env, onClose }: { env: Envelope | null; onClose: () => v
           when_text: when.trim() || null,
           goal_eur: type === 'goal' && goalCents ? goalCents / 100 : null,
           goal_date: type === 'goal' && due ? due : null,
+          account_id: accountId,
         }
         const done = () => {
           toast({ text: env ? `«${name.trim()}» — сохранено` : type === 'goal' ? `Цель «${name.trim()}» заведена` : `Конверт «${name.trim()}» готов` })
@@ -299,6 +306,13 @@ function EnvelopeForm({ env, onClose }: { env: Envelope | null; onClose: () => v
           <input value={when} onChange={(e) => setWhen(e.target.value)} placeholder="Когда, например «до 20.12»" aria-label="Когда" className={field} />
         </>
       )}
+      <Choice
+        label={type === 'goal' ? 'Где лежат деньги — счёт «Подушки»' : 'Где лежат деньги'}
+        options={accountOptions(accountList, { group: type === 'goal' ? 'cushion' : undefined, keep: accountId }).map((a) => ({ value: a.id, label: a.name }))}
+        value={accountId}
+        onChange={setAccountId}
+      />
+      {accountProblem && <p className="m-0 text-cap font-semibold text-amber-ink">{accountProblem}</p>}
       <Button type="submit" disabled={!valid || create.isPending || update.isPending}>
         Сохранить
       </Button>

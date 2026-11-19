@@ -15,7 +15,10 @@ export type OperationForm = {
   status: 'plan' | 'fact'
   grp: string | null
   category: string | null
-  account: string | null
+  /** expense — «откуда», income — «куда», transfer — «откуда» */
+  accountId: string | null
+  /** transfer only — «куда» */
+  toAccountId: string | null
   envelopeId: string | null
   debtId: string | null
   note: string
@@ -30,7 +33,8 @@ export type OperationRow = {
   confirmed_at: string | null
   grp: string | null
   category: string | null
-  account: string | null
+  account_id: string | null
+  to_account_id: string | null
   envelope_id: string | null
   debt_id: string | null
   note: string | null
@@ -91,7 +95,8 @@ export function operationRow(f: OperationForm, prev: PlanState | null, nowIso: s
     confirmed_at: f.status === 'plan' ? null : (prev?.confirmed_at ?? nowIso),
     grp,
     category: weekly ? f.category : null,
-    account: f.account,
+    account_id: f.accountId,
+    to_account_id: f.kind === 'transfer' ? f.toAccountId : null,
     envelope_id: f.kind === 'expense' ? f.envelopeId : null,
     debt_id: f.debtId,
     note: f.note.trim() || null,
@@ -109,17 +114,43 @@ export function operationForm(t: Omit<OperationRow, 'planned_amount_eur'> & { ca
     status: !t.is_planned || t.confirmed_at !== null ? 'fact' : 'plan',
     grp: t.grp,
     category: t.category,
-    account: t.account,
+    accountId: t.account_id,
+    toAccountId: t.to_account_id,
     envelopeId: t.envelope_id,
     debtId: t.debt_id,
     note: t.note ?? '',
   }
 }
 
+/**
+ * «Сначала перевод с …» (decision 18.11.2026): an expense from an envelope whose money lies off «Баланс» goes with
+ * a transfer of the same sum on the same day, from the envelope's account to the account the expense goes from —
+ * so «Баланс» does not dip for money that was set aside elsewhere. The same status as the expense.
+ */
+export function envelopeTransferRow(f: OperationForm, fromAccountId: string, envelopeName: string): OperationRow {
+  return {
+    kind: 'transfer',
+    title: `Из конверта «${envelopeName}»`,
+    amount_eur: (f.cents ?? 0) / 100,
+    date: f.date,
+    is_planned: f.status === 'plan',
+    confirmed_at: null,
+    grp: null,
+    category: null,
+    account_id: fromAccountId,
+    to_account_id: f.accountId,
+    envelope_id: null,
+    debt_id: null,
+    note: null,
+    planned_amount_eur: null,
+  }
+}
+
 export type DebtDirection = 'i_owe' | 'owed_to_me' | 'from_pot'
 export const DEBT_DIRECTION_LABEL: Record<DebtDirection, string> = { i_owe: 'я должна', owed_to_me: 'мне должны', from_pot: 'заём из копилки' }
 
-export type DebtForm = { who: string; direction: DebtDirection; cents: number | null; repaidCents: number | null; due: ISODate | null; potId: string | null; note: string }
+/** `accountId` — where the money to pay back is set aside («я должна», e.g. a tenant's deposit); only for that direction. */
+export type DebtForm = { who: string; direction: DebtDirection; cents: number | null; repaidCents: number | null; due: ISODate | null; potId: string | null; accountId?: string | null; note: string }
 
 /** A debt needs a name and a sum; «заём из копилки» — also the goal it was taken from; repaid ≤ the sum. */
 export function debtValid(f: DebtForm): boolean {
@@ -136,6 +167,7 @@ export function debtRow(f: DebtForm) {
     repaid_eur: f.repaidCents === null ? null : f.repaidCents / 100,
     due_date: f.due,
     pot_id: f.direction === 'from_pot' ? f.potId : null,
+    account_id: f.direction === 'i_owe' ? (f.accountId ?? null) : null,
     note: f.note.trim() || null,
   }
 }

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { confirmPatch, debtRow, debtValid, operationForm, operationRow, operationValid, unconfirmPatch, type DebtForm, type OperationForm } from './operation'
+import { confirmPatch, debtRow, debtValid, envelopeTransferRow, operationForm, operationRow, operationValid, unconfirmPatch, type DebtForm, type OperationForm } from './operation'
 
 const NOW = '2026-11-12T18:00:00.000Z'
 const form = (p: Partial<OperationForm> = {}): OperationForm => ({
-  kind: 'expense', title: ' Miete ', cents: 65000, date: '2026-12-01', status: 'plan', grp: 'Обязательное', category: null, account: 'Sparkasse', envelopeId: null, debtId: null, note: '', ...p,
+  kind: 'expense', title: ' Miete ', cents: 65000, date: '2026-12-01', status: 'plan', grp: 'Обязательное', category: null, accountId: 'spark', toAccountId: null, envelopeId: null, debtId: null, note: '', ...p,
 })
 
 describe('operation form → row', () => {
@@ -30,8 +30,20 @@ describe('operation form → row', () => {
     expect(operationRow(form({ grp: 'Жизнь', category: 'Продукты' }), null, NOW).category).toBe('Продукты')
     expect(operationRow(form({ grp: 'Обязательное', category: 'Продукты' }), null, NOW).category).toBeNull()
   })
+  it('accounts: «откуда» always, «куда» only for a transfer', () => {
+    expect(operationRow(form({ toAccountId: 'main' }), null, NOW)).toMatchObject({ account_id: 'spark', to_account_id: null })
+    expect(operationRow(form({ kind: 'transfer', toAccountId: 'main' }), null, NOW)).toMatchObject({ account_id: 'spark', to_account_id: 'main' })
+  })
+  it('«Сначала перевод с …»: the same sum, day and status, from the envelope account to the expense account', () => {
+    const f = form({ kind: 'expense', accountId: 'main', envelopeId: 'e', grp: 'Поездки и события', cents: 16500, date: '2026-12-05' })
+    expect(envelopeTransferRow(f, 'trips', 'Франкфурт')).toMatchObject({
+      kind: 'transfer', title: 'Из конверта «Франкфурт»', amount_eur: 165, date: '2026-12-05', is_planned: true, confirmed_at: null,
+      account_id: 'trips', to_account_id: 'main', envelope_id: null, grp: null,
+    })
+    expect(envelopeTransferRow({ ...f, status: 'fact' }, 'trips', 'Франкфурт').is_planned).toBe(false)
+  })
   it('a stored row round-trips through the form', () => {
-    const row = operationRow(form({ note: 'x', debtId: 'd' }), null, NOW)
+    const row = operationRow(form({ note: 'x', debtId: 'd', kind: 'transfer', toAccountId: 'main' }), null, NOW)
     expect(operationRow(operationForm(row), row, NOW)).toEqual(row)
     expect(operationForm({ ...row, is_planned: true, confirmed_at: 't' }).status).toBe('fact')
   })

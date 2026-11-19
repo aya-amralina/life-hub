@@ -4,12 +4,13 @@ import { useToast } from '@/app/toastContext'
 import { BottomSheet } from '@/components/ui/BottomSheet'
 import { Button } from '@/components/ui/Button'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
-import { ACCOUNTS, WEEK_CATEGORIES } from '@/lib/constants'
+import { Switch } from '@/components/ui/Switch'
+import { WEEK_CATEGORIES } from '@/lib/constants'
 import { todayBerlin } from '@/lib/dates'
 import { formatAmount, formatEur, parseEurInput } from '@/lib/format'
-import { legacyAccountName } from '@/lib/rules/accounts'
+import { accountOptions, accountsProblem, accountsStart, groupOfAccount } from '@/lib/rules/accounts'
 import { forecastEnd, isWeekRow } from '@/lib/rules/money'
-import { DEBT_DIRECTION_LABEL, OPERATION_GROUPS, OPERATION_KIND_LABEL, operationForm, operationRow, operationValid, type DebtDirection, type OperationForm, type OperationKind } from '@/lib/rules/operation'
+import { DEBT_DIRECTION_LABEL, OPERATION_GROUPS, OPERATION_KIND_LABEL, envelopeTransferRow, operationForm, operationRow, operationValid, type DebtDirection, type OperationForm, type OperationKind } from '@/lib/rules/operation'
 import { isVirtual, materialize } from '@/lib/rules/recurring'
 import { canMakeRecurring, linkCandidates, recurringFromOperation } from '@/lib/rules/recurringEdit'
 import { Choice } from './Choice'
@@ -36,7 +37,10 @@ const STATUSES = [
   { value: 'fact', label: 'Факт' },
 ] as const
 
-const blank = (): OperationForm => ({ kind: 'expense', title: '', cents: null, date: todayBerlin(), status: 'plan', grp: 'Обязательное', category: null, account: null, envelopeId: null, debtId: null, note: '' })
+const blank = (): OperationForm => ({ kind: 'expense', title: '', cents: null, date: todayBerlin(), status: 'plan', grp: 'Обязательное', category: null, accountId: null, toAccountId: null, envelopeId: null, debtId: null, note: '' })
+
+/** The account a new operation starts with (as the quick expense). */
+const MAIN_ACCOUNT = 'acct:revolut-main'
 
 /**
  * An operation of the plan — new or existing (the app is the source since 12.11.2026, no Excel behind it).
@@ -47,10 +51,9 @@ const blank = (): OperationForm => ({ kind: 'expense', title: '', cents: null, d
  * answering that occurrence; there is nothing to delete — the rule itself is changed in «Регулярные».
  * «Сделать регулярным» (a stored planned one): the rule sheet, prefilled from the operation; the operation becomes
  * the rule's first occurrence, then the usual «Уже есть в плане» for the similar ones.
+ * Accounts (decision 18.11.2026): an expense «откуда» only from «Баланс», income «куда» — any, a transfer «откуда →
+ * куда». A new expense from an envelope whose money lies off «Баланс» brings «Сначала перевод с …» (on by default).
  */
-/** The group of an account by its name; unknown — «Баланс». */
-const groupOfName = (accounts: readonly { name: string; grp: string }[], name: string) => accounts.find((a) => a.name === name)?.grp ?? 'balance'
-
 export function OperationSheet({ open, onClose, tx }: { open: boolean; onClose: () => void; tx: PlanTx | null }) {
   const all = useAllTransactions()
   const [ruleFrom, setRuleFrom] = useState<Transaction | null>(null)
@@ -101,10 +104,21 @@ function OperationFormBody({ tx, onClose, onMakeRecurring }: { tx: PlanTx | null
   const answer = useAnswerPlanned()
   const toast = useToast()
   const accounts = useAccounts()
+  const all = useAllTransactions()
+  const [withTransfer, setWithTransfer] = useState(true)
   const set = (p: Partial<OperationForm>) => setF((old) => ({ ...old, ...p }))
   const week = tx !== null && isWeekRow(tx)
-  const form = { ...f, cents: parseEurInput(amount) }
-  const valid = operationValid(form)
+  const accountList = accounts.data ?? []
+  const mainId = accountList.find((a) => a.source_id === MAIN_ACCOUNT)?.id ?? null
+  // a new operation starts from Revolut · Основной; a stored one keeps what it has (none = «Баланс»)
+  const form = { ...f, accountId: f.accountId ?? (tx ? null : mainId), cents: parseEurInput(amount) }
+  const problem = week ? null : accountsProblem({ kind: form.kind, date: form.date, account_id: form.accountId, to_account_id: form.kind === 'transfer' ? form.toAccountId : null }, accountList, accountsStart(all.data ?? []))
+  const valid = operationValid(form) && problem === null
+  const groupOf = groupOfAccount(accountList)
+  const envelope = form.kind === 'expense' && form.envelopeId ? (envelopes.data ?? []).find((e) => e.id === form.envelopeId) : undefined
+  const envelopeAccount = envelope?.account_id ? accountList.find((a) => a.id === envelope.account_id) : undefined
+  // only a new expense: an existing one already has (or had) its money moved
+  const offerTransfer = !tx && envelopeAccount !== undefined && groupOf(envelopeAccount.id) !== 'balance' && form.accountId !== null
   // only envelopes hold money for spending; a goal is a pocket, not a source of an expense
   const pots = (envelopes.data ?? []).filter((e) => e.type === 'envelope' || e.id === f.envelopeId)
   const openDebts = (debts.data ?? []).filter((d) => d.status === 'open' || d.id === f.debtId)
@@ -121,8 +135,11 @@ function OperationFormBody({ tx, onClose, onMakeRecurring }: { tx: PlanTx | null
       update.mutate({ id: tx.id, patch: week ? { amount_eur: row.amount_eur, date: row.date, note: row.note } : row })
       toast({ text: `${row.title} · ${sum} — сохранено` })
     } else {
+      // the transfer first: through the offline queue the rows go in order
+      const transfer = offerTransfer && withTransfer ? envelopeTransferRow(form, envelopeAccount!.id, envelope!.name) : null
+      if (transfer) create.mutate({ id: crypto.randomUUID(), ...transfer })
       create.mutate({ id: crypto.randomUUID(), ...row })
-      toast({ text: `${row.title} · ${sum} — ${row.is_planned ? 'в плане' : 'записано'}` })
+      toast({ text: `${row.title} · ${sum} — ${row.is_planned ? 'в плане' : 'записано'}${transfer ? `, с переводом с ${envelopeAccount!.name}` : ''}` })
     }
     onClose()
   }
@@ -176,12 +193,22 @@ function OperationFormBody({ tx, onClose, onMakeRecurring }: { tx: PlanTx | null
             />
           )}
           <Choice
-            label="Счёт"
-            // an expense goes only from «Баланс» (decision 18.11.2026): the old names mapped to accounts, the chosen one kept
-            options={ACCOUNTS.filter((a) => f.kind !== 'expense' || a === f.account || groupOfName(accounts.data ?? [], legacyAccountName(a)) === 'balance').map((a) => ({ value: a, label: a }))}
-            value={f.account}
-            onChange={(account) => set({ account })}
+            label={f.kind === 'income' ? 'Куда' : f.kind === 'transfer' ? 'Откуда' : 'Откуда — только счета «Баланса»'}
+            options={accountOptions(accountList, { group: f.kind === 'expense' ? 'balance' : undefined, keep: form.accountId }).map((a) => ({ value: a.id, label: a.name }))}
+            value={form.accountId}
+            onChange={(accountId) => set({ accountId })}
           />
+          {f.kind === 'transfer' && (
+            <Choice
+              label="Куда"
+              options={accountOptions(accountList, { keep: f.toAccountId })
+                .filter((a) => a.id !== form.accountId)
+                .map((a) => ({ value: a.id, label: a.name }))}
+              value={f.toAccountId}
+              onChange={(toAccountId) => set({ toAccountId })}
+            />
+          )}
+          {problem && <p className="m-0 text-cap font-semibold text-amber-ink">{problem}</p>}
           {f.kind === 'expense' && pots.length > 0 && (
             <Choice
               label="Из конверта — не входит в лимит недели"
@@ -189,6 +216,15 @@ function OperationFormBody({ tx, onClose, onMakeRecurring }: { tx: PlanTx | null
               value={f.envelopeId}
               onChange={(envelopeId) => set({ envelopeId })}
             />
+          )}
+          {offerTransfer && (
+            <div className="flex items-center gap-3">
+              <span className="min-w-0 flex-1 text-base">
+                Сначала перевод с {envelopeAccount!.name}
+                <span className="block text-cap text-ink2">та же сумма и дата — деньги конверта лежат не на «Балансе»</span>
+              </span>
+              <Switch checked={withTransfer} onChange={setWithTransfer} label={`Сначала перевод с ${envelopeAccount!.name}`} />
+            </div>
           )}
           {openDebts.length > 0 && (
             <Choice
