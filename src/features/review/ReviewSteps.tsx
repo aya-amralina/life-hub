@@ -9,12 +9,13 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { EmptyState, SkeletonCard } from '@/components/ui/Feedback'
 import { MetaChip } from '@/components/ui/MetaChip'
-import { ACCOUNTS, SPHERE_CLASS, SPHERE_LABEL, type Sphere } from '@/lib/constants'
+import { ACCOUNT_GROUPS, SPHERE_CLASS, SPHERE_LABEL, type Sphere } from '@/lib/constants'
 import { addDaysISO, formatWeekdayDate, todayBerlin, type ISODate } from '@/lib/dates'
 import { formatEur, formatHours, plural, toCents } from '@/lib/format'
 import { weekPoints, weekPointsTarget } from '@/lib/rules/activities'
 import { minimumDone, minimumSet, stageForDate, weekHabitShare } from '@/lib/rules/habits'
 import { isItemOpen, isStuck } from '@/lib/rules/items'
+import { GROUP_LABEL, accountOptions, parseBalanceInput } from '@/lib/rules/accounts'
 import { isWeekRow, upcomingPlanned } from '@/lib/rules/money'
 import { nextWeekAgenda, splitItem } from '@/lib/rules/review'
 import { LOAD_LABEL, isFixed, planRollover, plannedItems, rolloverCandidates, studyItemsOfWeek, weekCapacity, weekLoad } from '@/lib/rules/study'
@@ -25,7 +26,7 @@ import { useCreateItem, useItems, usePatchItems, useUpdateItem, type Item } from
 import { CutNextWeek } from '@/features/money/CutNextWeek'
 import { MoneyQuestions } from '@/features/money/MoneyQuestions'
 import { MoneyTotal } from '@/features/money/MoneyTotal'
-import { usePlanTransactions } from '@/features/money/api'
+import { useAccounts, usePlanTransactions, type Account } from '@/features/money/api'
 import { useMoneyWeek } from '@/features/money/useMoneyWeek'
 import { MoveSheet } from '@/features/study/MoveSheet'
 import { weekLabel } from '@/features/study/weekLabel'
@@ -89,21 +90,67 @@ export function MoneyStep({
       <Card>
         <CardHeader title="Остатки на счетах" context="по желанию" />
         <p className="m-0 text-cap text-ink2">Сверка с банком: впиши, что видно в приложениях банков, — сохранится в обзоре недели.</p>
-        {ACCOUNTS.map((a) => (
-          <label key={a} className="flex items-center gap-3">
-            <span className="flex-1 text-base">{a}</span>
-            <input
-              inputMode="decimal"
-              value={balances[a] ?? ''}
-              onChange={(e) => onBalances({ ...balances, [a]: e.target.value })}
-              aria-label={`Остаток ${a}`}
-              className="h-11 w-28 rounded-xl border border-line2 bg-card px-3 text-right text-base text-ink tabular-nums"
-            />
-            <span className="text-cap text-ink2">€</span>
-          </label>
-        ))}
+        <BalanceInputs balances={balances} onBalances={onBalances} />
       </Card>
       <Note label="Импульсные траты — были?" value={impulse} onChange={onImpulse} placeholder="Например: кофе по дороге, потому что устала" />
+    </>
+  )
+}
+
+/**
+ * Real balances per account, by group (decision 18.11.2026). An account of «Баланс» may be below zero (Dispo): the
+ * decimal keypad of a phone has no minus, so «±» flips the sign.
+ */
+function BalanceInputs({ balances, onBalances }: { balances: Record<string, string>; onBalances: (b: Record<string, string>) => void }) {
+  const accounts = useAccounts()
+  const list = accountOptions(accounts.data ?? [])
+  const set = (a: Account, v: string) => onBalances({ ...balances, [a.name]: v })
+  const flip = (v: string) => (/^\s*[-−]/.test(v) ? v.replace(/^\s*[-−]\s*/, '') : `−${v.trim()}`)
+  return (
+    <>
+      {ACCOUNT_GROUPS.map((g) => {
+        const inGroup = list.filter((a) => a.grp === g)
+        if (!inGroup.length) return null
+        return (
+          <div key={g} role="group" aria-label={GROUP_LABEL[g]} className="flex flex-col gap-2">
+            <span className="text-cap font-semibold text-ink2">{GROUP_LABEL[g]}</span>
+            {inGroup.map((a) => {
+              const value = balances[a.name] ?? ''
+              const check = parseBalanceInput(value, a.grp)
+              return (
+                <div key={a.id} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <label htmlFor={`bal-${a.id}`} className="min-w-0 flex-1 text-base [overflow-wrap:anywhere]">
+                      {a.name}
+                    </label>
+                    {a.grp === 'balance' && (
+                      <button
+                        type="button"
+                        onClick={() => set(a, flip(value))}
+                        aria-label={`Сменить знак: ${a.name}`}
+                        className="size-11 flex-none rounded-xl border border-line2 text-base text-ink2 active:bg-sub"
+                      >
+                        ±
+                      </button>
+                    )}
+                    <input
+                      id={`bal-${a.id}`}
+                      inputMode="decimal"
+                      value={value}
+                      onChange={(e) => set(a, e.target.value)}
+                      aria-label={`Остаток ${a.name}`}
+                      aria-invalid={'problem' in check}
+                      className="h-11 w-28 flex-none rounded-xl border border-line2 bg-card px-3 text-right text-base text-ink tabular-nums"
+                    />
+                    <span className="text-cap text-ink2">€</span>
+                  </div>
+                  {'problem' in check && <span className="text-cap font-semibold text-amber-ink">{check.problem}</span>}
+                </div>
+              )
+            })}
+          </div>
+        )
+      })}
     </>
   )
 }

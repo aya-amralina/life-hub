@@ -17,7 +17,7 @@ import { formatAmount, formatEur, plural, toCents } from '@/lib/format'
 import { forecastEnd, plannedQuestions, weekSpendings } from '@/lib/rules/money'
 import { nextOccurrence, ruleState } from '@/lib/rules/recurringEdit'
 import { NotesSection } from '@/features/notes/NotesCard'
-import { useAddExpense, useAllTransactions, useDeleteTransaction, usePlanTransactions, useRecurring, useWeekLimits, type Transaction } from './api'
+import { useAccountName, useAddExpense, useAllTransactions, useDeleteTransaction, usePlanTransactions, useRecurring, useWeekLimits, type Transaction } from './api'
 import { CutNextWeek } from './CutNextWeek'
 import { EnvelopesTab } from './EnvelopesTab'
 import { LimitsSheet } from './LimitsSheet'
@@ -200,6 +200,7 @@ function WeekTab() {
 
 /** A week's expense: own ones (not from Excel) are removed by a swipe left or by a tap → «Удалить»; a toast brings it back. */
 function SpendingRow({ t, today }: { t: Transaction; today: string }) {
+  const accountName = useAccountName()
   const del = useDeleteTransaction()
   const add = useAddExpense()
   const toast = useToast()
@@ -210,7 +211,7 @@ function SpendingRow({ t, today }: { t: Transaction; today: string }) {
     toast({
       text: `${t.title} · ${formatEur(toCents(t.amount_eur))} — убрала`,
       actionLabel: 'Вернуть',
-      onAction: () => add.mutate({ id: t.id, date: t.date, amount_eur: t.amount_eur, category: t.category, account: t.account, title: t.title }),
+      onAction: () => add.mutate({ id: t.id, date: t.date, amount_eur: t.amount_eur, category: t.category, account_id: t.account_id, title: t.title }),
     })
   }
   const body = (
@@ -218,7 +219,7 @@ function SpendingRow({ t, today }: { t: Transaction; today: string }) {
       <span className="min-w-0 flex-1">
         <span className="block text-base [overflow-wrap:anywhere]">{t.title}</span>
         <span className="block text-cap text-ink2">
-          {[formatRelativeDay(t.date, today), t.category !== t.title ? t.category : null, t.account, t.envelope_id ? 'конверт' : null].filter(Boolean).join(' · ')}
+          {[formatRelativeDay(t.date, today), t.category !== t.title ? t.category : null, accountName(t), t.envelope_id ? 'конверт' : null].filter(Boolean).join(' · ')}
         </span>
       </span>
       <span className="text-base tabular-nums">{formatEur(toCents(t.amount_eur))}</span>

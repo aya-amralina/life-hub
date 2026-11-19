@@ -1,6 +1,6 @@
 import type { AccountGroup } from '../constants'
 import type { ISODate } from '../dates'
-import { toCents } from '../format'
+import { parseSignedEurInput, toCents } from '../format'
 import { balanceAt, isFact, isInPlan, type TxLike } from './money'
 
 /**
@@ -119,7 +119,7 @@ export function goalAccountProblem(accountId: string | null, accounts: readonly 
 }
 
 /** Accounts a choice offers: not archived (the one already chosen stays), optionally of one group, in order. */
-export function accountOptions(accounts: readonly AccountLike[], opts: { group?: AccountGroup; keep?: string | null } = {}): AccountLike[] {
+export function accountOptions<A extends AccountLike>(accounts: readonly A[], opts: { group?: AccountGroup; keep?: string | null } = {}): A[] {
   return accounts
     .filter((a) => (!a.archived || a.id === opts.keep) && (!opts.group || a.grp === opts.group || a.id === opts.keep))
     .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
@@ -210,4 +210,26 @@ export function goalAccountNow(
   if (others.length) return null
   const cents = accountBalanceAt(txs, account.id, today)
   return cents === null ? null : { cents, account }
+}
+
+/**
+ * A real balance typed in the review: empty — not entered; below zero only on «Баланс» (Dispo). Returns the cents,
+ * null for empty, or the reason in words.
+ */
+export function parseBalanceInput(text: string, grp: string): { cents: number | null } | { problem: string } {
+  if (!text.trim()) return { cents: null }
+  const cents = parseSignedEurInput(text)
+  if (cents === null) return { problem: 'Сумма — цифрами, например 120,50.' }
+  if (cents < 0 && grp !== 'balance') return { problem: 'Минус — только у счетов «Баланса».' }
+  return { cents }
+}
+
+/** The review's balances (typed per account name) → rows for «Остатки»: entered and valid ones, accounts not archived. */
+export function reviewBalances<A extends AccountLike>(typed: Readonly<Record<string, string>>, accounts: readonly A[]): { account: A; amount: number }[] {
+  return accounts
+    .filter((a) => !a.archived && typed[a.name] !== undefined)
+    .flatMap((a) => {
+      const r = parseBalanceInput(typed[a.name]!, a.grp)
+      return 'cents' in r && r.cents !== null ? [{ account: a, amount: r.cents / 100 }] : []
+    })
 }

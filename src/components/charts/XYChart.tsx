@@ -137,7 +137,8 @@ export function XYChart({
               yAxisId="left"
               x={todayKey}
               stroke="var(--line2)"
-              label={{ value: todayLabel, position: 'insideTopRight', fill: 'var(--ink)', fontSize: 13, fontWeight: 600 }}
+              // near the left edge the label goes right of the line — otherwise it sits on the axis ticks
+              label={{ value: todayLabel, position: data.findIndex((d) => d.key === todayKey) < data.length / 5 ? 'insideTopLeft' : 'insideTopRight', fill: 'var(--ink)', fontSize: 13, fontWeight: 600 }}
             />
           )}
           {!empty && (

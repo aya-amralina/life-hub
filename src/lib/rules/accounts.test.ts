@@ -12,6 +12,8 @@ import {
   groupDelta,
   groupOfAccount,
   legacyAccountName,
+  parseBalanceInput,
+  reviewBalances,
   reconcileAccounts,
   type AccTx,
   type AccountLike,
@@ -221,5 +223,19 @@ describe('accounts: «сейчас» of a goal', () => {
     expect(goalAccountNow(goals[1]!, goals, accs, txs, '2026-11-22')).toBeNull()
     expect(goalAccountNow({ id: 'g5', account_id: null }, goals, accs, txs, '2026-11-22')).toBeNull()
     expect(goalAccountNow(goals[0]!, goals, accs, txs, '2026-11-17')).toBeNull()
+  })
+})
+
+describe('accounts: balances typed in the review', () => {
+  it('empty — not entered; below zero only on «Баланс»', () => {
+    expect(parseBalanceInput(' ', 'balance')).toEqual({ cents: null })
+    expect(parseBalanceInput('−12,50', 'balance')).toEqual({ cents: -1250 })
+    expect(parseBalanceInput('-1', 'cushion')).toEqual({ problem: 'Минус — только у счетов «Баланса».' })
+    expect(parseBalanceInput('сто', 'balance')).toEqual({ problem: 'Сумма — цифрами, например 120,50.' })
+  })
+  it('rows for «Остатки»: by account name, valid and not archived only', () => {
+    const list = [acc('Основной', 'balance', 10), acc('Подушка', 'cushion', 50), acc('Старый', 'balance', 5, true)]
+    const rows = reviewBalances({ Основной: '-3,5', Подушка: '-1', Старый: '7', Revolut: '9' }, list)
+    expect(rows.map((r) => [r.account.id, r.amount])).toEqual([['Основной', -3.5]])
   })
 })

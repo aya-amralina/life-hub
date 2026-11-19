@@ -5,13 +5,14 @@ import { dayChipLabel, formatWeekdayDate, todayBerlin } from '@/lib/dates'
 import { formatEur, toCents } from '@/lib/format'
 import { plannedQuestions } from '@/lib/rules/money'
 import { confirmPatch, unconfirmPatch } from '@/lib/rules/operation'
-import { useAnswerPlanned, usePlanTransactions, type PlanTx } from './api'
+import { useAccountName, useAnswerPlanned, usePlanTransactions, type PlanTx } from './api'
 
 /**
  * Rule 18: a planned operation whose day has come asks once — income «Пришло?», expense «Списалось?».
  * Confirm (the amount can be corrected), another date, or cancel (out of the plan). Stands first until answered.
  */
 export function MoneyQuestions({ only }: { only?: number } = {}) {
+  const accountName = useAccountName()
   const today = todayBerlin()
   const txs = usePlanTransactions()
   const answerPlanned = useAnswerPlanned()
@@ -38,7 +39,7 @@ export function MoneyQuestions({ only }: { only?: number } = {}) {
             question={question}
             title={tx.title}
             lang="de"
-            meta={[tx.date === today ? 'сегодня' : formatWeekdayDate(tx.date), tx.account].filter(Boolean).join(' · ')}
+            meta={[tx.date === today ? 'сегодня' : formatWeekdayDate(tx.date), accountName(tx)].filter(Boolean).join(' · ')}
             confirmLabel="Подтвердить"
             today={today}
             amount={{

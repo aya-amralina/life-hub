@@ -12,6 +12,7 @@ import { ensureWeek, weekKeys } from '@/features/weeks/api'
 
 export type Transaction = Tables<'transactions'>
 export type WeekLimit = Tables<'week_limits'>
+export type Account = Tables<'accounts'>
 
 export const moneyKeys = {
   all: ['money'] as const,
@@ -49,12 +50,33 @@ export function useWeekTransactions(monday: ISODate) {
   })
 }
 
+/** Accounts (decision 18.11.2026), in their order; archived ones too — old operations may point to them. */
+export function useAccounts() {
+  return useQuery({
+    queryKey: [...moneyKeys.all, 'accounts'] as const,
+    queryFn: async (): Promise<Account[]> => {
+      const { data, error } = await supabase.from('accounts').select('*').order('sort_order').order('name')
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+/** The account's name of an operation: by account_id; rows of the version before it carry only the old text. */
+export function useAccountName() {
+  const accounts = useAccounts()
+  return useMemo(() => {
+    const names = new Map((accounts.data ?? []).map((a) => [a.id, a.name]))
+    return (t: { account_id?: string | null; account?: string | null }) => (t.account_id ? (names.get(t.account_id) ?? null) : (t.account ?? null))
+  }, [accounts.data])
+}
+
 /** Quick expense: saved immediately as fact (group «Жизнь», no envelope). */
 export function useAddExpense() {
   const qc = useQueryClient()
   return useMutation({
     // the id is made here, so «Отменить» works even before the expense reaches the server (offline queue)
-    mutationFn: async (tx: Pick<TablesInsert<'transactions'>, 'date' | 'amount_eur' | 'category' | 'account' | 'title'> & { id: string }) => {
+    mutationFn: async (tx: Pick<TablesInsert<'transactions'>, 'date' | 'amount_eur' | 'category' | 'account_id' | 'title'> & { id: string }) => {
       const values = { ...tx, kind: 'expense', grp: 'Жизнь', is_planned: false, confirmed_at: new Date().toISOString() }
       await write({ table: 'transactions', action: 'insert', values })
       return values
@@ -63,7 +85,7 @@ export function useAddExpense() {
       // show it in the week at once (offline the refetch waits for the network)
       await qc.cancelQueries({ queryKey: moneyKeys.all })
       const monday = weekStart(tx.date)
-      const row = { envelope_id: null, note: null, source_id: null, cancelled_at: null, entry_kind: 'one_off', week_no: null, debt_id: null, planned_amount_eur: null, recurring_id: null, occurrence_date: null, user_id: '', created_at: '', updated_at: '', ...tx, kind: 'expense', grp: 'Жизнь', is_planned: false, confirmed_at: new Date().toISOString() } as Transaction
+      const row = { account: null, to_account_id: null, envelope_id: null, note: null, source_id: null, cancelled_at: null, entry_kind: 'one_off', week_no: null, debt_id: null, planned_amount_eur: null, recurring_id: null, occurrence_date: null, user_id: '', created_at: '', updated_at: '', ...tx, kind: 'expense', grp: 'Жизнь', is_planned: false, confirmed_at: new Date().toISOString() } as Transaction
       qc.setQueryData<Transaction[]>(moneyKeys.week(monday), (old) => (old ? [row, ...old] : [row]))
     },
     onSettled: () => qc.invalidateQueries({ queryKey: moneyKeys.all }),
@@ -316,14 +338,17 @@ export function useSaveGoalBalance() {
   })
 }
 
-/** The Sunday review writes the balances it asks for into «Остатки» (one row per day and account). */
+/**
+ * The Sunday review writes the balances it asks for into «Остатки»: one row per day and account (account_id). Until
+ * migration 0018 the old text column is still required — it gets the account's name.
+ */
 export function useSaveActualBalances() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ date, balances }: { date: ISODate; balances: Record<string, number> }) => {
-      const rows = Object.entries(balances).map(([account, amount]) => ({ date, account, amount_eur: amount, origin: 'review' }))
+    mutationFn: async ({ date, balances }: { date: ISODate; balances: { account: Pick<Account, 'id' | 'name'>; amount: number }[] }) => {
+      const rows = balances.map(({ account, amount }) => ({ date, account_id: account.id, account: account.name, amount_eur: amount, origin: 'review' }))
       if (!rows.length) return
-      const { error } = await supabase.from('actual_balances').upsert(rows, { onConflict: 'user_id,date,account' })
+      const { error } = await supabase.from('actual_balances').upsert(rows, { onConflict: 'user_id,date,account_id' })
       if (error) throw error
     },
     onSettled: () => qc.invalidateQueries({ queryKey: moneyKeys.all }),

@@ -10,7 +10,7 @@ import { formatDayMonth, todayBerlin, type ISODate } from '@/lib/dates'
 import { formatEur, toCents } from '@/lib/format'
 import { forecastEnd } from '@/lib/rules/money'
 import { describeRule, linkCandidates, nextOccurrence, ruleState } from '@/lib/rules/recurringEdit'
-import { useAllTransactions, useRecurring, type Recurring } from './api'
+import { useAccountName, useAllTransactions, useRecurring, type Recurring } from './api'
 import { RecurringLinkSheet } from './RecurringLinkSheet'
 import { RecurringSheet } from './RecurringSheet'
 
@@ -106,6 +106,7 @@ export function RecurringTab() {
 }
 
 function RuleRow({ r, next, today, muted = false, onOpen }: { r: Recurring; next: ISODate | null; today: ISODate; muted?: boolean; onOpen: () => void }) {
+  const accountName = useAccountName()
   const when = muted
     ? `закончился ${formatDayMonth(r.end_date ?? today)}`
     : !r.active
@@ -122,7 +123,7 @@ function RuleRow({ r, next, today, muted = false, onOpen }: { r: Recurring; next
           <span lang="de" className={cn('block text-base [overflow-wrap:anywhere]', (muted || !r.active) && 'text-ink3')}>
             {r.title}
           </span>
-          <span className="block text-cap text-ink2">{[describeRule(r), r.account, when].filter(Boolean).join(' · ')}</span>
+          <span className="block text-cap text-ink2">{[describeRule(r), accountName(r), when].filter(Boolean).join(' · ')}</span>
         </span>
         <span className={cn('text-base tabular-nums', (muted || !r.active) && 'text-ink3')}>{signed(r)}</span>
         <ChevronRight size={16} strokeWidth={1.75} aria-hidden="true" className="flex-none text-ink3" />

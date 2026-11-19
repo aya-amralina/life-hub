@@ -7,6 +7,7 @@ import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { ACCOUNTS, WEEK_CATEGORIES } from '@/lib/constants'
 import { todayBerlin } from '@/lib/dates'
 import { formatAmount, formatEur, parseEurInput } from '@/lib/format'
+import { legacyAccountName } from '@/lib/rules/accounts'
 import { forecastEnd, isWeekRow } from '@/lib/rules/money'
 import { DEBT_DIRECTION_LABEL, OPERATION_GROUPS, OPERATION_KIND_LABEL, operationForm, operationRow, operationValid, type DebtDirection, type OperationForm, type OperationKind } from '@/lib/rules/operation'
 import { isVirtual, materialize } from '@/lib/rules/recurring'
@@ -25,6 +26,7 @@ import {
   type PlanTx,
   type Recurring,
   type Transaction,
+  useAccounts,
 } from './api'
 
 const field = 'h-12 w-full rounded-xl border border-line2 bg-card px-4 text-base text-ink outline-none placeholder:text-ink3 focus:border-ink2'
@@ -46,6 +48,9 @@ const blank = (): OperationForm => ({ kind: 'expense', title: '', cents: null, d
  * «Сделать регулярным» (a stored planned one): the rule sheet, prefilled from the operation; the operation becomes
  * the rule's first occurrence, then the usual «Уже есть в плане» for the similar ones.
  */
+/** The group of an account by its name; unknown — «Баланс». */
+const groupOfName = (accounts: readonly { name: string; grp: string }[], name: string) => accounts.find((a) => a.name === name)?.grp ?? 'balance'
+
 export function OperationSheet({ open, onClose, tx }: { open: boolean; onClose: () => void; tx: PlanTx | null }) {
   const all = useAllTransactions()
   const [ruleFrom, setRuleFrom] = useState<Transaction | null>(null)
@@ -95,6 +100,7 @@ function OperationFormBody({ tx, onClose, onMakeRecurring }: { tx: PlanTx | null
   const del = useDeleteTransaction()
   const answer = useAnswerPlanned()
   const toast = useToast()
+  const accounts = useAccounts()
   const set = (p: Partial<OperationForm>) => setF((old) => ({ ...old, ...p }))
   const week = tx !== null && isWeekRow(tx)
   const form = { ...f, cents: parseEurInput(amount) }
@@ -169,7 +175,13 @@ function OperationFormBody({ tx, onClose, onMakeRecurring }: { tx: PlanTx | null
               onChange={(category) => set({ category })}
             />
           )}
-          <Choice label="Счёт" options={ACCOUNTS.map((a) => ({ value: a, label: a }))} value={f.account} onChange={(account) => set({ account })} />
+          <Choice
+            label="Счёт"
+            // an expense goes only from «Баланс» (decision 18.11.2026): the old names mapped to accounts, the chosen one kept
+            options={ACCOUNTS.filter((a) => f.kind !== 'expense' || a === f.account || groupOfName(accounts.data ?? [], legacyAccountName(a)) === 'balance').map((a) => ({ value: a, label: a }))}
+            value={f.account}
+            onChange={(account) => set({ account })}
+          />
           {f.kind === 'expense' && pots.length > 0 && (
             <Choice
               label="Из конверта — не входит в лимит недели"

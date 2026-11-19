@@ -13,9 +13,10 @@ import { ProgressBar } from '@/components/ui/ProgressBar'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { formatDayMonth, formatWeekdayDate, todayBerlin } from '@/lib/dates'
 import { formatEur, parseEurInput, plural } from '@/lib/format'
+import { goalAccountNow } from '@/lib/rules/accounts'
 import { debtSummary, envelopeSummary, envelopesLeft, goalProgress } from '@/lib/rules/money'
 import { DebtSheet } from './DebtSheet'
-import { useActualBalances, useAllTransactions, useCreateEnvelope, useDebts, useEnvelopes, useSaveGoalBalance, useUpdateEnvelope, type Debt, type Envelope } from './api'
+import { useAccounts, useActualBalances, useAllTransactions, useCreateEnvelope, useDebts, useEnvelopes, useSaveGoalBalance, useUpdateEnvelope, type Debt, type Envelope } from './api'
 
 const field = 'h-12 w-full rounded-xl border border-line2 bg-card px-4 text-base text-ink outline-none focus:border-ink2'
 const DIRECTION: Record<string, string> = { i_owe: 'я должна', owed_to_me: 'мне должны', from_pot: 'заём из копилки' }
@@ -31,6 +32,7 @@ export function EnvelopesTab() {
   const txs = useAllTransactions()
   const debts = useDebts()
   const balances = useActualBalances()
+  const accounts = useAccounts()
   const [adding, setAdding] = useState(false)
   const [editingEnv, setEditingEnv] = useState<Envelope | null>(null)
   // the debt sheet: null — closed, 'new' — a new debt, else the one being edited
@@ -73,7 +75,7 @@ export function EnvelopesTab() {
           ))}
           {goals.length > 0 && <h2 className="m-0 pt-2 text-title font-semibold">Цели</h2>}
           {goals.map((g) => (
-            <GoalCard key={g.id} g={g} p={goalProgress(g, balances.data ?? [], debtList, tx)} loans={open.filter((d) => d.direction === 'from_pot' && d.pot_id === g.id)} onEdit={() => setEditingEnv(g)} />
+            <GoalCard key={g.id} g={g} p={goalProgress(g, balances.data ?? [], debtList, tx)} onAccount={goalAccountNow(g, goals, accounts.data ?? [], tx, todayBerlin())} loans={open.filter((d) => d.direction === 'from_pot' && d.pot_id === g.id)} onEdit={() => setEditingEnv(g)} />
           ))}
         </>
       )}
@@ -133,8 +135,24 @@ function EnvelopeCard({ e, s, onEdit }: { e: Envelope; s: ReturnType<typeof enve
   )
 }
 
-function GoalCard({ g, p, loans, onEdit }: { g: Envelope; p: ReturnType<typeof goalProgress>; loans: Debt[]; onEdit: () => void }) {
+function GoalCard({
+  g,
+  p: stored,
+  onAccount,
+  loans,
+  onEdit,
+}: {
+  g: Envelope
+  p: ReturnType<typeof goalProgress>
+  /** the goal is the only one on its account: «сейчас» is that account's balance, nothing to enter */
+  onAccount: ReturnType<typeof goalAccountNow>
+  loans: Debt[]
+  onEdit: () => void
+}) {
   const today = todayBerlin()
+  const p = onAccount
+    ? { ...stored, nowCents: onAccount.cents, asOf: today, share: stored.targetCents ? Math.min(1, Math.max(0, onAccount.cents) / stored.targetCents) : null }
+    : stored
   const late = p.due !== null && p.due < today && (p.share ?? 0) < 1
   const save = useSaveGoalBalance()
   const toast = useToast()
@@ -153,10 +171,10 @@ function GoalCard({ g, p, loans, onEdit }: { g: Envelope; p: ReturnType<typeof g
       </div>
       {p.targetCents !== null && <ProgressBar value={p.nowCents ?? 0} max={p.targetCents} fillClass="bg-money" label={`${g.name}: накоплено`} />}
       <div className="flex flex-wrap items-center gap-2 text-cap text-ink2 tabular-nums">
-        {p.nowCents !== null ? <span>остаток на {formatDayMonth(p.asOf!)}</span> : <span>остаток пока не внесён</span>}
+        {onAccount ? <span>остаток счёта {onAccount.account.name}</span> : p.nowCents !== null ? <span>остаток на {formatDayMonth(p.asOf!)}</span> : <span>остаток пока не внесён</span>}
         {p.due && (late ? <MetaChip kind="late" text={`Срок прошёл · ${formatWeekdayDate(p.due)}`} /> : <MetaChip kind="flag" text={`до ${formatWeekdayDate(p.due)}`} />)}
       </div>
-      {entering ? (
+      {onAccount ? null : entering ? (
         <form
           className="flex gap-2"
           onSubmit={(e) => {
@@ -167,7 +185,7 @@ function GoalCard({ g, p, loans, onEdit }: { g: Envelope; p: ReturnType<typeof g
             setInput('')
           }}
         >
-          <input autoFocus value={input} onChange={(e) => setInput(e.target.value)} inputMode="decimal" placeholder="Сейчас в кармашке, €" aria-label={`Остаток: ${g.name}`} className={`${field} min-w-0 flex-1`} />
+          <input autoFocus value={input} onChange={(e) => setInput(e.target.value)} inputMode="decimal" placeholder="Сейчас на цели, €" aria-label={`Остаток: ${g.name}`} className={`${field} min-w-0 flex-1`} />
           <Button type="submit" disabled={cents === null}>
             Сохранить
           </Button>
@@ -264,7 +282,7 @@ function EnvelopeForm({ env, onClose }: { env: Envelope | null; onClose: () => v
         onChange={setType}
       />
       <p className="m-0 text-cap text-ink2">
-        {type === 'goal' ? 'Копишь к сумме. Сколько уже накоплено, считается по остатку кармашка — внеси его кнопкой «Внести остаток».' : 'Деньги отложены на трату и не входят в лимит недели.'}
+        {type === 'goal' ? 'Копишь к сумме. Если цель одна на своём счёте, накоплено — остаток счёта; если на счёте несколько целей — внеси долю кнопкой «Внести остаток».' : 'Деньги отложены на трату и не входят в лимит недели.'}
       </p>
       <input autoFocus={!env} value={name} onChange={(e) => setName(e.target.value)} placeholder="На что" aria-label="Название" className={field} />
       {type === 'goal' ? (
