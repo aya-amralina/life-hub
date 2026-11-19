@@ -25,6 +25,6 @@ test('силовая: очередь недели → подход в 1 тап �
 
   await expect(page.getByText('Сегодня силовая засчитана.')).toBeVisible()
   await bodyTab(page, 'Сегодня')
-  await expect(page.getByText(/Силовые 1 из \d/)).toBeVisible()
+  await expect(page.getByText(/\. Силовые 1 из \d/)).toBeVisible() // the header line of «Сегодня»
   await expect(page.getByText('Кардио · 15 мин', { exact: true })).toBeVisible()
 })
