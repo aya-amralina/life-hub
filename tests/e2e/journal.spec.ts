@@ -6,6 +6,8 @@ test.afterAll(cleanupTestUser)
 
 test('заметка дня: «Сохранить» только после правки, черновик не теряется, журнал собирает записи', async ({ page }) => {
   test.skip(!live, NEEDS)
+  // many steps (a reload for the draft, the journal) plus the cleanup of beforeEach: ~30 s in a full run — triple time
+  test.slow()
   const sb = await testClient()
   expect((await sb.from('daily_logs').insert({ date: berlinDate(-2), note: 'Старая запись про сон', mood: 6, sleep_h: 7 })).error).toBeNull()
   await sb.auth.signOut()
