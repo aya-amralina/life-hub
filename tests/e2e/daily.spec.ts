@@ -96,7 +96,7 @@ test('сервер не принял отметку: она возвращает
   )
   const habit = page.getByRole('checkbox', { name: /Вода/ })
   await habit.click()
-  await expect(page.getByText('Не сохранилось: сервер не принял. Отметка вернулась как была')).toBeVisible()
+  await expect(page.getByText('Не сохранилось: сервер не принял изменение. На экране — то, что на сервере')).toBeVisible()
   await expect(habit).toHaveAttribute('aria-checked', 'false')
   await expect(page.getByText(/ждут? сети/)).toHaveCount(0) // rejected, not queued
   await page.unroute('**/rest/v1/daily_logs*')

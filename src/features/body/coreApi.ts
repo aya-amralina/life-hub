@@ -1,10 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { write } from '@/app/offlineQueue'
-import { useToast } from '@/app/toastContext'
 import { supabase } from '@/lib/supabase'
 import type { Tables, TablesUpdate } from '@/lib/db/types'
 import type { ISODate } from '@/lib/dates'
-import { NOT_SAVED } from './api'
 
 export type CoreProgram = Tables<'core_programs'>
 export type CoreSession = Tables<'core_sessions'>
@@ -63,7 +61,6 @@ type SessionPatch = Partial<Pick<CoreSession, 'done' | 'dome' | 'done_at'>>
  */
 export function useSaveCoreSession(program: Pick<CoreProgram, 'id' | 'stage'>, date: ISODate) {
   const qc = useQueryClient()
-  const toast = useToast()
   return useMutation({
     networkMode: 'always',
     // ticks of one session go out one by one (each sends the whole `done` list — the last one must win)
@@ -88,10 +85,7 @@ export function useSaveCoreSession(program: Pick<CoreProgram, 'id' | 'stage'>, d
       })
       return { prev }
     },
-    onError: (_e, _v, ctx) => {
-      qc.setQueryData(coreKeys.sessions, ctx?.prev)
-      toast({ text: NOT_SAVED })
-    },
+    onError: (_e, _v, ctx) => qc.setQueryData(coreKeys.sessions, ctx?.prev),
     onSettled: () => (qc.isMutating({ mutationKey: ['core_sessions', 'save', date] }) <= 1 ? qc.invalidateQueries({ queryKey: coreKeys.sessions }) : undefined),
   })
 }
@@ -99,7 +93,6 @@ export function useSaveCoreSession(program: Pick<CoreProgram, 'id' | 'stage'>, d
 /** «Перейти» / «Ещё неделю». */
 export function useUpdateCoreProgram() {
   const qc = useQueryClient()
-  const toast = useToast()
   return useMutation({
     networkMode: 'always',
     mutationFn: async ({ id, patch }: { id: string; patch: TablesUpdate<'core_programs'> }) => {
@@ -111,10 +104,7 @@ export function useUpdateCoreProgram() {
       if (prev) qc.setQueryData<CoreProgram>(coreKeys.program, { ...prev, ...patch } as CoreProgram)
       return { prev }
     },
-    onError: (_e, _v, ctx) => {
-      qc.setQueryData(coreKeys.program, ctx?.prev)
-      toast({ text: 'Не сохранилось: сервер не принял. Этап остался прежним' })
-    },
+    onError: (_e, _v, ctx) => qc.setQueryData(coreKeys.program, ctx?.prev),
     onSettled: () => qc.invalidateQueries({ queryKey: coreKeys.program }),
   })
 }

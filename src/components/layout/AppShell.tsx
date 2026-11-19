@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { flush, usePendingChanges } from '@/app/offlineQueue'
+import { useRejectedWrites } from '@/app/rejectedWrites'
 import { useToast } from '@/app/toastContext'
 import { Navigate, Outlet, useLocation } from 'react-router'
 import { AddActionContext, AddSheetContext, type AddForm, type OpenAdd } from '@/app/addSheetContext'
@@ -63,6 +64,8 @@ function Shell({
   online: boolean
 }) {
   useRollover()
+  // a failed write is never silent (Деньги, Работа, Учёба, Тело …)
+  useRejectedWrites()
   // the table view takes the full width (laptop); every other screen keeps the 560px column
   const [wide, setWide] = useState(false)
   const pending = usePendingChanges()

@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { write } from '@/app/offlineQueue'
-import { useToast } from '@/app/toastContext'
 import { supabase } from '@/lib/supabase'
 import type { Tables, TablesInsert } from '@/lib/db/types'
 import { addDaysISO, type ISODate } from '@/lib/dates'
@@ -59,7 +58,6 @@ export function useStages() {
  */
 export function useSaveDailyLog(date: ISODate) {
   const qc = useQueryClient()
-  const toast = useToast()
   return useMutation({
     // one day's changes go out one by one: two quick taps (1 → 2 cups) never reach the server in reverse order
     scope: { id: `daily_logs:${date}` },
@@ -74,18 +72,12 @@ export function useSaveDailyLog(date: ISODate) {
       qc.setQueryData<DailyLog | null>(bodyKeys.day(date), (old) => ({ ...emptyLog(date), ...old, ...patch }) as DailyLog)
       return { prev }
     },
-    // the server said no: the mark goes back, and says so — never «saved» when the base has nothing
-    onError: (_e, _v, ctx) => {
-      qc.setQueryData(bodyKeys.day(date), ctx?.prev ?? null)
-      toast({ text: NOT_SAVED })
-    },
+    // the server said no: the mark goes back (the toast is app-wide — app/rejectedWrites.ts)
+    onError: (_e, _v, ctx) => qc.setQueryData(bodyKeys.day(date), ctx?.prev ?? null),
     // refetch after the last change of the queue only — an earlier answer must not flash the older value
     onSettled: () => (qc.isMutating({ mutationKey: ['daily_logs', 'save', date] }) <= 1 ? qc.invalidateQueries({ queryKey: ['daily_logs'] }) : undefined),
   })
 }
-
-/** A write the server rejected (not a missing network — that one waits in the queue). */
-export const NOT_SAVED = 'Не сохранилось: сервер не принял. Отметка вернулась как была'
 
 function emptyLog(date: ISODate): Partial<DailyLog> {
   return {

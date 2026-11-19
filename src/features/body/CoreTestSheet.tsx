@@ -40,7 +40,7 @@ function TestForm({ programId, date, onDone }: { programId: string; date: ISODat
           save
             .mutateAsync({ date, fingers, dome })
             .then((r) => toast({ text: r === 'queued' ? `Тест сохранён на телефоне${what} — отправится, когда будет сеть` : `Тест записан${what}` }))
-            .catch(() => toast({ text: 'Не сохранилось: сервер не принял тест. Попробуй ещё раз' }))
+            .catch(() => {}) // a failure is told app-wide (app/rejectedWrites.ts)
           onDone()
         }}
       >
