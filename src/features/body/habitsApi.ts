@@ -141,3 +141,83 @@ export function useHabitDay(date: ISODate, minimumMode: boolean) {
     day: dayMarks(marks.data ?? [], date, minimumMode),
   }
 }
+
+export type WorkoutSession = Tables<'workout_sessions'>
+export const workoutKeys = { sessions: ['workout_sessions'] as const, sets: ['strength_sets'] as const, activities: ['activities'] as const, types: ['activity_types'] as const }
+
+/** All strength sessions (one a day at most — a few hundred a year). */
+export function useWorkoutSessions() {
+  return useQuery({
+    queryKey: workoutKeys.sessions,
+    queryFn: async (): Promise<WorkoutSession[]> => {
+      const { data, error } = await supabase.from('workout_sessions').select('*').order('date')
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+type SessionPatch = Partial<Pick<WorkoutSession, 'template_id' | 'place' | 'dome' | 'cardio_min' | 'done_at'>>
+export type SetWrite = { exercise_key: string; exercise: string; workout: string; reps: number[]; loads: string[]; sets_done: boolean[] }
+type FinishWrite = { dome: boolean | null; cardio: number | null; cardioTypeId: string | null; activityId: string | null }
+
+/**
+ * The strength session of a day: the session row (upsert by day, the id made once on the screen), a row per exercise
+ * (upsert by session + exercise, each tick), «Готово» (cardio → an activity of the day of type «Кардио», seeded by 0023) and «Не засчитывать». All through the offline queue, in order (one scope per day), optimistic.
+ */
+export function useWorkoutWrites(sessionId: string, date: ISODate, base: { template_id: string; place: string }) {
+  const qc = useQueryClient()
+  const scope = { id: `workout:${date}` }
+  const patchSession = (patch: SessionPatch & { activity_id?: string | null }) =>
+    qc.setQueryData<WorkoutSession[]>(workoutKeys.sessions, (old = []) => {
+      const i = old.findIndex((s) => s.id === sessionId)
+      if (i >= 0) return old.map((s, j) => (j === i ? { ...s, ...patch } : s))
+      return [...old, { id: sessionId, date, dome: null, cardio_min: null, activity_id: null, done_at: null, ...base, ...patch } as WorkoutSession]
+    })
+  const sendSession = (patch: SessionPatch & { activity_id?: string | null }) =>
+    write({ table: 'workout_sessions', action: 'upsert', values: { id: sessionId, date, ...base, ...patch }, onConflict: 'user_id,date' })
+  const settle = () => qc.invalidateQueries({ queryKey: workoutKeys.sessions })
+
+  const session = useMutation({
+    scope,
+    mutationFn: (patch: SessionPatch) => sendSession(patch),
+    onMutate: (patch) => patchSession(patch),
+    onSettled: settle,
+  })
+  const set = useMutation({
+    scope,
+    mutationFn: async (row: SetWrite) => {
+      await sendSession({})
+      await write({ table: 'strength_sets', action: 'upsert', values: { date, session_id: sessionId, ...row }, onConflict: 'user_id,session_id,exercise_key' })
+    },
+    onMutate: (row) => {
+      patchSession({})
+      qc.setQueryData<Tables<'strength_sets'>[]>(workoutKeys.sets, (old = []) => {
+        const i = old.findIndex((r) => r.session_id === sessionId && r.exercise_key === row.exercise_key)
+        const next = { id: `local-${row.exercise_key}`, date, session_id: sessionId, load: null, hard_at_end: null, note: null, ...row } as Tables<'strength_sets'>
+        return i >= 0 ? old.map((r, j) => (j === i ? { ...r, ...row } : r)) : [...old, next]
+      })
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: workoutKeys.sets }),
+  })
+  const finish = useMutation({
+    scope,
+    mutationFn: async (f: FinishWrite) => {
+      // «Кардио» is seeded by migration 0023 — never created here (offline or on two devices it would double)
+      if (f.activityId && f.cardio && f.cardioTypeId) await write({ table: 'activities', action: 'insert', values: { id: f.activityId, date, type_id: f.cardioTypeId, minutes: f.cardio } })
+      return sendSession({ dome: f.dome, cardio_min: f.cardio, activity_id: f.activityId, done_at: new Date().toISOString() })
+    },
+    onMutate: (f) => patchSession({ dome: f.dome, cardio_min: f.cardio, activity_id: f.activityId, done_at: new Date().toISOString() }),
+    onSettled: () => Promise.all([settle(), qc.invalidateQueries({ queryKey: workoutKeys.activities }), qc.invalidateQueries({ queryKey: workoutKeys.types })]),
+  })
+  const undo = useMutation({
+    scope,
+    mutationFn: async (activityId: string | null) => {
+      await sendSession({ done_at: null, activity_id: null })
+      if (activityId) await write({ table: 'activities', action: 'delete', id: activityId })
+    },
+    onMutate: () => patchSession({ done_at: null, activity_id: null }),
+    onSettled: () => Promise.all([settle(), qc.invalidateQueries({ queryKey: workoutKeys.activities })]),
+  })
+  return { session, set, finish, undo }
+}

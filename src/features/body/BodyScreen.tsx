@@ -11,6 +11,7 @@ import { ScreenHeader } from '@/components/layout/ScreenHeader'
 import { addDaysISO, formatDayMonth, formatLongDate, formatWeekdayDate, todayBerlin, weekStart, weekdayShort, type ISODate } from '@/lib/dates'
 import { strengthWeek, weekLine } from '@/lib/rules/bodyDay'
 import { weekDaysActive, weekSessions } from '@/lib/rules/core'
+import { strengthDates } from '@/lib/rules/workouts'
 import { activeOn, dayMarks, daySet, minimumOn, minimumPhrase, stageForDate, weekHabitShare } from '@/lib/rules/habits'
 import { isItemOpen, isUpcoming } from '@/lib/rules/items'
 import { NotesSection } from '@/features/notes/NotesCard'
@@ -25,20 +26,18 @@ import { useStrengthSets } from './activityApi'
 import { useCoreProgram, useCoreSessions } from './coreApi'
 import { CoreSession } from './CoreSession'
 import { useStages, useWeekLogs } from './api'
-import { useHabits, useMarks, useWorkouts } from './habitsApi'
+import { useHabits, useMarks, useWorkoutSessions, useWorkouts } from './habitsApi'
 import { IntakeTab } from './IntakeTab'
 import { MeasurementsTab } from './MeasurementsTab'
 import { StrengthTab } from './StrengthTab'
+import { TrainingTab } from './TrainingTab'
+import { WorkoutSessionScreen } from './WorkoutSession'
 
 const TABS: readonly RouteTab[] = [
   { to: '/body', label: 'Сегодня', end: true },
   { to: '/body/training', label: 'Тренировки' },
   { to: '/body/health', label: 'Здоровье' },
   { to: '/body/charts', label: 'Динамика' },
-]
-const TRAINING: readonly RouteTab[] = [
-  { to: '/body/training/strength', label: 'Сила' },
-  { to: '/body/training/core', label: 'Кор' },
 ]
 const HEALTH: readonly RouteTab[] = [
   { to: '/body/health/intake', label: 'Приём' },
@@ -51,7 +50,6 @@ const HEALTH: readonly RouteTab[] = [
 const MOVED: Record<string, string> = {
   core: '/body/training/core',
   strength: '/body/training/strength',
-  training: '/body/training/strength',
   intake: '/body/health/intake',
   tasks: '/body/health/tasks',
   measure: '/body/health/measure',
@@ -71,7 +69,7 @@ export function BodyScreen() {
   if (path in MOVED) return <Navigate to={MOVED[path]!} replace />
   const [tab, sub] = path.split('/')
   const known =
-    path === '' || path === 'charts' || path === 'settings' || (tab === 'training' && (sub === 'strength' || sub === 'core')) || (tab === 'health' && ['intake', 'tasks', 'measure', 'notes'].includes(sub ?? ''))
+    path === '' || path === 'charts' || path === 'settings' || path === 'training' || (tab === 'training' && ['strength', 'core', 'workout'].includes(sub ?? '')) || (tab === 'health' && ['intake', 'tasks', 'measure', 'notes'].includes(sub ?? ''))
   if (!known) return <Navigate to="/body" replace />
   return (
     <>
@@ -86,7 +84,13 @@ export function BodyScreen() {
       <HeaderLine date={path === '' ? date : today} />
       {path !== 'settings' && <RouteTabs tabs={TABS} label="Вкладки «Тела»" />}
       {path === '' && <BodyToday date={date} setDate={setDate} />}
-      {tab === 'training' && <RouteTabs tabs={TRAINING} label="Тренировки" variant="sub" />}
+      {path === 'training' && <TrainingTab />}
+      {tab === 'training' && sub && (
+        <Link to="/body/training" className="flex min-h-11 items-center self-start text-base text-ink2 no-underline">
+          ← Тренировки
+        </Link>
+      )}
+      {path === 'training/workout' && <WorkoutSessionScreen />}
       {path === 'training/strength' && <StrengthTab />}
       {path === 'training/core' && <CoreSession />}
       {tab === 'health' && <RouteTabs tabs={HEALTH} label="Здоровье" variant="sub" />}
@@ -125,10 +129,11 @@ export function BodyScreen() {
 function HeaderLine({ date }: { date: ISODate }) {
   const workouts = useWorkouts()
   const sets = useStrengthSets()
+  const workoutSessions = useWorkoutSessions()
   const program = useCoreProgram()
   const sessions = useCoreSessions()
   const p = program.data
-  const strength = strengthWeek(workouts.data?.queue ?? [], (sets.data ?? []).map((s) => s.date), date)
+  const strength = strengthWeek(workouts.data?.queue ?? [], strengthDates(workoutSessions.data ?? [], sets.data ?? []), date)
   const core = p && date >= p.start_date ? { done: weekSessions(sessions.data ?? [], date), of: weekDaysActive(p.start_date, date) } : null
   const line = weekLine(strength, core)
   return <p className="m-0 -mt-3 text-cap text-ink2">{[`${weekdayShort(date)}, ${formatLongDate(date)}`, line].filter(Boolean).join('. ')}</p>

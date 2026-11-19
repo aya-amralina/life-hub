@@ -14,6 +14,7 @@ import { careChoice, careEntries, careToggle, isCareDone, type CareEntry } from 
 import { isEvening, lastBefore } from '@/lib/rules/day'
 import { dayMarks, dueOn, minimumOn, type DayMarks } from '@/lib/rules/habits'
 import { isIntakeActive } from '@/lib/rules/intake'
+import { strengthDates } from '@/lib/rules/workouts'
 import { happenedQuestions } from '@/lib/rules/items'
 import { useItems } from '@/features/items/api'
 import { ItemQuestions } from '@/features/items/ItemQuestions'
@@ -24,10 +25,10 @@ import { useDailyLog, useLogsSince, useSaveDailyLog } from './api'
 import { CoreCard } from './CoreCard'
 import { CheckIn, CoffeeField } from './EveningCard'
 import { habitIcon } from './habitMeta'
-import { useHabits, useMarks, useSetMarks, useWorkouts, type Habit } from './habitsApi'
+import { useHabits, useMarks, useSetMarks, useWorkoutSessions, useWorkouts, type Habit } from './habitsApi'
+import { WORKOUT_PATH } from './WorkoutSession'
 import { SleepRow } from './HabitsCard'
 
-export const STRENGTH_PATH = '/body/training/strength'
 const SKIP_KEY = 'lifehub.body.strengthSkippedOn'
 
 /**
@@ -248,6 +249,7 @@ function IntakeRow({ date, skipped, onChange }: { date: ISODate; skipped: boolea
 function StrengthNext({ date }: { date: ISODate }) {
   const workouts = useWorkouts()
   const sets = useStrengthSets()
+  const sessions = useWorkoutSessions()
   const [skippedOn, setSkippedOn] = useState<ISODate | null>(() => {
     try {
       return localStorage.getItem(SKIP_KEY)
@@ -255,9 +257,9 @@ function StrengthNext({ date }: { date: ISODate }) {
       return null
     }
   })
-  if (workouts.isPending || sets.isPending) return null
+  if (workouts.isPending || sets.isPending || sessions.isPending) return null
   const { templates, queue } = workouts.data ?? { templates: [], queue: [] }
-  const card = strengthCard(queue, (sets.data ?? []).map((s) => s.date), date, skippedOn)
+  const card = strengthCard(queue, strengthDates(sessions.data ?? [], sets.data ?? []), date, skippedOn)
   if (!card) return null
   if (card.kind === 'done') {
     return <CheckRow label="Силовая" done onToggle={() => undefined} />
@@ -282,7 +284,7 @@ function StrengthNext({ date }: { date: ISODate }) {
         <Button variant="quiet" onClick={skip}>
           Не сегодня
         </Button>
-        <Link to={STRENGTH_PATH} className="inline-flex h-12 flex-none items-center justify-center rounded-xl border border-line2 bg-card px-4 text-base font-semibold text-ink no-underline active:bg-sub">
+        <Link to={WORKOUT_PATH} className="inline-flex h-12 flex-none items-center justify-center rounded-xl border border-line2 bg-card px-4 text-base font-semibold text-ink no-underline active:bg-sub">
           Начать
         </Link>
       </div>

@@ -23,6 +23,7 @@ export const BACKUP_TABLES = [
   'habit_marks',
   'daily_logs',
   'activities',
+  'workout_sessions',
   'intake',
   'strength_sets',
   'measurements',
@@ -39,9 +40,10 @@ export const BACKUP_FORMAT = 'life-hub-backup'
 /**
  * v2 (16.11.2026) adds `recurring` and the columns of operations that link to it; v3 (18.11.2026) adds `accounts`;
  * v4 (19.11.2026) adds «Кор» (`core_programs`, `core_sessions`, `core_tests`); v5 (19.11.2026) adds habits as data (`habits`,
- * `habit_plan`, `habit_marks`) and strength templates (`workout_templates`, `workout_queue`). Older files are still restored.
+ * `habit_plan`, `habit_marks`) and strength templates (`workout_templates`, `workout_queue`); v6 (19.11.2026) adds strength sessions
+ * (`workout_sessions`). Older files are still restored.
  */
-export const BACKUP_VERSION = 5
+export const BACKUP_VERSION = 6
 
 /** Tables each readable version may hold. */
 const CORE: readonly string[] = ['core_programs', 'core_sessions', 'core_tests']
@@ -50,8 +52,9 @@ const TABLES_OF_VERSION: Record<number, readonly string[]> = {
   1: BACKUP_TABLES.filter((t) => t !== 'recurring' && t !== 'accounts' && !CORE.includes(t) && !HABITS.includes(t)),
   2: BACKUP_TABLES.filter((t) => t !== 'accounts' && !CORE.includes(t) && !HABITS.includes(t)),
   3: BACKUP_TABLES.filter((t) => !CORE.includes(t) && !HABITS.includes(t)),
-  4: BACKUP_TABLES.filter((t) => !HABITS.includes(t)),
-  5: BACKUP_TABLES,
+  4: BACKUP_TABLES.filter((t) => !HABITS.includes(t) && t !== 'workout_sessions'),
+  5: BACKUP_TABLES.filter((t) => t !== 'workout_sessions'),
+  6: BACKUP_TABLES,
 }
 
 /**
@@ -76,6 +79,7 @@ export const TABLE_LABEL: Record<BackupTable, string> = {
   habit_marks: 'Отметки привычек',
   workout_templates: 'Шаблоны силовых',
   workout_queue: 'Очередь силовых',
+  workout_sessions: 'Силовые тренировки',
   activity_types: 'Типы активностей',
   envelopes: 'Конверты и цели',
   debts: 'Долги',

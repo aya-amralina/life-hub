@@ -72,10 +72,11 @@ const TABLES = [
   'debts',
   'items',
   'daily_logs',
+  'strength_sets',
+  'workout_sessions',
   'activities',
   'activity_types',
   'intake',
-  'strength_sets',
   'measurements',
   'people',
   'wishlist',
@@ -100,7 +101,8 @@ export async function cleanupTestUser() {
   if (error) throw new Error(`cleanup sign-in failed: ${error.code}`)
   if (data.user?.email?.toLowerCase() !== user!.email) throw new Error('cleanup: not the test user — refusing')
   for (const table of TABLES) {
-    const del = await sb.from(table).delete().not('id', 'is', null)
+    // «Кардио» comes from migration 0023, like the accounts — it stays
+    const del = table === 'activity_types' ? await sb.from(table).delete().or('source_id.is.null,source_id.neq.type:cardio') : await sb.from(table).delete().not('id', 'is', null)
     if (del.error) throw new Error(`cleanup ${table} failed: ${del.error.code}`)
   }
   await resetAccounts(sb)

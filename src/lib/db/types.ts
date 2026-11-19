@@ -1202,11 +1202,15 @@ export type Database = {
           created_at: string
           date: string
           exercise: string
+          exercise_key: string | null
           hard_at_end: boolean | null
           id: string
           load: string | null
+          loads: string[] | null
           note: string | null
           reps: number[]
+          session_id: string | null
+          sets_done: boolean[] | null
           source_id: string | null
           updated_at: string
           user_id: string
@@ -1216,11 +1220,15 @@ export type Database = {
           created_at?: string
           date: string
           exercise: string
+          exercise_key?: string | null
           hard_at_end?: boolean | null
           id?: string
           load?: string | null
+          loads?: string[] | null
           note?: string | null
           reps?: number[]
+          session_id?: string | null
+          sets_done?: boolean[] | null
           source_id?: string | null
           updated_at?: string
           user_id?: string
@@ -1230,17 +1238,29 @@ export type Database = {
           created_at?: string
           date?: string
           exercise?: string
+          exercise_key?: string | null
           hard_at_end?: boolean | null
           id?: string
           load?: string | null
+          loads?: string[] | null
           note?: string | null
           reps?: number[]
+          session_id?: string | null
+          sets_done?: boolean[] | null
           source_id?: string | null
           updated_at?: string
           user_id?: string
           workout?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "strength_sets_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "workout_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       transactions: {
         Row: {
@@ -1531,6 +1551,66 @@ export type Database = {
           },
         ]
       }
+      workout_sessions: {
+        Row: {
+          activity_id: string | null
+          cardio_min: number | null
+          created_at: string
+          date: string
+          dome: boolean | null
+          done_at: string | null
+          id: string
+          place: string
+          source_id: string | null
+          template_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          activity_id?: string | null
+          cardio_min?: number | null
+          created_at?: string
+          date: string
+          dome?: boolean | null
+          done_at?: string | null
+          id?: string
+          place?: string
+          source_id?: string | null
+          template_id: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          activity_id?: string | null
+          cardio_min?: number | null
+          created_at?: string
+          date?: string
+          dome?: boolean | null
+          done_at?: string | null
+          id?: string
+          place?: string
+          source_id?: string | null
+          template_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workout_sessions_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workout_sessions_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "workout_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workout_templates: {
         Row: {
           archived_at: string | null
@@ -1540,6 +1620,7 @@ export type Database = {
           focus: string
           id: string
           name: string
+          reminders: string[]
           rules: string[]
           sort_order: number
           source_id: string | null
@@ -1554,6 +1635,7 @@ export type Database = {
           focus: string
           id?: string
           name: string
+          reminders?: string[]
           rules?: string[]
           sort_order?: number
           source_id?: string | null
@@ -1568,6 +1650,7 @@ export type Database = {
           focus?: string
           id?: string
           name?: string
+          reminders?: string[]
           rules?: string[]
           sort_order?: number
           source_id?: string | null
