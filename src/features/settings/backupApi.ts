@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { fetchAllPages } from '@/lib/paging'
-import { BACKUP_FORMAT, BACKUP_TABLES, BACKUP_VERSION, restoreRow, type Backup, type BackupTable, type Row } from '@/lib/backup'
+import { BACKUP_FORMAT, BACKUP_TABLES, BACKUP_VERSION, exportFileName, restoreRow, type Backup, type BackupTable, type Row } from '@/lib/backup'
 
 async function allRows(table: BackupTable): Promise<Row[]> {
   // (created_at, id): imported rows share created_at, so id keeps the pages stable
@@ -102,7 +102,7 @@ export function lastExport(): string | null {
 export async function downloadBackup(): Promise<number> {
   const backup = await exportAll()
   const rows = Object.values(backup.tables).reduce((s, r) => s + (r?.length ?? 0), 0)
-  await saveFile(`lifehub-export-${backup.exported_at.slice(0, 10)}.json`, 'application/json', JSON.stringify(backup))
+  await saveFile(exportFileName(backup.exported_at), 'application/json', JSON.stringify(backup))
   try {
     localStorage.setItem(LAST_EXPORT, backup.exported_at)
   } catch {

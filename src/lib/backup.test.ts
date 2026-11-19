@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BACKUP_FORMAT, BACKUP_TABLES, BACKUP_VERSION, parseBackup, restorePlan, restoreRow, toCsv, type Backup } from './backup'
+import { BACKUP_FORMAT, BACKUP_TABLES, BACKUP_VERSION, exportFileName, parseBackup, restorePlan, restoreRow, toCsv, type Backup } from './backup'
 
 const backup: Backup = {
   format: BACKUP_FORMAT,
@@ -85,5 +85,12 @@ describe('backup reminder', async () => {
     expect(backupDue('2026-11-07T09:00:00Z', now)).toBe(true)
     expect(backupDue('2026-11-09T10:00:00Z', now)).toBe(false)
     expect(backupDue('garbage', now)).toBe(true)
+  })
+})
+
+describe('export file name', () => {
+  it('Berlin time to the second, winter and summer', () => {
+    expect(exportFileName('2026-11-19T15:52:07.123Z')).toBe('lifehub-export-2026-11-19-165207.json')
+    expect(exportFileName('2027-07-01T22:00:59Z')).toBe('lifehub-export-2027-07-02-000059.json')
   })
 })

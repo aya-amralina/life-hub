@@ -1,4 +1,5 @@
 // Export / restore format, shared with `npm run backup` (scripts/import/backup.py).
+import { TIME_ZONE } from './dates'
 
 /** Every user table, parents first — the restore goes in this order. */
 export const BACKUP_TABLES = [
@@ -152,4 +153,21 @@ export function backupAgeDays(lastExport: string | null, now: Date): number | nu
   if (!lastExport) return null
   const t = new Date(lastExport).getTime()
   return Number.isNaN(t) ? null : Math.floor((now.getTime() - t) / 86_400_000)
+}
+
+const berlinStamp = new Intl.DateTimeFormat('en-CA', {
+  timeZone: TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+})
+
+/** The name of an export file: Berlin time to the second (as `npm run backup`), so two exports never share a name. */
+export function exportFileName(exportedAt: string): string {
+  const p = Object.fromEntries(berlinStamp.formatToParts(new Date(exportedAt)).map((x) => [x.type, x.value]))
+  return `lifehub-export-${p.year}-${p.month}-${p.day}-${p.hour}${p.minute}${p.second}.json`
 }

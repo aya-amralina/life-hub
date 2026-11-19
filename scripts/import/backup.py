@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import sys
+from zoneinfo import ZoneInfo
 
 from supabase_rest import ConfigError, SupabaseError, SupabaseRest, config_from_env, load_env
 from xl import DATA
@@ -22,6 +23,11 @@ TABLES = [
 ]
 FORMAT = "life-hub-backup"
 VERSION = 3  # v2 (16.11.2026): + recurring, transactions.recurring_id / occurrence_date; v3 (18.11.2026): + accounts; the app still reads v1, v2
+
+
+def backup_name(now: dt.datetime) -> str:
+    """Berlin time to the second: two backups in one minute (before and after a write) never share a file."""
+    return f"lifehub-backup-{now.astimezone(ZoneInfo('Europe/Berlin')):%Y-%m-%d-%H%M%S}.json"
 
 
 def main() -> int:
@@ -38,7 +44,7 @@ def main() -> int:
     now = dt.datetime.now(dt.timezone.utc)
     folder = DATA / "backups"
     folder.mkdir(parents=True, exist_ok=True)
-    path = folder / f"lifehub-backup-{now.astimezone(dt.timezone(dt.timedelta(hours=1))):%Y-%m-%d-%H%M}.json"
+    path = folder / backup_name(now)
     payload = {"format": FORMAT, "version": VERSION, "exported_at": now.isoformat(), "tables": tables}
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
     total = sum(len(v) for v in tables.values())
