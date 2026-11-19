@@ -95,3 +95,17 @@ describe('rule 14 — week habit share', () => {
     expect(weekHabitShare(day, (d) => daySet(withNew, later, d), mon, '2026-11-11')).toBeCloseTo(4 / 7)
   })
 })
+
+describe('only done = true counts — everywhere a mark is read', () => {
+  // every habit of the day has a row, all of them unmarked
+  const off = [mark('outside', '2026-11-19', false), mark('water', '2026-11-19', false)]
+  const day = dayMarks(off, '2026-11-19', false)
+  const set = daySet(habits, plans, '2026-11-19')
+  it('the day card, the week, the minimum', () => {
+    expect(day.done.size).toBe(0)
+    expect(habitsDone(day, set.active, set.minimum)).toBe(0)
+    expect(habitsDone(dayMarks(off, '2026-11-19', true), set.active, set.minimum)).toBe(0)
+    expect(minimumDone(dayMarks(off, '2026-11-19', true), set.minimum)).toBe(false)
+    expect(weekHabitShare((d) => dayMarks(off, d, false), (d) => daySet(habits, plans, d), '2026-11-16', '2026-11-19')).toBe(0)
+  })
+})

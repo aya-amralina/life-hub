@@ -122,6 +122,13 @@ describe('habit calendar, activity weeks, reps', () => {
     const full = calendar([...marks, { habit_id: 'water', date: today, done: true }], [today])
     expect(full.find((c) => c.key === today)!.level).toBe(3) // a complete minimum day counts fully
   })
+  it('the calendar counts only done = true', () => {
+    const cells = calendar([
+      { habit_id: 'water', date: '2026-11-10', done: false },
+      { habit_id: 'outside', date: '2026-11-10', done: false },
+    ])
+    expect(cells.find((c) => c.key === '2026-11-10')!.level).toBe(0)
+  })
   it('activity points per week with the target of that week', () => {
     const w = activityWeeks([{ date: '2026-11-10', type_id: 't', minutes: 30 }], [{ id: 't', points_per_10min: 2 }], [], today, () => 20)
     expect(w).toHaveLength(8)

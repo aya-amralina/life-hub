@@ -49,3 +49,12 @@ describe('care habits', () => {
     expect([careTimeOfDay('Утро'), careTimeOfDay('Вечер'), careTimeOfDay(null)]).toEqual(['morning', 'evening', 'any'])
   })
 })
+
+describe('care: only done = true counts', () => {
+  it('unmarked rows choose nothing and count nothing', () => {
+    const entries = careEntries(habits, plans, '2026-11-19')
+    const off = dayMarks(['e-nia', 'aze', 'cream'].map((habit_id) => ({ habit_id, date: 'd', done: false })), 'd', false)
+    expect(careDone(off, entries)).toBe(0)
+    expect(careChoice(off, entries[1]!)).toBeNull()
+  })
+})
