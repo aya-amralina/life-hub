@@ -159,7 +159,8 @@ test('«Сделать регулярным»: правило из планов�
   const sheet = page.getByRole('dialog', { name: 'Новый регулярный платёж' })
   await expect(sheet.getByLabel('Название')).toHaveValue('Netflix e2e')
   await expect(sheet.getByLabel('Первая дата')).toHaveValue(first)
-  await expect(sheet.getByRole('button', { name: /Revolut/ })).toHaveAttribute('aria-pressed', 'true')
+  // the old text «Revolut» of the operation is Revolut · Основной (0017); the rule takes the account from it
+  await expect(sheet.getByRole('button', { name: 'Revolut · Основной' })).toHaveAttribute('aria-pressed', 'true')
   await sheet.getByRole('button', { name: 'Сохранить' }).click()
 
   const link = page.getByRole('dialog', { name: 'Уже есть в плане' })
@@ -167,7 +168,7 @@ test('«Сделать регулярным»: правило из планов�
   await expect.poll(linked).toEqual({ [a.data!.id]: first, [b.data!.id]: null })
   await link.getByRole('button', { name: 'Привязать 1' }).click()
   await expect.poll(linked).toEqual({ [a.data!.id]: first, [b.data!.id]: addMonthsISO(first, 1) })
-  const rules = (await sb.from('recurring').select('title, amount_eur, account, grp, anchor_date').eq('title', 'Netflix e2e')).data ?? []
-  expect(rules.map((r) => [Number(r.amount_eur), r.account, r.grp, r.anchor_date])).toEqual([[13.99, 'Revolut', 'Жизнь', first]])
+  const rules = (await sb.from('recurring').select('title, amount_eur, grp, anchor_date, accounts!recurring_account_id_fkey(source_id)').eq('title', 'Netflix e2e')).data ?? []
+  expect(rules.map((r) => [Number(r.amount_eur), (r.accounts as unknown as { source_id: string } | null)?.source_id, r.grp, r.anchor_date])).toEqual([[13.99, 'acct:revolut-main', 'Жизнь', first]])
   await sb.auth.signOut()
 })

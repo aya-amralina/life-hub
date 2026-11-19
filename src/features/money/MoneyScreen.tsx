@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CalendarRange, ChevronRight, Hourglass, NotebookPen, Pencil, PiggyBank, Repeat, Trash2 } from 'lucide-react'
+import { CalendarRange, ChevronRight, Hourglass, Landmark, NotebookPen, Pencil, PiggyBank, Repeat, Trash2 } from 'lucide-react'
 import { Link, Navigate, useParams } from 'react-router'
 import { useAddAction, useOpenAdd } from '@/app/addSheetContext'
 import { useToast } from '@/app/toastContext'
@@ -14,11 +14,13 @@ import { MoreList, SectionHeader, type MoreLink } from '@/components/layout/More
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
 import { addDaysISO, formatDayMonth, formatRelativeDay, todayBerlin, weekStart } from '@/lib/dates'
 import { formatAmount, formatEur, plural, toCents } from '@/lib/format'
+import { groupBalanceAt } from '@/lib/rules/accounts'
 import { forecastEnd, plannedQuestions, weekSpendings } from '@/lib/rules/money'
 import { nextOccurrence, ruleState } from '@/lib/rules/recurringEdit'
 import { NotesSection } from '@/features/notes/NotesCard'
-import { useAccountName, useAddExpense, useAllTransactions, useDeleteTransaction, usePlanTransactions, useRecurring, useWeekLimits, type Transaction } from './api'
+import { useAccountName, useAccounts, useAddExpense, useAllTransactions, useDeleteTransaction, usePlanTransactions, useRecurring, useWeekLimits, type Transaction } from './api'
 import { CutNextWeek } from './CutNextWeek'
+import { AccountsTab } from './AccountsTab'
 import { EnvelopesTab } from './EnvelopesTab'
 import { LimitsSheet } from './LimitsSheet'
 import { MoneyQuestions } from './MoneyQuestions'
@@ -30,6 +32,7 @@ import { useMoneyWeek } from './useMoneyWeek'
 
 const BACK = '/money'
 const SECTIONS = {
+  accounts: 'Счета',
   month: 'Месяц',
   recurring: 'Регулярные',
   envelopes: 'Конверты и долги',
@@ -39,6 +42,7 @@ const SECTIONS = {
 type Section = keyof typeof SECTIONS
 
 const MORE: readonly MoreLink[] = [
+  { to: '/money/accounts', label: 'Счета', icon: Landmark },
   { to: '/money/month', label: 'Месяц', icon: CalendarRange, hint: 'план и баланс' },
   { to: '/money/recurring', label: 'Регулярные', icon: Repeat },
   { to: '/money/envelopes', label: 'Конверты и долги', icon: PiggyBank },
@@ -66,6 +70,7 @@ export function MoneyScreen() {
     <>
       <SectionHeader title={SECTIONS[s]} back={BACK} sphere="Деньги" right={s === 'month' ? <CalendarLink sphere="money" /> : undefined} />
       {(s === 'month' || s === 'envelopes') && <PendingLink />}
+      {s === 'accounts' && <AccountsTab />}
       {s === 'month' && <MonthTab />}
       {s === 'recurring' && <RecurringTab />}
       {s === 'envelopes' && <EnvelopesTab />}
@@ -83,16 +88,20 @@ function MoneyMore() {
 function useMoreLinks(): readonly MoreLink[] {
   const rules = useRecurring()
   const txs = useAllTransactions()
+  const accounts = useAccounts()
   const today = todayBerlin()
+  // «Счета» — what «Баланс» holds now, once there is a start by accounts
+  const balance = groupBalanceAt(txs.data ?? [], accounts.data ?? [], 'balance', today, 'fact')
+  const links = balance === null ? MORE : MORE.map((l) => (l.to === '/money/accounts' ? { ...l, hint: `«Баланс» ${formatEur(balance, { whole: true })}` } : l))
   const current = (rules.data ?? []).filter((r) => ruleState(r, today) !== 'ended')
-  if (!current.length) return MORE
+  if (!current.length) return links
   const end = forecastEnd(today)
   const next = current
     .map((r) => nextOccurrence(r, txs.data ?? [], today, end))
     .filter((d): d is string => d !== null)
     .sort()[0]
   const hint = `${current.length}${next ? ` · след. ${formatDayMonth(next)}` : ''}`
-  return MORE.map((l) => (l.to === '/money/recurring' ? { ...l, hint } : l))
+  return links.map((l) => (l.to === '/money/recurring' ? { ...l, hint } : l))
 }
 
 function PendingLink() {

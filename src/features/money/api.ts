@@ -383,6 +383,18 @@ export function useUpdateEnvelope() {
   })
 }
 
+/** An account: new (name, group, order after the others) or a change (name, group, archive). */
+export function useSaveAccount() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, values }: { id: string | null; values: TablesUpdate<'accounts'> & Partial<TablesInsert<'accounts'>> }) => {
+      const { error } = id ? await supabase.from('accounts').update(values).eq('id', id) : await supabase.from('accounts').insert(values as TablesInsert<'accounts'>)
+      if (error) throw error
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: moneyKeys.all }),
+  })
+}
+
 /** Debts are kept in the app: create, change (incl. close / reopen), delete. */
 export function useSaveDebt() {
   const qc = useQueryClient()

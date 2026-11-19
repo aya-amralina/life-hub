@@ -12,17 +12,18 @@ import { WeekSwitcher } from '@/components/ui/WeekSwitcher'
 import { cn } from '@/components/ui/cn'
 import { formatDayMonth, parseISODate, todayBerlin, type ISODate } from '@/lib/dates'
 import { formatEur, toCents } from '@/lib/format'
-import { BALANCE_LINE_POINTS, balanceLine } from '@/lib/rules/charts'
-import { balanceView, reconcileAccounts, type AccountsReconciliation } from '@/lib/rules/accounts'
+import { BALANCE_LINE_POINTS, balanceLine, niceTicks } from '@/lib/rules/charts'
+import { balanceView, reconcileAccounts } from '@/lib/rules/accounts'
 import { XYChart } from '@/components/charts/Chart'
 import { ChartLegend } from '@/components/charts/chartParts'
-import { balancesByDate, forecastEnd, isFact, isWeekRow, monthsTable, plannedQuestions, reconcile, signedCents, upcomingPlanned, type Reconciliation } from '@/lib/rules/money'
+import { balancesByDate, forecastEnd, isFact, isWeekRow, monthsTable, plannedQuestions, reconcile, signedCents, upcomingPlanned } from '@/lib/rules/money'
 import { confirmPatch } from '@/lib/rules/operation'
 import { ACCOUNTS } from '@/lib/constants'
 import { Chip } from '@/components/ui/Chip'
 import { MetaChip } from '@/components/ui/MetaChip'
 import { ruleState } from '@/lib/rules/recurringEdit'
 import { joinRu } from '@/lib/format'
+import { accountsCheckText, potCheckText, shortName } from './checkText'
 import { useAccountName, useAccounts, useActualBalances, useAnswerPlanned, usePlanTransactions, useRecurring, type PlanTx } from './api'
 import { OperationSheet } from './OperationSheet'
 
@@ -239,51 +240,6 @@ export function MonthTab() {
       <OperationSheet open={editing !== null} onClose={() => setEditing(null)} tx={editing === 'new' ? null : editing} />
     </>
   )
-}
-
-const eur = (c: number) => formatEur(c, { whole: true })
-/** «Revolut · На месяц» → «На месяц»: the bank is clear from the list of «Баланс». */
-const shortName = (name: string) => name.replace(/^Revolut · /, '')
-const signedEur = (c: number) => `${c > 0 ? '+' : '−'}${formatEur(Math.abs(c))}`
-
-/** The common pot against «Остатки» written before the start by accounts. */
-function potCheckText(check: Reconciliation | null): string {
-  if (check === null) return 'Реальных остатков пока нет — внеси их в воскресном обзоре, сравню с расчётом.'
-  return `Остатки на ${formatDayMonth(check.date)}: ${eur(check.actualCents)}, по расчёту ${eur(check.calculatedCents)} — ${
-    check.matches ? 'сходится' : `расхождение ${signedEur(check.diffCents)}`
-  }.${check.missing.length ? ` Не внесены: ${check.missing.join(', ')}.` : ''}`
-}
-
-/** From the start: «Баланс» as a whole when every account of it is entered; accounts off by 1 € or more by name. */
-function accountsCheckText(r: AccountsReconciliation | null): string {
-  if (r === null) return 'Остатков по счетам пока нет — внеси их в воскресном обзоре, сравню с расчётом.'
-  const head = r.balance
-    ? `Остатки на ${formatDayMonth(r.date)}: «Баланс» ${eur(r.balance.actualCents)}, по расчёту ${eur(r.balance.calculatedCents)}`
-    : `Остатки на ${formatDayMonth(r.date)} по внесённым счетам`
-  const verdict = r.matches
-    ? ' — сходится.'
-    : ` — расхождение: ${[
-        ...(r.balance && Math.abs(r.balance.diffCents) >= 100 ? [`«Баланс» ${signedEur(r.balance.diffCents)}`] : []),
-        ...r.off.map((c) => `${shortName(c.account.name)} ${signedEur(c.diffCents)}`),
-      ].join(', ')}.`
-  // short names, as in the caption of «Баланс»; at most three, the rest counted
-  const missing = r.missing.map(shortName)
-  const tail = missing.length > 3 ? `${missing.slice(0, 3).join(', ')} и ещё ${missing.length - 3}` : missing.join(', ')
-  return head + verdict + (missing.length ? ` Не внесены: ${tail}.` : '')
-}
-
-/** 3 round ticks over the values (1000 / 2000 / 3000 style). */
-function niceTicks(values: number[]): number[] | undefined {
-  if (!values.length) return undefined
-  const lo = Math.min(...values)
-  const hi = Math.max(...values)
-  const step = Math.max(100, Math.pow(10, Math.floor(Math.log10(Math.max(1, hi - lo)))))
-  const start = Math.floor(lo / step) * step
-  const end = Math.ceil(hi / step) * step
-  const n = Math.max(1, Math.round((end - start) / step / 2))
-  const ticks: number[] = []
-  for (let v = start; v <= end; v += step * n) ticks.push(v)
-  return ticks
 }
 
 function OperationRow({ t, today, onConfirm, onOpen }: { t: PlanTx; today: ISODate; onConfirm: () => void; onOpen: () => void }) {

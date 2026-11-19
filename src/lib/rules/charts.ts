@@ -254,3 +254,16 @@ export function statusCounts(items: readonly { status: string | null; done_at: s
   return statuses.map((s) => ({ key: s, label: s, count: items.filter((i) => (i.status ?? 'Offen') === s && i.type !== 'Erfolg').length })).filter((x) => x.count > 0)
 }
 
+/** 3 round ticks over the values (1000 / 2000 / 3000 style). */
+export function niceTicks(values: number[]): number[] | undefined {
+  if (!values.length) return undefined
+  const lo = Math.min(...values)
+  const hi = Math.max(...values)
+  const step = Math.max(100, Math.pow(10, Math.floor(Math.log10(Math.max(1, hi - lo)))))
+  const start = Math.floor(lo / step) * step
+  const end = Math.ceil(hi / step) * step
+  const n = Math.max(1, Math.round((end - start) / step / 2))
+  const ticks: number[] = []
+  for (let v = start; v <= end; v += step * n) ticks.push(v)
+  return ticks
+}

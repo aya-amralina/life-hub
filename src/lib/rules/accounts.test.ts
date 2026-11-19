@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   accountBalanceAt,
+  accountsOverview,
   accountDelta,
   accountOptions,
   accountsProblem,
@@ -10,11 +11,13 @@ import {
   goalAccountProblem,
   groupBalanceAt,
   groupDelta,
+  groupForecast,
   groupOfAccount,
   legacyAccountName,
   parseBalanceInput,
   reviewBalances,
   reconcileAccounts,
+  reservesByAccount,
   type AccTx,
   type AccountLike,
 } from './accounts'
@@ -237,5 +240,88 @@ describe('accounts: balances typed in the review', () => {
     const list = [acc('Основной', 'balance', 10), acc('Подушка', 'cushion', 50), acc('Старый', 'balance', 5, true)]
     const rows = reviewBalances({ Основной: '-3,5', Подушка: '-1', Старый: '7', Revolut: '9' }, list)
     expect(rows.map((r) => [r.account.id, r.amount])).toEqual([['Основной', -3.5]])
+  })
+})
+
+describe('accounts: what is set aside, «всего» and «свободно»', () => {
+  // the examples of the plan: «Подушка» and its goal; the tenant's deposit on «Депозит», returned 30.11; an envelope
+  const envelopes = [
+    { id: 'goal', name: 'Подушка', type: 'goal', archived: false, account_id: 'cushion', planned_eur: null, goal_eur: 535 },
+    { id: 'trip', name: 'Франкфурт', type: 'envelope', archived: false, account_id: 'dep', planned_eur: 30, goal_eur: null },
+    { id: 'old', name: 'Старый', type: 'envelope', archived: true, account_id: 'dep', planned_eur: 99, goal_eur: null },
+  ]
+  const debts = [
+    { id: 'l1', who: 'Депозит жильца', direction: 'i_owe', amount_eur: 100, repaid_eur: 0, status: 'open', pot_id: null, due_date: '2026-11-30', account_id: 'dep' },
+    { id: 'l3', who: 'Закрытый', direction: 'i_owe', amount_eur: 50, repaid_eur: 50, status: 'closed', pot_id: null, due_date: null, account_id: 'dep' },
+  ]
+  // the deposit's pair of 30.11 above is linked to no debt; here the expense pays L1 back
+  const withDebt = txs.map((t) => (t.kind === 'expense' && t.date === '2026-11-30' ? { ...t, debt_id: 'l1' } : t))
+  const reserves = (today: string, list = withDebt) => reservesByAccount({ envelopes, debts, txs: list, balances: [], accounts, today })
+
+  it('a goal alone on its account sets aside min(balance, target); an envelope — what is left; a debt — what is still owed', () => {
+    const r = reserves('2026-11-22')
+    expect(r.get('cushion')).toEqual([{ kind: 'goal', id: 'goal', name: 'Подушка', cents: 53500 }]) // 557 on the account, target 535
+    expect(r.get('dep')).toEqual([
+      { kind: 'envelope', id: 'trip', name: 'Франкфурт', cents: 3000 },
+      { kind: 'debt', id: 'l1', name: 'Депозит жильца', cents: 10000 },
+    ])
+  })
+  it('a planned expense from an envelope does not lower what is set aside; a confirmed one does', () => {
+    const spent = [...withDebt, tx({ date: '2026-11-21', amount_eur: 10, account_id: 'main', envelope_id: 'trip', grp: 'Поездки и события' })]
+    const planned = [...withDebt, { ...spent.at(-1)!, is_planned: true }]
+    expect(reserves('2026-11-22', planned).get('dep')![0]!.cents).toBe(3000)
+    expect(reserves('2026-11-22', spent).get('dep')![0]!.cents).toBe(2000)
+  })
+  it('the deposit paid back (the expense confirmed) is no longer set aside', () => {
+    const paid = withDebt.map((t) => (t.date === '2026-11-30' ? { ...t, confirmed_at: 'x' } : t))
+    expect(reserves('2026-11-30', paid).get('dep')!.map((x) => x.kind)).toEqual(['envelope'])
+  })
+  it('goals sharing an account: each by its latest share, never above its target', () => {
+    const two = [...envelopes, { id: 'jan', name: 'Январь', type: 'goal', archived: false, account_id: 'cushion', planned_eur: null, goal_eur: 40 }]
+    const balances = [
+      { date: START, envelope_id: 'goal', amount_eur: 300 },
+      { date: START, envelope_id: 'jan', amount_eur: 50 },
+      { date: '2026-11-25', envelope_id: 'goal', amount_eur: 999 }, // later than «today» — not yet
+    ]
+    const r = reservesByAccount({ envelopes: two, debts, txs: withDebt, balances, accounts, today: '2026-11-22' })
+    expect(r.get('cushion')!.map((x) => [x.id, x.cents])).toEqual([['goal', 30000], ['jan', 4000]])
+  })
+  it('overview: all and free per account, group totals; before the start — null', () => {
+    const o = accountsOverview(withDebt, accounts, reserves('2026-11-22'), '2026-11-22')!
+    const cushion = o.find((g) => g.grp === 'cushion')!
+    expect(cushion).toMatchObject({ totalCents: 55700, freeCents: 2200 })
+    const separate = o.find((g) => g.grp === 'separate')!
+    expect(separate.accounts[0]).toMatchObject({ totalCents: 10000, reservedCents: 13000, freeCents: -3000 })
+    expect(o.find((g) => g.grp === 'balance')!.accounts.map((l) => l.account.id)).toEqual(['main', 'month', 'spark'])
+    expect(accountsOverview(withDebt, accounts, new Map(), '2026-11-17')).toBeNull()
+  })
+  it('an archived account shows only while something is left on it', () => {
+    const list = [...accounts, acc('gone', 'balance', 99, true)]
+    expect(accountsOverview(withDebt, list, new Map(), '2026-11-22')!.flatMap((g) => g.accounts).some((l) => l.account.id === 'gone')).toBe(false)
+  })
+})
+
+describe('accounts: the forecast of «Подушка»', () => {
+  const plan = (p: Partial<AccTx>) => tx({ is_planned: true, ...p })
+  const list = [
+    ...txs,
+    plan({ date: '2026-12-01', kind: 'income', amount_eur: 3, account_id: 'cushion' }), // interest
+    plan({ date: '2026-12-10', kind: 'transfer', amount_eur: 200, account_id: 'cushion', to_account_id: 'main' }), // taken out
+    plan({ date: '2026-12-30', kind: 'transfer', amount_eur: 45, account_id: 'main', to_account_id: 'cushion' }), // paid back
+  ]
+  it('today, day by day to the end with its own plan; the lowest day', () => {
+    const f = groupForecast(list, accounts, 'cushion', '2026-11-23', '2027-05-31')!
+    expect(f.nowCents).toBe(55700)
+    expect(f.endCents).toBe(55700 + 300 - 20000 + 4500)
+    expect(f.pit).toEqual({ date: '2026-12-10', cents: 55700 + 300 - 20000 })
+    expect(f.moves).toBe(true)
+  })
+  it('nothing planned for it — no moves, the lowest day is today', () => {
+    const f = groupForecast(txs, accounts, 'cushion', '2026-11-23', '2027-05-31')!
+    expect(f).toMatchObject({ nowCents: 55700, endCents: 55700, pit: { date: '2026-11-23', cents: 55700 }, moves: false })
+  })
+  it('the week budgets of «Жизнь» are not its business; before the start — null', () => {
+    expect(groupForecast(txs, accounts, 'cushion', '2026-11-19', '2026-11-30')!.pit.cents).toBe(50000)
+    expect(groupForecast(txs, accounts, 'cushion', '2026-11-17', '2026-11-30')).toBeNull()
   })
 })

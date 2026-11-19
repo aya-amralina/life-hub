@@ -1,7 +1,7 @@
 import type { AccountGroup } from '../constants'
-import type { ISODate } from '../dates'
 import { parseSignedEurInput, toCents } from '../format'
-import { balanceAt, isFact, isInPlan, type TxLike } from './money'
+import { addDaysISO, type ISODate } from '../dates'
+import { balanceAt, debtSummary, envelopeSummary, isFact, isInPlan, type DebtLike, type TxLike } from './money'
 
 /**
  * Accounts (decision 18.11.2026). Every Revolut pocket is an account; accounts are in groups: «Баланс» — the plan and
@@ -232,4 +232,91 @@ export function reviewBalances<A extends AccountLike>(typed: Readonly<Record<str
       const r = parseBalanceInput(typed[a.name]!, a.grp)
       return 'cents' in r && r.cents !== null ? [{ account: a, amount: r.cents / 100 }] : []
     })
+}
+
+export type Reserve = { kind: 'envelope' | 'goal' | 'debt'; id: string; name: string; cents: number }
+export type EnvelopeOfAccount = { id: string; name: string; type: string; archived: boolean; account_id: string | null; planned_eur: number | null; goal_eur: number | null }
+export type DebtOfAccount = DebtLike & { who: string; account_id: string | null }
+
+/**
+ * What is set aside on each account (decision 18.11.2026), never twice with the plan:
+ * - an envelope — what is left of it (planned − confirmed expenses with it; a planned expense does not lower it);
+ * - a goal — min(now, target): now is the account's balance when the goal is alone on it, else its latest share
+ *   from «Внести остаток»;
+ * - a debt «я должна» — what is left to pay back.
+ */
+export function reservesByAccount(i: {
+  envelopes: readonly EnvelopeOfAccount[]
+  debts: readonly DebtOfAccount[]
+  txs: readonly AccTx[]
+  balances: readonly { date: ISODate; envelope_id: string | null; amount_eur: number | string }[]
+  accounts: readonly AccountLike[]
+  today: ISODate
+}): Map<string, Reserve[]> {
+  const out = new Map<string, Reserve[]>()
+  const add = (accountId: string, r: Reserve) => {
+    if (r.cents > 0) out.set(accountId, [...(out.get(accountId) ?? []), r])
+  }
+  for (const e of i.envelopes) {
+    if (e.archived || !e.account_id) continue
+    if (e.type === 'envelope') {
+      add(e.account_id, { kind: 'envelope', id: e.id, name: e.name, cents: envelopeSummary(e, i.txs).leftCents })
+      continue
+    }
+    const own = goalAccountNow(e, i.envelopes, i.accounts, i.txs, i.today)
+    const share = i.balances.filter((b) => b.envelope_id === e.id && b.date <= i.today).sort((a, b) => b.date.localeCompare(a.date))[0]
+    const now = own ? own.cents : share ? toCents(share.amount_eur) : 0
+    const target = e.goal_eur === null ? null : toCents(e.goal_eur)
+    add(e.account_id, { kind: 'goal', id: e.id, name: e.name, cents: Math.max(0, target === null ? now : Math.min(now, target)) })
+  }
+  for (const d of i.debts) {
+    if (d.direction !== 'i_owe' || d.status !== 'open' || !d.account_id) continue
+    add(d.account_id, { kind: 'debt', id: d.id, name: d.who, cents: debtSummary(d, i.txs).leftCents })
+  }
+  return out
+}
+
+export type AccountLine<A extends AccountLike> = { account: A; totalCents: number; reservedCents: number; freeCents: number; reserves: Reserve[] }
+export type GroupLine<A extends AccountLike> = { grp: AccountGroup; totalCents: number; freeCents: number; accounts: AccountLine<A>[] }
+
+/**
+ * «Счета»: every account from the start — all (its balance today), free (all minus what is set aside on it) — and
+ * the totals of the groups. Archived accounts only while something is left on them. Null before the start.
+ */
+export function accountsOverview<A extends AccountLike>(txs: readonly AccTx[], accounts: readonly A[], reserves: ReadonlyMap<string, Reserve[]>, today: ISODate): GroupLine<A>[] | null {
+  const start = accountsStart(txs)
+  if (start === null || today < start) return null
+  const lines = accounts
+    .map((account): AccountLine<A> => {
+      const totalCents = accountBalanceAt(txs, account.id, today) ?? 0
+      const list = reserves.get(account.id) ?? []
+      const reservedCents = list.reduce((s, r) => s + r.cents, 0)
+      return { account, totalCents, reservedCents, freeCents: totalCents - reservedCents, reserves: list }
+    })
+    .filter((l) => !l.account.archived || l.totalCents !== 0)
+    .sort((a, b) => a.account.sort_order - b.account.sort_order || a.account.name.localeCompare(b.account.name))
+  const groups: AccountGroup[] = ['balance', 'cushion', 'separate']
+  return groups.map((grp) => {
+    const inGroup = lines.filter((l) => l.account.grp === grp)
+    return { grp, totalCents: inGroup.reduce((s, l) => s + l.totalCents, 0), freeCents: inGroup.reduce((s, l) => s + l.freeCents, 0), accounts: inGroup }
+  })
+}
+
+/**
+ * A group's own forecast (decision 18.11.2026; «Подушка»): its balance today and day by day to `end` with its planned
+ * and recurring operations — income to its accounts, transfers across its border; no week budgets of «Жизнь».
+ * `moves` — whether the plan has anything for it after today; the lowest day is the earliest of equal ones.
+ */
+export function groupForecast(txs: readonly AccTx[], accounts: readonly AccountLike[], g: AccountGroup, today: ISODate, end: ISODate) {
+  const at = (d: ISODate) => groupBalanceAt(txs, accounts, g, d, 'plan', today)
+  const nowCents = groupBalanceAt(txs, accounts, g, today, 'fact')
+  if (nowCents === null) return null
+  const groupOf = groupOfAccount(accounts)
+  const moves = txs.some((t) => isInPlan(t) && !isFact(t) && t.date > today && t.date <= end && groupDelta(t, groupOf, g) !== 0)
+  let pit = { date: today, cents: at(today)! }
+  for (let d = addDaysISO(today, 1); d <= end; d = addDaysISO(d, 1)) {
+    const c = at(d)!
+    if (c < pit.cents) pit = { date: d, cents: c }
+  }
+  return { nowCents, endCents: at(end)!, pit, moves, at: (d: ISODate, mode: 'fact' | 'plan') => groupBalanceAt(txs, accounts, g, d, mode, today) ?? 0 }
 }
