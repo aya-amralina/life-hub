@@ -67,8 +67,8 @@ test('воскресный обзор: пять шагов, «Пропустит
   expect(data?.week_thought).toBe('Спокойно и по одному')
   expect((data?.answers as { skipped?: string[] }).skipped).toEqual(['body'])
   const bal = await sb.from('actual_balances').select('account, amount_eur, origin, accounts(source_id)')
-  // the review writes to «Остатки», per account (the old text column gets the account's name until 0018)
-  expect(bal.data).toEqual([{ account: 'Revolut · Основной', amount_eur: 742.1, origin: 'review', accounts: { source_id: 'acct:revolut-main' } }])
+  // the review writes to «Остатки», per account; the old text column stays empty (0018)
+  expect(bal.data).toEqual([{ account: null, amount_eur: 742.1, origin: 'review', accounts: { source_id: 'acct:revolut-main' } }])
   await sb.auth.signOut()
 })
 

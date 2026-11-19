@@ -74,6 +74,11 @@ describe('migrations: explicit access for every public table', () => {
     }
   })
 
+  it('0018 only makes the old text of «Остатки» optional; dropping waits for 0019', () => {
+    const relax = readFileSync(join(dir, '20261119120000_balances_account_optional.sql'), 'utf8').replace(/--.*$/gm, '').trim().toLowerCase()
+    expect(relax).toBe('alter table public.actual_balances alter column account drop not null;')
+  })
+
   it('ping() reads no table', () => {
     expect(sql).toMatch(/create or replace function public\.ping\(\)[\s\S]*?as \$\$ select 1 \$\$;/)
   })

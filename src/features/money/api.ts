@@ -323,30 +323,24 @@ export function useActualBalances() {
   })
 }
 
-/** «Внести остаток» of a goal's pocket: one «Остатки» row per day (account — the goal's Excel ID, else its name). */
+/** «Внести остаток» of a goal that shares its account: one «Остатки» row per day and goal (envelope_id; migration 0018). */
 export function useSaveGoalBalance() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ goal, date, amount }: { goal: Pick<Envelope, 'id' | 'name' | 'source_id'>; date: ISODate; amount: number }) => {
-      const account = goal.source_id?.startsWith('budget:env:') ? goal.source_id.slice('budget:env:'.length) : goal.name
-      const { error } = await supabase
-        .from('actual_balances')
-        .upsert({ date, account, envelope_id: goal.id, amount_eur: amount, origin: 'review' }, { onConflict: 'user_id,date,account' })
+      const { error } = await supabase.from('actual_balances').upsert({ date, envelope_id: goal.id, amount_eur: amount, origin: 'review' }, { onConflict: 'user_id,date,envelope_id' })
       if (error) throw error
     },
     onSettled: () => qc.invalidateQueries({ queryKey: moneyKeys.all }),
   })
 }
 
-/**
- * The Sunday review writes the balances it asks for into «Остатки»: one row per day and account (account_id). Until
- * migration 0018 the old text column is still required — it gets the account's name.
- */
+/** The Sunday review writes the balances it asks for into «Остатки»: one row per day and account (account_id). */
 export function useSaveActualBalances() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ date, balances }: { date: ISODate; balances: { account: Pick<Account, 'id' | 'name'>; amount: number }[] }) => {
-      const rows = balances.map(({ account, amount }) => ({ date, account_id: account.id, account: account.name, amount_eur: amount, origin: 'review' }))
+      const rows = balances.map(({ account, amount }) => ({ date, account_id: account.id, amount_eur: amount, origin: 'review' }))
       if (!rows.length) return
       const { error } = await supabase.from('actual_balances').upsert(rows, { onConflict: 'user_id,date,account_id' })
       if (error) throw error

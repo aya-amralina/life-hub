@@ -135,7 +135,7 @@ export type Database = {
       }
       actual_balances: {
         Row: {
-          account: string
+          account: string | null
           account_id: string | null
           amount_eur: number
           created_at: string
@@ -149,7 +149,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          account: string
+          account?: string | null
           account_id?: string | null
           amount_eur: number
           created_at?: string
@@ -163,7 +163,7 @@ export type Database = {
           user_id?: string
         }
         Update: {
-          account?: string
+          account?: string | null
           account_id?: string | null
           amount_eur?: number
           created_at?: string
