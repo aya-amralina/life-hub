@@ -6,6 +6,8 @@ import { fetchAllPages } from '@/lib/paging'
 import type { Tables, TablesInsert, TablesUpdate } from '@/lib/db/types'
 import { addDaysISO, todayBerlin, weekStart, type ISODate } from '@/lib/dates'
 import { forecastEnd } from '@/lib/rules/money'
+import type { WeekLimitSum } from '@/lib/rules/forecast'
+import { toCents } from '@/lib/format'
 import { isVirtual, materialize, withRecurring, type VirtualTx } from '@/lib/rules/recurring'
 import type { WeekCategory } from '@/lib/constants'
 import { ensureWeek, weekKeys } from '@/features/weeks/api'
@@ -46,6 +48,22 @@ export function useWeekTransactions(monday: ISODate) {
         .order('created_at', { ascending: false })
       if (error) throw error
       return data
+    },
+  })
+}
+
+/** The limits of every week, summed over the categories, by Monday — what «Жизнь» by plan needs (stage 2). */
+export function useAllWeekLimits() {
+  return useQuery({
+    queryKey: [...moneyKeys.all, 'limits', 'all'] as const,
+    queryFn: async (): Promise<WeekLimitSum[]> => {
+      const rows = await fetchAllPages((from, to) => supabase.from('week_limits').select('id, limit_eur, weeks!inner(start_date)').order('id').range(from, to))
+      const by = new Map<ISODate, number>()
+      for (const r of rows) {
+        const monday = (r.weeks as unknown as { start_date: ISODate }).start_date
+        by.set(monday, (by.get(monday) ?? 0) + toCents(r.limit_eur))
+      }
+      return [...by.entries()].map(([monday, limitCents]) => ({ monday, limitCents }))
     },
   })
 }

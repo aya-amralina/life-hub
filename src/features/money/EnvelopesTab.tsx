@@ -12,8 +12,9 @@ import { PickSheet } from '@/components/ui/PickSheet'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { formatDayMonth, formatWeekdayDate, todayBerlin } from '@/lib/dates'
-import { formatEur, parseEurInput, plural } from '@/lib/format'
+import { formatEstimate, formatEur, parseEurInput, plural } from '@/lib/format'
 import { accountOptions, goalAccountNow, goalAccountProblem } from '@/lib/rules/accounts'
+import { goalForecast } from '@/lib/rules/forecast'
 import { debtSummary, envelopeSummary, envelopesLeft, goalProgress } from '@/lib/rules/money'
 import { Choice } from './Choice'
 import { DebtSheet } from './DebtSheet'
@@ -76,7 +77,7 @@ export function EnvelopesTab() {
           ))}
           {goals.length > 0 && <h2 className="m-0 pt-2 text-title font-semibold">Цели</h2>}
           {goals.map((g) => (
-            <GoalCard key={g.id} g={g} p={goalProgress(g, balances.data ?? [], debtList, tx)} onAccount={goalAccountNow(g, goals, accounts.data ?? [], tx, todayBerlin())} loans={open.filter((d) => d.direction === 'from_pot' && d.pot_id === g.id)} onEdit={() => setEditingEnv(g)} />
+            <GoalCard key={g.id} g={g} p={goalProgress(g, balances.data ?? [], debtList, tx)} onAccount={goalAccountNow(g, goals, accounts.data ?? [], tx, todayBerlin())} forecast={goalForecast(g, { goals, accounts: accounts.data ?? [], txs: tx, balances: balances.data ?? [], today: todayBerlin() })} loans={open.filter((d) => d.direction === 'from_pot' && d.pot_id === g.id)} onEdit={() => setEditingEnv(g)} />
           ))}
         </>
       )}
@@ -140,6 +141,7 @@ function GoalCard({
   g,
   p: stored,
   onAccount,
+  forecast,
   loans,
   onEdit,
 }: {
@@ -147,6 +149,8 @@ function GoalCard({
   p: ReturnType<typeof goalProgress>
   /** the goal is the only one on its account: «сейчас» is that account's balance, nothing to enter */
   onAccount: ReturnType<typeof goalAccountNow>
+  /** stage 2: a month's share to the due date and the pace — numbers and dates only */
+  forecast: ReturnType<typeof goalForecast>
   loans: Debt[]
   onEdit: () => void
 }) {
@@ -203,7 +207,30 @@ function GoalCard({
         </p>
       ))}
       {p.borrowedCents > 0 && <div className="text-cap font-semibold text-amber-ink tabular-nums">ещё не возвращено {eur(p.borrowedCents)}</div>}
+      {forecast && !late && <GoalForecastLines f={forecast} />}
     </Card>
+  )
+}
+
+/** «нужно ≈ X € в месяц до 31.12 · ещё Y €» and the pace: «≈ N € в месяц — к 2.02» / «темпа пока нет» / «остаток не растёт». */
+function GoalForecastLines({ f }: { f: NonNullable<ReturnType<typeof goalForecast>> }) {
+  const need =
+    f.due === null
+      ? `ещё ${formatEstimate(f.leftCents)}`
+      : f.perMonthCents !== null
+        ? `нужно ≈ ${formatEstimate(f.perMonthCents)} в месяц до ${formatDayMonth(f.due)} · ещё ${formatEstimate(f.leftCents)}`
+        : `до ${formatDayMonth(f.due)} — ещё ${formatEstimate(f.leftCents)}`
+  const pace =
+    f.pace === 'none'
+      ? 'темпа пока нет'
+      : f.pace === 'not_growing'
+        ? 'остаток не растёт'
+        : `при текущем темпе ≈ ${formatEstimate(f.pace.perMonthCents)} в месяц — к ${formatDayMonth(f.pace.closesOn)}${f.pace.closesOn.slice(0, 4) !== f.due?.slice(0, 4) ? `.${f.pace.closesOn.slice(0, 4)}` : ''}`
+  return (
+    <div className="flex flex-col gap-0.5 text-cap text-ink2 tabular-nums">
+      <span>{need}</span>
+      <span>{pace}</span>
+    </div>
   )
 }
 

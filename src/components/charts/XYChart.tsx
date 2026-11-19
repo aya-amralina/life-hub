@@ -1,6 +1,6 @@
 import { formatChartNumber as chartNumber } from '@/lib/format'
-import type { SphereColor, XYAxis, XYBand, XYBar, XYLine } from './chartParts'
-import { Bar, CartesianGrid, ComposedChart, Line, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import type { SphereColor, XYArea, XYAxis, XYBand, XYBar, XYLine } from './chartParts'
+import { Area, Bar, CartesianGrid, ComposedChart, Line, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 const color = (c: SphereColor) => `var(--${c})`
 
@@ -15,6 +15,7 @@ export function XYChart({
   data,
   lines = [],
   bars = [],
+  areas = [],
   yLeft,
   yRight,
   bands = [],
@@ -28,6 +29,7 @@ export function XYChart({
   data: readonly ({ key: string; label: string } & Record<string, unknown>)[]
   lines?: XYLine[]
   bars?: XYBar[]
+  areas?: XYArea[]
   yLeft?: XYAxis
   yRight?: XYAxis
   bands?: XYBand[]
@@ -99,6 +101,23 @@ export function XYChart({
               label={{ value: b.label, position: 'insideTopLeft', fill: 'var(--ink2)', fontSize: 13 }}
             />
           ))}
+          {areas.map((a) => (
+            <Area
+              key={`${a.low}-${a.high}`}
+              // a range: [low, high] of the point; a gap where either is missing
+              dataKey={(d: Record<string, unknown>) => (d[a.low] == null || d[a.high] == null ? null : [d[a.low], d[a.high]])}
+              name={a.name}
+              yAxisId="left"
+              type="linear"
+              stroke="none"
+              fill={color(a.color)}
+              fillOpacity={0.16}
+              activeDot={false}
+              connectNulls={false}
+              isAnimationActive={false}
+              unit={a.unit}
+            />
+          ))}
           {bars.map((b) => (
             <Bar
               key={b.key}
@@ -145,7 +164,11 @@ export function XYChart({
             <Tooltip
               cursor={{ stroke: 'var(--ink3)', strokeWidth: 1 }}
               labelFormatter={(k) => labelOf.get(String(k)) ?? String(k)}
-              formatter={(v, name, item) => [`${chartNumber(Number(v))}${(item as { unit?: string }).unit ?? ''}`, name]}
+              formatter={(v, name, item) => {
+                const unit = (item as { unit?: string }).unit ?? ''
+                // a range (the corridor) as «low–high»
+                return [Array.isArray(v) ? `${chartNumber(Number(v[0]))}–${chartNumber(Number(v[1]))}${unit}` : `${chartNumber(Number(v))}${unit}`, name]
+              }}
               contentStyle={{ background: 'var(--inv)', border: 0, borderRadius: 8, boxShadow: 'var(--shadow)', padding: '6px 10px', fontSize: 13 }}
               labelStyle={{ color: 'var(--on-inv)', fontWeight: 600 }}
               itemStyle={{ color: 'var(--on-inv)', padding: 0 }}

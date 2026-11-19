@@ -29,6 +29,7 @@ import { useItems, useUpdateItem } from '@/features/items/api'
 import { donePatch, reopenPatch } from '@/features/items/donePatch'
 import { ItemRow } from '@/features/items/ItemRow'
 import { useWeekTransactions } from '@/features/money/api'
+import { FreeUntilRow } from '@/features/money/FreeUntil'
 import { ReviewCard } from '@/features/review/ReviewCard'
 import { InstallHint } from '@/features/settings/InstallHint'
 import { QuestionStack } from './QuestionStack'
@@ -63,6 +64,8 @@ export function TodayScreen() {
       <ReviewCard today={today} />
       {/* Questions stand first until answered (design 3m). */}
       <QuestionStack />
+      {/* one quiet row, no card: the day stays the day */}
+      <FreeUntilRow to="/money" />
       {/* by the time of day: from 18:00 «Вечер» moves up, with what the day came to */}
       {evening && <EveningCard date={today} context={<DaySummary today={today} />} />}
       <HabitsCard date={today} to="/body" />

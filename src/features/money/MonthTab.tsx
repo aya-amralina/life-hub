@@ -11,8 +11,9 @@ import { FilterChips } from '@/components/ui/FilterChips'
 import { WeekSwitcher } from '@/components/ui/WeekSwitcher'
 import { cn } from '@/components/ui/cn'
 import { formatDayMonth, parseISODate, todayBerlin, type ISODate } from '@/lib/dates'
-import { formatEur, toCents } from '@/lib/format'
-import { BALANCE_LINE_POINTS, balanceLine, niceTicks } from '@/lib/rules/charts'
+import { formatEstimate, formatEur, toCents } from '@/lib/format'
+import { forecastLine, niceTicks } from '@/lib/rules/charts'
+import { SCENARIOS, forecast, forecastMonths, type Forecast, type Scenario } from '@/lib/rules/forecast'
 import { balanceView, reconcileAccounts } from '@/lib/rules/accounts'
 import { XYChart } from '@/components/charts/Chart'
 import { ChartLegend } from '@/components/charts/chartParts'
@@ -24,7 +25,7 @@ import { MetaChip } from '@/components/ui/MetaChip'
 import { ruleState } from '@/lib/rules/recurringEdit'
 import { joinRu } from '@/lib/format'
 import { accountsCheckText, potCheckText, shortName } from './checkText'
-import { useAccountName, useAccounts, useActualBalances, useAnswerPlanned, usePlanTransactions, useRecurring, type PlanTx } from './api'
+import { useAccountName, useAccounts, useActualBalances, useAllWeekLimits, useAnswerPlanned, usePlanTransactions, useRecurring, type PlanTx } from './api'
 import { OperationSheet } from './OperationSheet'
 
 type Filter = 'plan' | 'fact'
@@ -51,11 +52,12 @@ export function MonthTab() {
   const actual = useActualBalances()
   const rules = useRecurring()
   const accounts = useAccounts()
+  const limits = useAllWeekLimits()
   // the operation sheet: null — closed, 'new' — a new operation, else the one being edited
   const [editing, setEditing] = useState<PlanTx | 'new' | null>(null)
   useAddAction(() => setEditing('new'))
 
-  if (txs.isPending) return <SkeletonCard />
+  if (txs.isPending || limits.isPending) return <SkeletonCard />
   const all = txs.data ?? []
   if (!all.length) {
     return (
@@ -79,7 +81,8 @@ export function MonthTab() {
   const view = balanceView(all, accountList, today)
   const factNow = view.at(today, 'fact')
   const end = forecastEnd(today)
-  const planEnd = view.at(end, 'plan')
+  // stage 2: «Баланс» in three scenarios to the horizon (only numbers and dates)
+  const f = forecast({ txs: all, accounts: accountList, limits: limits.data ?? [], today, end })
   const balanceNames = accountList.filter((a) => a.grp === 'balance' && !a.archived).map((a) => shortName(a.name))
   const pending = plannedQuestions(all, today)
   const pendingCents = pending.reduce((s, q) => s + signedCents(q.tx), 0)
@@ -95,8 +98,8 @@ export function MonthTab() {
   const next = upcomingPlanned(all, today).slice(0, 5)
   // the chart: from the start of this month (or of the accounts, if later — no jump inside the line) to the horizon
   const monthStart = `${today.slice(0, 7)}-01`
-  const line = balanceLine(all, view.start && view.start > monthStart ? view.start : monthStart, end, today, BALANCE_LINE_POINTS, view.at)
-  const months = monthsTable(all, today, end, view)
+  const line = forecastLine(f, (d) => view.at(d, 'fact'), view.start && view.start > monthStart ? view.start : monthStart, today)
+  const months = forecastMonths(monthsTable(all, today, end, view), f, all)
   const accountsFrom = months.find((m) => m.accountsFrom)?.accountsFrom ?? null
   const ruleCount = (rules.data ?? []).filter((r) => ruleState(r, today) !== 'ended').length
 
@@ -116,24 +119,26 @@ export function MonthTab() {
             {`Ждут подтверждения: ${joinRu(pending.slice(0, 3).map((q) => q.tx.title))}${pending.length > 3 ? ` и ещё ${pending.length - 3}` : ''} · ${pendingCents > 0 ? '+' : '−'}${formatEur(Math.abs(pendingCents), { whole: true })}`}
           </p>
         )}
-        <div className="text-base text-ink2 tabular-nums">план на {formatDayMonth(end)} — {formatEur(planEnd, { whole: true })}</div>
+        <ScenarioTable f={f} />
         <XYChart
-          label={`Баланс до ${formatDayMonth(end)}: план и факт`}
+          label={`Баланс до ${formatDayMonth(end)}: факт и сценарии`}
           data={line}
           height={184}
           empty={all.filter((t) => isFact(t)).length < 2}
           emptyText="Мало данных — график появится через неделю отметок"
+          areas={f.scenarios.tempo ? [{ low: 'low', high: 'high', name: 'Коридор', color: 'money', unit: ' €' }] : []}
           lines={[
-            { key: 'plan', name: 'План', color: 'money', dash: true, unit: ' €' },
+            { key: 'plan', name: 'По плану', color: 'money', dash: true, unit: ' €' },
             { key: 'fact', name: 'Факт', color: 'money', unit: ' €' },
           ]}
-          yLeft={{ domain: ['auto', 'auto'], ticks: niceTicks(line.map((p) => p.plan).concat(line.map((p) => p.fact ?? p.plan))) }}
+          yLeft={{ domain: ['auto', 'auto'], ticks: niceTicks(line.flatMap((p) => [p.fact, p.plan, p.low, p.high]).filter((v): v is number => v !== null)) }}
           todayKey={today}
         />
         <ChartLegend
           items={[
-            { name: 'план', color: 'money', kind: 'dash' },
             { name: 'факт', color: 'money', kind: 'line' },
+            { name: 'по плану', color: 'money', kind: 'dash' },
+            ...(f.scenarios.tempo ? [{ name: 'коридор сценариев', color: 'money' as const, kind: 'bar' as const }] : []),
           ]}
         />
         <p className="m-0 text-cap text-ink2 tabular-nums">{view.start ? accountsCheckText(byAccount) : potCheckText(check)}</p>
@@ -239,6 +244,53 @@ export function MonthTab() {
       )}
       <OperationSheet open={editing !== null} onClose={() => setEditing(null)} tx={editing === 'new' ? null : editing} />
     </>
+  )
+}
+
+const SCENARIO_LABEL: Record<Scenario, string> = { plan: 'по плану', tempo: 'по темпу', careful: 'осторожно' }
+
+/**
+ * The scenarios on the horizon and their lowest day (stage 2, SPEC §8: numbers and dates only). «по темпу» names its
+ * week; too few weeks of «Жизнь» — «мало данных», and «осторожно» with it.
+ */
+function ScenarioTable({ f }: { f: Forecast }) {
+  const signed = formatEstimate
+  return (
+    <table className="w-full border-collapse text-cap tabular-nums">
+      <thead>
+        <tr className="text-ink2">
+          <th className="py-1 text-left font-normal">Сценарий</th>
+          <th className="py-1 text-right font-normal">на {formatDayMonth(f.end)}</th>
+          <th className="py-1 text-right font-normal">ниже всего</th>
+        </tr>
+      </thead>
+      <tbody>
+        {SCENARIOS.map((s) => {
+          const r = f.scenarios[s]
+          return (
+            <tr key={s} className="border-t border-line">
+              <td className="py-2">
+                {SCENARIO_LABEL[s]}
+                {s === 'tempo' && f.tempo.enough && <span className="block text-ink2">{formatEstimate(f.tempo.weeklyCents!)} в неделю</span>}
+              </td>
+              {r ? (
+                <>
+                  <td className="py-2 text-right font-semibold">{signed(r.endCents)}</td>
+                  <td className="py-2 text-right">
+                    {signed(r.pit.cents)}
+                    <span className="block text-ink2">{formatDayMonth(r.pit.date)}</span>
+                  </td>
+                </>
+              ) : (
+                <td colSpan={2} className="py-2 text-right text-ink2">
+                  мало данных
+                </td>
+              )}
+            </tr>
+          )
+        })}
+      </tbody>
+    </table>
   )
 }
 

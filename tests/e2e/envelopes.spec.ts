@@ -1,10 +1,8 @@
 import { expect, test } from '@playwright/test'
-import { formatDayMonth } from '../../src/lib/dates'
-import { forecastEnd } from '../../src/lib/rules/money'
 import { NEEDS, berlinDate, cleanupTestUser, live, login, more, plus, testClient } from './helpers'
 
-/** «план на 31.05 — 350 €»: the plan at the end of the rolling horizon. */
-const planOn = (eur: number) => new RegExp(`план на ${formatDayMonth(forecastEnd(berlinDate())).replace('.', '\\.')} — ${eur}\\s€`)
+/** The scenario «по плану» on the horizon (stage 2): its row of the table holds the sum. */
+const planOn = (eur: number) => new RegExp(`^по плану.*${eur}\\s€`)
 
 test.beforeEach(cleanupTestUser)
 test.afterAll(cleanupTestUser)
@@ -59,7 +57,7 @@ test('без Excel: плановая операция, её правка и до
   await sheet.getByRole('button', { name: 'Sparkasse' }).click()
   await sheet.getByRole('button', { name: 'Сохранить' }).click()
   await expect(page.getByText(/Ждут подтверждения: Miete e2e/)).toBeVisible()
-  await expect(page.getByText(planOn(350))).toBeVisible()
+  await expect(page.getByRole('row', { name: planOn(350) })).toBeVisible()
 
   // edit: another sum and status «факт» — it moves into «сейчас»
   await page.getByRole('button', { name: /Miete e2e/ }).click()
@@ -68,7 +66,7 @@ test('без Excel: плановая операция, её правка и до
   await edit.getByRole('tab', { name: 'Факт' }).click()
   await edit.getByRole('button', { name: 'Сохранить' }).click()
   await expect(page.getByText(/Ждут подтверждения/)).toBeHidden()
-  await expect(page.getByText(planOn(400))).toBeVisible()
+  await expect(page.getByRole('row', { name: planOn(400) })).toBeVisible()
 
   // a debt
   await page.getByRole('link', { name: 'Назад: Деньги' }).click()

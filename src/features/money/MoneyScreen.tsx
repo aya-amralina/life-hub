@@ -13,8 +13,9 @@ import { CalendarLink } from '@/components/layout/CalendarLink'
 import { MoreList, SectionHeader, type MoreLink } from '@/components/layout/MoreList'
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
 import { addDaysISO, formatDayMonth, formatRelativeDay, todayBerlin, weekStart } from '@/lib/dates'
-import { formatAmount, formatEur, plural, toCents } from '@/lib/format'
+import { formatAmount, formatEstimate, formatEur, plural, toCents } from '@/lib/format'
 import { groupBalanceAt } from '@/lib/rules/accounts'
+import { weekPace } from '@/lib/rules/forecast'
 import { forecastEnd, plannedQuestions, weekSpendings } from '@/lib/rules/money'
 import { nextOccurrence, ruleState } from '@/lib/rules/recurringEdit'
 import { NotesSection } from '@/features/notes/NotesCard'
@@ -22,6 +23,7 @@ import { useAccountName, useAccounts, useAddExpense, useAllTransactions, useDele
 import { CutNextWeek } from './CutNextWeek'
 import { AccountsTab } from './AccountsTab'
 import { EnvelopesTab } from './EnvelopesTab'
+import { FreeUntilRow } from './FreeUntil'
 import { LimitsSheet } from './LimitsSheet'
 import { MoneyQuestions } from './MoneyQuestions'
 import { MoneyTotal } from './MoneyTotal'
@@ -59,6 +61,7 @@ export function MoneyScreen() {
         <ScreenHeader title="Деньги" right={<CalendarLink sphere="money" />} />
         {/* the questions themselves — on the week (and «Сегодня»); sections only say that some are waiting */}
         <MoneyQuestions />
+        <FreeUntilRow />
         <WeekTab />
         <MoneyMore />
       </>
@@ -155,6 +158,7 @@ function WeekTab() {
           <Card>
             <CardHeader title="Неделя" dotClass="bg-money" context={summary.status === 'over' ? 'перерасход' : 'в лимите'} />
             <MoneyTotal summary={summary} />
+            {monday === thisMonday && <WeekPaceLine spentCents={summary.spentCents} limitCents={summary.limitCents} monday={monday} today={today} />}
           </Card>
           {summary.status === 'over' && monday <= thisMonday && <CutNextWeek monday={monday} summary={summary} />}
           <Card>
@@ -204,6 +208,18 @@ function WeekTab() {
 
       <LimitsSheet open={editLimits} onClose={() => setEditLimits(false)} monday={monday} current={limits.data ?? []} />
     </>
+  )
+}
+
+/** «при таком темпе к воскресенью ≈ X € из лимита Y €» — from Wednesday to Saturday; above the limit — amber. */
+function WeekPaceLine({ spentCents, limitCents, monday, today }: { spentCents: number; limitCents: number; monday: string; today: string }) {
+  const pace = weekPace(spentCents, limitCents, monday, today)
+  if (!pace) return null
+  const over = pace.projectedCents > pace.limitCents
+  return (
+    <div className={over ? 'text-cap font-semibold text-amber-ink tabular-nums' : 'text-cap text-ink2 tabular-nums'}>
+      при таком темпе к воскресенью ≈ {formatEstimate(pace.projectedCents)} из лимита {formatEur(pace.limitCents, { whole: true })}
+    </div>
   )
 }
 

@@ -6,6 +6,8 @@ export type XYLine = { key: string; name: string; color: SphereColor; dash?: boo
 export type XYBar = { key: string; name: string; color: SphereColor; axis?: 'left' | 'right'; opacity?: number; unit?: string; minPointSize?: number }
 export type XYAxis = { domain: [number | 'auto', number | 'auto']; ticks?: number[]; unit?: string }
 export type XYBand = { from: string; to: string; label: string }
+/** A filled range between two keys of a point (a corridor of scenarios); null on either — a gap. */
+export type XYArea = { low: string; high: string; name: string; color: SphereColor; unit?: string }
 
 const color = (c: SphereColor) => `var(--${c})`
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatAmount, formatEur, formatHours, parseEurInput, parseSignedEurInput, toCents } from './format'
+import { formatAmount, formatEstimate, formatEur, formatHours, parseEurInput, parseSignedEurInput, toCents } from './format'
 
 const NB = ' '
 
@@ -72,5 +72,13 @@ describe('parseSignedEurInput (Dispo)', () => {
     expect(parseSignedEurInput(' 40 ')).toBe(4000)
     expect(parseSignedEurInput('--1')).toBeNull()
     expect(parseSignedEurInput('')).toBeNull()
+  })
+})
+
+describe('formatEstimate', () => {
+  it('whole euros, «−» below zero', () => {
+    expect(formatEstimate(30438)).toBe('304\u00a0€')
+    expect(formatEstimate(-20141)).toBe('−201\u00a0€')
+    expect(formatEstimate(-40)).toBe('0\u00a0€')
   })
 })

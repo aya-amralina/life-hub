@@ -23,7 +23,8 @@ test('Месяц: «сейчас» по факту, ждут подтвержд�
   // the rolling horizon: the end of the month six months ahead
   const end = formatDayMonth(forecastEnd(berlinDate()))
   await expect(page.getByText(`Баланс до ${end}`, { exact: true })).toBeVisible()
-  await expect(page.getByText(new RegExp(`^план на ${end.replace('.', '\\.')} —`))).toBeVisible()
+  // stage 2: the scenarios on the horizon instead of one «план на …»
+  await expect(page.getByRole('columnheader', { name: `на ${end}` })).toBeVisible()
   await expect(page.getByText('900 €').first()).toBeVisible() // 1000 − 100: the planned 50 is not in «сейчас»
   await expect(page.getByText('Ждут подтверждения: Abo e2e · −50 €')).toBeVisible()
   await expect(page.getByText(/по расчёту 900\s€ — сходится/)).toBeVisible()

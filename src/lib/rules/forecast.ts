@@ -1,8 +1,8 @@
 import { WEEK_CATEGORIES } from '../constants'
-import { addDaysISO, daysBetween, weekStart, type ISODate } from '../dates'
+import { addDaysISO, daysBetween, endOfMonthISO, weekStart, type ISODate } from '../dates'
 import { toCents } from '../format'
 import { accountBalanceAt, accountsStart, balanceView, goalAccountNow, groupDelta, groupOfAccount, type AccTx, type AccountLike } from './accounts'
-import { debtSummary, envelopeSummary, forecastEnd, isFact, isWeekRow, signedCents, spentLifeInWeek, type DebtLike } from './money'
+import { debtSummary, envelopeSummary, forecastEnd, isFact, isInPlan, isWeekRow, signedCents, spentLifeInWeek, type DebtLike, type MonthRow } from './money'
 
 /**
  * The forecast of «Деньги» (stage 2, decision 16.11.2026 and 18.11.2026): «Баланс» from the start by accounts to the
@@ -82,7 +82,8 @@ function lifeByDay(weekly: (m: ISODate) => number, spentThisWeek: number, today:
   }
 }
 
-export type ForecastDay = { date: ISODate; plan: number; tempo: number | null; careful: number | null }
+/** A day of the forecast, cents; `lifePlan` — «Жизнь» by plan from today through that day (for «Месяцы»). */
+export type ForecastDay = { date: ISODate; plan: number; tempo: number | null; careful: number | null; lifePlan: number }
 export type ScenarioResult = { endCents: number; pit: { date: ISODate; cents: number } }
 
 /** The lowest day of a series; the earliest of equal ones. */
@@ -129,7 +130,8 @@ export function forecast(i: { txs: readonly AccTx[]; accounts: readonly AccountL
       life[s] += f(d)
       return base - Math.round(life[s])
     }
-    days.push({ date: d, plan: at('plan')!, tempo: at('tempo'), careful: at('careful') })
+    const planCents = at('plan')!
+    days.push({ date: d, plan: planCents, tempo: at('tempo'), careful: at('careful'), lifePlan: Math.round(life.plan) })
   }
   const result = (s: Scenario): ScenarioResult | null => {
     if (!weekly[s]) return null
@@ -256,4 +258,27 @@ export function weekPace(spentCents: number, limitCents: number, monday: ISODate
   const day = daysBetween(monday, today) + 1
   if (day < WEEK_PACE_FROM_DAY || day > 6 || limitCents <= 0 || spentCents <= 0) return null
   return { projectedCents: Math.round((spentCents * 7) / day), limitCents }
+}
+
+/**
+ * «Месяцы» with the forecast (decision 18.11.2026): from today's month on, «На конец» is the scenario «по плану» on the
+ * month's last day (the horizon at most), and «Расход» has «Жизнь» by plan for the days from today instead of the week
+ * budget rows of the plan. Months before today — as they were.
+ */
+export function forecastMonths(rows: readonly MonthRow[], f: Forecast, txs: readonly AccTx[]): MonthRow[] {
+  const first = f.days[0]!.date
+  const dayOf = new Map(f.days.map((d) => [d.date, d]))
+  return rows.map((r) => {
+    const last = endOfMonthISO(`${r.month}-01`)
+    if (last < first) return r
+    const upTo = last < f.end ? last : f.end
+    const end = dayOf.get(upTo)
+    if (!end) return r
+    // «Жизнь» by plan through the day before the month (0 when the month holds today)
+    const before = dayOf.get(addDaysISO(`${r.month}-01`, -1))?.lifePlan ?? 0
+    const budgets = txs
+      .filter((t) => t.entry_kind === 'week_budget' && isInPlan(t) && !isFact(t) && t.date.startsWith(r.month))
+      .reduce((s, t) => s + toCents(t.amount_eur), 0)
+    return { ...r, endCents: end.plan, expenseCents: r.expenseCents - budgets + end.lifePlan - before }
+  })
 }

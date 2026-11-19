@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { AccTx, AccountLike } from './accounts'
-import { forecast, freeUntil, goalForecast, lifePlanWeeks, lifeTempo, lifeWeekFact, lowestPoint, weekPace, type WeekLimitSum } from './forecast'
+import { balanceView } from './accounts'
+import { forecastLine } from './charts'
+import { forecast, forecastMonths, freeUntil, goalForecast, lifePlanWeeks, lifeTempo, lifeWeekFact, lowestPoint, weekPace, type WeekLimitSum } from './forecast'
+import { monthsTable } from './money'
 
 const acc = (id: string, grp: string, sort_order = 0): AccountLike => ({ id, name: id, grp, sort_order, archived: false })
 const accounts = [acc('main', 'balance', 10), acc('spark', 'balance', 30), acc('cushion', 'cushion', 50), acc('dep', 'separate', 70), acc('trips', 'separate', 90)]
@@ -199,5 +202,30 @@ describe('forecast: the pace of the week', () => {
     expect(weekPace(1000, 2500, mon, '2026-11-22')).toBeNull()
     expect(weekPace(1000, 0, mon, '2026-11-19')).toBeNull()
     expect(weekPace(0, 2500, mon, '2026-11-19')).toBeNull()
+  })
+})
+
+describe('forecast: «Месяцы» and the chart', () => {
+  const f = forecast({ txs, accounts, limits, today: TODAY, end: END })
+  it('from today’s month: the end by plan, «Жизнь» by plan instead of the week budget rows', () => {
+    const view = balanceView(txs, accounts, TODAY)
+    const rows = forecastMonths(monthsTable(txs, TODAY, END, view), f, txs)
+    const nov = rows.find((r) => r.month === '2026-11')!
+    const dec = rows.find((r) => r.month === '2026-12')!
+    expect(dec.endCents).toBe(f.scenarios.plan!.endCents) // 6.12, the horizon here
+    expect(nov.endCents).toBe(f.days.find((d) => d.date === '2026-11-30')!.plan)
+    const plain = monthsTable(txs, TODAY, END, view).find((r) => r.month === '2026-11')!
+    // November: the 25 € week budget row out, «Жизнь» by plan 19–30.11 in (8.04 + 70 + 47.50 / 7)
+    expect(nov.expenseCents - plain.expenseCents).toBe(-2500 + f.days.find((d) => d.date === '2026-11-30')!.lifePlan)
+    expect(rows.find((r) => r.month === '2026-10')).toEqual(monthsTable(txs, TODAY, END, view).find((r) => r.month === '2026-10'))
+  })
+  it('the line: the fact to today, the plan and the corridor from today; today, the lowest day and the horizon included', () => {
+    const line = forecastLine(f, (d) => balanceView(txs, accounts, TODAY).at(d, 'fact'), START, TODAY, 8)
+    expect(line.length).toBeLessThanOrEqual(8)
+    for (const k of [TODAY, '2026-11-26', END]) expect(line.some((p) => p.key === k)).toBe(true)
+    const today = line.find((p) => p.key === TODAY)!
+    expect(today).toMatchObject({ fact: 293.04, plan: f.days[0]!.plan / 100 })
+    expect(line.find((p) => p.key === START)).toMatchObject({ fact: 300, plan: null, low: null, high: null })
+    for (const p of line.filter((x) => x.key >= TODAY)) expect(p.low! <= p.plan! && p.plan! <= p.high!).toBe(true)
   })
 })

@@ -19,6 +19,12 @@ export function formatEur(cents: number, opts: { whole?: boolean } = {}): string
   return nbsp((opts.whole && isWhole ? eurWhole : eur).format(value))
 }
 
+/** An estimate (a forecast, «≈»): rounded to whole euros, with the sign «−» (U+2212) below zero — 30438 → «304 €». */
+export function formatEstimate(cents: number): string {
+  const whole = Math.round(cents / 100) * 100
+  return whole < 0 ? `−${formatEur(-whole, { whole: true })}` : formatEur(whole, { whole: true })
+}
+
 const num2 = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const num0 = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 })
 
