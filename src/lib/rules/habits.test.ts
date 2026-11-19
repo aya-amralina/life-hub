@@ -28,9 +28,9 @@ describe('rule 12 — stage by date', () => {
   it('ignores stages of other spheres', () => {
     expect(stageForDate([{ ...stages[0]!, sphere: 'study' }], '2026-11-10')).toBeNull()
   })
-  it('hides habits that have not started; all three without stages', () => {
+  it('hides habits that have not started; without stages — the default two («Утренний старт» is off)', () => {
     expect(activeHabits(stages[0]!)).toEqual(['morning', 'outside'])
-    expect(activeHabits(null)).toEqual(['morning', 'outside', 'water'])
+    expect(activeHabits(null)).toEqual(['outside', 'water'])
   })
 })
 
@@ -65,25 +65,25 @@ describe('rule 13 — «минимум» counts the day', () => {
 describe('rule 14 — week habit share', () => {
   const mon = '2026-11-09'
   it('marked / (active × elapsed days), today included', () => {
-    // Wednesday: 3 days × 3 habits = 9 possible; 3 + 2 + 1 marked = 6
+    // Wednesday: 3 days × 2 default habits = 6 possible; 2 + 1 + 1 marked = 4 («Утренний старт» does not count)
     const logs = [
       log('2026-11-09', { morning: true, outside: true, water: true }),
       log('2026-11-10', { morning: true, water: true }),
       log('2026-11-11', { outside: true }),
     ]
-    expect(weekHabitShare(logs, [], mon, '2026-11-11')).toBeCloseTo(6 / 9)
+    expect(weekHabitShare(logs, [], mon, '2026-11-11')).toBeCloseTo(4 / 6)
   })
   it('missing days count as zero, no reset, a complete minimum day counts fully', () => {
     const logs = [log('2026-11-09', { minimum_mode: true, water: true, outside: true })]
-    expect(weekHabitShare(logs, [], mon, '2026-11-10')).toBeCloseTo(3 / 6)
+    expect(weekHabitShare(logs, [], mon, '2026-11-10')).toBeCloseTo(2 / 4)
   })
   it('an incomplete minimum day counts its marked habits of the set', () => {
     const logs = [log('2026-11-09', { minimum_mode: true, water: true })]
-    expect(weekHabitShare(logs, [], mon, '2026-11-09')).toBeCloseTo(1 / 3)
+    expect(weekHabitShare(logs, [], mon, '2026-11-09')).toBeCloseTo(1 / 2)
   })
   it('past week uses all 7 days', () => {
-    const logs = [log('2026-11-09', { morning: true })]
-    expect(weekHabitShare(logs, [], mon, '2026-11-20')).toBeCloseTo(1 / 21)
+    const logs = [log('2026-11-09', { water: true })]
+    expect(weekHabitShare(logs, [], mon, '2026-11-20')).toBeCloseTo(1 / 14)
   })
   it('active habits are taken per day when a stage starts mid-week', () => {
     const stages = [stage('A', '2026-11-01', '2026-11-10', ['morning']), stage('B', '2026-11-11', '2026-11-30', ['morning', 'water'])]

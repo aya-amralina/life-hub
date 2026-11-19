@@ -23,6 +23,7 @@ import {
 import { burning, completedOn, itemsOfDay, nextTargetAfterHorizon } from '@/lib/rules/items'
 import { isEvening, spentOn } from '@/lib/rules/day'
 import { formatEur } from '@/lib/format'
+import { CoreCard } from '@/features/body/CoreCard'
 import { EveningCard } from '@/features/body/EveningCard'
 import { HabitsCard } from '@/features/body/HabitsCard'
 import { useItems, useUpdateItem } from '@/features/items/api'
@@ -69,6 +70,7 @@ export function TodayScreen() {
       {/* by the time of day: from 18:00 «Вечер» moves up, with what the day came to */}
       {evening && <EveningCard date={today} context={<DaySummary today={today} />} />}
       <HabitsCard date={today} to="/body" />
+      <CoreCard today={today} />
       <BurningCard today={today} />
       {!evening && <EveningCard date={today} foldable />}
     </>

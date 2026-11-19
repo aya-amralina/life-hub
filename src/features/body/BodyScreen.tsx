@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CalendarClock, ChartLine, Dumbbell, Flag, NotebookPen, Pill, Ruler, Stethoscope, X } from 'lucide-react'
+import { CalendarClock, ChartLine, Dumbbell, Flag, NotebookPen, PersonStanding, Pill, Ruler, Stethoscope, X } from 'lucide-react'
 import { Navigate, useParams } from 'react-router'
 import { useAddAction, useOpenAdd } from '@/app/addSheetContext'
 import { IconButton } from '@/components/ui/Button'
@@ -28,6 +28,9 @@ import { ActivitySheet } from './ActivitySheet'
 import { BodyCharts } from './BodyCharts'
 import { DayNoteCard } from '@/features/journal/DayNoteCard'
 import { bodyDataKeys, useActivities, useActivityTypes, useWrite } from './activityApi'
+import { CORE_PATH } from './coreApi'
+import { CoreCard } from './CoreCard'
+import { CoreSession } from './CoreSession'
 import { useDailyLog, useSaveDailyLog, useStages, useWeekLogs } from './api'
 import { EveningCard } from './EveningCard'
 import { HABIT_META, minimumPhrase } from './habitMeta'
@@ -38,6 +41,7 @@ import { StrengthTab } from './StrengthTab'
 
 const BACK = '/body'
 const SECTIONS = {
+  core: 'Кор',
   tasks: 'Задачи и визиты',
   charts: 'Графики',
   strength: 'Сила',
@@ -49,6 +53,7 @@ const SECTIONS = {
 type Section = keyof typeof SECTIONS
 
 const MORE: readonly MoreLink[] = [
+  { to: CORE_PATH, label: 'Кор', icon: PersonStanding },
   { to: '/body/tasks', label: 'Задачи и визиты', icon: Stethoscope },
   { to: '/body/charts', label: 'Графики', icon: ChartLine },
   { to: '/body/strength', label: 'Сила', icon: Dumbbell },
@@ -75,6 +80,7 @@ export function BodyScreen() {
   return (
     <>
       <SectionHeader title={SECTIONS[s]} back={BACK} sphere="Тело" right={s === 'tasks' ? <CalendarLink sphere="body" /> : undefined} />
+      {s === 'core' && <CoreSession />}
       {s === 'tasks' && <BodyTasks />}
       {s === 'charts' && (
         <>
@@ -120,6 +126,7 @@ function DayTab() {
       <ItemQuestions sphere="body" />
       <MinimumCard date={date} />
       <HabitsCard date={date} />
+      {date === today && <CoreCard today={today} />}
       {minimum ? (
         <MinimumRest />
       ) : (
@@ -336,7 +343,7 @@ function StageCard() {
   const list = stages.data ?? []
   const next = list.find((s) => s.sphere === 'body' && s.start_date > today)
   if (!list.length) {
-    return <EmptyState title="Этапов пока нет">Их заводят в настройках. А пока считаются все три привычки, минимум — вода и 10 минут на улице.</EmptyState>
+    return <EmptyState title="Этапов пока нет">Их заводят в настройках. А пока считаются вода и 10 минут на улице, они же — минимум.</EmptyState>
   }
   return (
     <>
@@ -354,7 +361,7 @@ function StageCard() {
           <div className="text-cap text-ink2">Минимум: {minimumPhrase(minimumSet(stage))}</div>
         </Card>
       ) : (
-        <EmptyState title="Сейчас нет активного этапа">Привычки считаются все три.</EmptyState>
+        <EmptyState title="Сейчас нет активного этапа">Считаются вода и 10 минут на улице.</EmptyState>
       )}
       {next && (
         <EmptyState title={`Дальше: ${next.name}`}>{`С ${formatDayMonth(next.start_date)}. Новые привычки появятся сами, когда этап начнётся.`}</EmptyState>

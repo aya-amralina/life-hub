@@ -13,6 +13,7 @@ import { ACCOUNT_GROUPS, SPHERE_CLASS, SPHERE_LABEL, type Sphere } from '@/lib/c
 import { addDaysISO, formatWeekdayDate, todayBerlin, type ISODate } from '@/lib/dates'
 import { formatEur, formatHours, plural, toCents } from '@/lib/format'
 import { weekPoints, weekPointsTarget } from '@/lib/rules/activities'
+import { coffeeAverage } from '@/lib/rules/charts'
 import { minimumDone, minimumSet, stageForDate, weekHabitShare } from '@/lib/rules/habits'
 import { isItemOpen, isStuck } from '@/lib/rules/items'
 import { GROUP_LABEL, accountOptions, parseBalanceInput } from '@/lib/rules/accounts'
@@ -167,12 +168,17 @@ export function BodyStep({ monday, note, onNote }: { monday: ISODate; note: stri
   const share = weekHabitShare(logs.data ?? [], stages.data ?? [], monday, today < sunday ? today : sunday)
   const stage = stages.data?.length ? stageForDate(stages.data, monday) : null
   const minDays = (logs.data ?? []).filter((l) => minimumDone(l, minimumSet(stage))).length
-  const avg = (f: (l: { mood: number | null; energy: number | null; sleep_h: number | null; coffee_cups: number | null }) => number | null) => {
+  const avg = (f: (l: { mood: number | null; energy: number | null; sleep_h: number | null }) => number | null) => {
     const v = (logs.data ?? []).map(f).filter((x): x is number => x !== null).map(Number)
     return v.length ? String(Math.round((v.reduce((s, x) => s + x, 0) / v.length) * 10) / 10).replace('.', ',') : '—'
   }
   const points = weekPoints(activities.data ?? [], types.data ?? [], monday)
   const target = weekPointsTarget(stage)
+  // a day without a coffee mark is 0 (the default «Нет»), so every day of the week counts
+  const coffee = coffeeAverage(
+    logs.data ?? [],
+    Array.from({ length: 7 }, (_, i) => addDaysISO(monday, i)).filter((d) => d <= today),
+  )
   return (
     <>
       <Card>
@@ -195,7 +201,7 @@ export function BodyStep({ monday, note, onNote }: { monday: ISODate; note: stri
           <dt className="text-ink2">Сон, часов в среднем</dt>
           <dd className="m-0 text-right">{avg((l) => l.sleep_h)}</dd>
           <dt className="text-ink2">Кофе, чашек в день</dt>
-          <dd className="m-0 text-right">{avg((l) => l.coffee_cups)}</dd>
+          <dd className="m-0 text-right">{coffee === null ? '—' : String(coffee).replace('.', ',')}</dd>
           <dt className="text-ink2">Очки активности</dt>
           <dd className="m-0 text-right">
             {String(points).replace('.', ',')}

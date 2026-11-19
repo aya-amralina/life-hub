@@ -1,8 +1,14 @@
 import { addDaysISO, daysBetween, type ISODate } from '../dates'
 
-/** Daily habits = boolean columns of daily_logs («Счёт дня (из 3)»). */
+/**
+ * Daily habits = boolean columns of daily_logs. `morning` («Утренний старт») is off since 19.11.2026: no stage holds it,
+ * its marks stay in the base as history and count again only if a stage takes it back.
+ */
 export const HABIT_KEYS = ['morning', 'outside', 'water'] as const
 export type HabitKey = (typeof HABIT_KEYS)[number]
+
+/** Habits counted when there is no stage (before import, the test user). */
+export const DEFAULT_HABITS: readonly HabitKey[] = ['outside', 'water']
 
 export type StageLike = {
   name: string
@@ -25,10 +31,10 @@ export function stageForDate<T extends StageLike>(stages: readonly T[], date: IS
 
 /**
  * Habits of the stage; habits that have not started yet are hidden.
- * Without any stage (before import) all three daily habits are active.
+ * Without any stage (before import) the default habits are active.
  */
 export function activeHabits(stage: Pick<StageLike, 'habits'> | null): HabitKey[] {
-  if (!stage) return [...HABIT_KEYS]
+  if (!stage) return [...DEFAULT_HABITS]
   return HABIT_KEYS.filter((k) => stage.habits.includes(k))
 }
 

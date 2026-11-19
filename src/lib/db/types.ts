@@ -190,6 +190,151 @@ export type Database = {
           },
         ]
       }
+      core_programs: {
+        Row: {
+          created_at: string
+          id: string
+          minutes: number
+          name: string
+          offer_after: string | null
+          rules: string[]
+          source_id: string | null
+          stage: number
+          stage_since: string
+          stages: Json
+          start_date: string
+          test_every_days: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          minutes?: number
+          name: string
+          offer_after?: string | null
+          rules?: string[]
+          source_id?: string | null
+          stage?: number
+          stage_since: string
+          stages: Json
+          start_date: string
+          test_every_days?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          minutes?: number
+          name?: string
+          offer_after?: string | null
+          rules?: string[]
+          source_id?: string | null
+          stage?: number
+          stage_since?: string
+          stages?: Json
+          start_date?: string
+          test_every_days?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      core_sessions: {
+        Row: {
+          created_at: string
+          date: string
+          dome: boolean | null
+          done: string[]
+          done_at: string | null
+          id: string
+          program_id: string
+          source_id: string | null
+          stage: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          dome?: boolean | null
+          done?: string[]
+          done_at?: string | null
+          id?: string
+          program_id: string
+          source_id?: string | null
+          stage: number
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          dome?: boolean | null
+          done?: string[]
+          done_at?: string | null
+          id?: string
+          program_id?: string
+          source_id?: string | null
+          stage?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "core_sessions_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "core_programs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      core_tests: {
+        Row: {
+          created_at: string
+          date: string
+          dome: boolean | null
+          fingers: number | null
+          id: string
+          program_id: string
+          source_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          dome?: boolean | null
+          fingers?: number | null
+          id?: string
+          program_id: string
+          source_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          dome?: boolean | null
+          fingers?: number | null
+          id?: string
+          program_id?: string
+          source_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "core_tests_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "core_programs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_logs: {
         Row: {
           body_cream: boolean

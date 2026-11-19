@@ -56,6 +56,8 @@ export async function login(page: Page) {
 
 // Child tables first (FKs).
 const TABLES = [
+  'core_sessions',
+  'core_tests',
   'week_limits',
   'actual_balances',
   'transactions',
@@ -95,6 +97,7 @@ export async function cleanupTestUser() {
     if (del.error) throw new Error(`cleanup ${table} failed: ${del.error.code}`)
   }
   await resetAccounts(sb)
+  await resetCore(sb)
   await sb.auth.signOut()
 }
 
@@ -111,6 +114,12 @@ async function resetAccounts(sb: Awaited<ReturnType<typeof testClient>>) {
     { onConflict: 'user_id,source_id' },
   )
   if (up.error) throw new Error(`reset accounts failed: ${up.error.code}`)
+}
+
+/** «Кор» comes from migration 0020, like the accounts: its sessions and tests are gone, the program is back on stage 1. */
+async function resetCore(sb: Awaited<ReturnType<typeof testClient>>) {
+  const up = await sb.from('core_programs').update({ stage: 1, stage_since: '2026-11-19', offer_after: null }).eq('source_id', 'core:program')
+  if (up.error) throw new Error(`reset core failed: ${up.error.code}`)
 }
 
 /** Signed-in client of the TEST user — for seeding rows a scenario needs (RLS keeps them its own). */

@@ -6,6 +6,7 @@ export const BACKUP_TABLES = [
   'accounts',
   'weeks',
   'plan_stages',
+  'core_programs',
   'activity_types',
   'envelopes',
   'debts',
@@ -20,6 +21,8 @@ export const BACKUP_TABLES = [
   'intake',
   'strength_sets',
   'measurements',
+  'core_sessions',
+  'core_tests',
   'notes',
   'wishlist',
   'reviews',
@@ -29,16 +32,18 @@ export type BackupTable = (typeof BACKUP_TABLES)[number]
 
 export const BACKUP_FORMAT = 'life-hub-backup'
 /**
- * v2 (16.11.2026) adds `recurring` and the columns of operations that link to it; v3 (18.11.2026) adds `accounts`.
- * Older files are still restored.
+ * v2 (16.11.2026) adds `recurring` and the columns of operations that link to it; v3 (18.11.2026) adds `accounts`;
+ * v4 (19.11.2026) adds «Кор» (`core_programs`, `core_sessions`, `core_tests`). Older files are still restored.
  */
-export const BACKUP_VERSION = 3
+export const BACKUP_VERSION = 4
 
 /** Tables each readable version may hold. */
+const CORE: readonly string[] = ['core_programs', 'core_sessions', 'core_tests']
 const TABLES_OF_VERSION: Record<number, readonly string[]> = {
-  1: BACKUP_TABLES.filter((t) => t !== 'recurring' && t !== 'accounts'),
-  2: BACKUP_TABLES.filter((t) => t !== 'accounts'),
-  3: BACKUP_TABLES,
+  1: BACKUP_TABLES.filter((t) => t !== 'recurring' && t !== 'accounts' && !CORE.includes(t)),
+  2: BACKUP_TABLES.filter((t) => t !== 'accounts' && !CORE.includes(t)),
+  3: BACKUP_TABLES.filter((t) => !CORE.includes(t)),
+  4: BACKUP_TABLES,
 }
 
 export type Row = Record<string, unknown> & { id: string }
@@ -48,6 +53,9 @@ export const TABLE_LABEL: Record<BackupTable, string> = {
   accounts: 'Счета',
   weeks: 'Недели',
   plan_stages: 'Этапы',
+  core_programs: 'Кор · программа',
+  core_sessions: 'Кор · сессии',
+  core_tests: 'Кор · тесты пальцами',
   activity_types: 'Типы активностей',
   envelopes: 'Конверты и цели',
   debts: 'Долги',

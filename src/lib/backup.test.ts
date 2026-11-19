@@ -19,12 +19,20 @@ describe('backup', () => {
     expect(parseBackup(JSON.stringify(backup)).ok).toBe(true)
     expect(parseBackup('nope')).toEqual({ ok: false, reason: 'Это не JSON-файл.' })
     expect(parseBackup('{"format":"x"}')).toEqual({ ok: false, reason: 'Это не экспорт Life Hub.' })
-    expect(parseBackup(JSON.stringify({ ...backup, version: 4 }))).toEqual({ ok: false, reason: 'Версия файла 4 — читаются версии 1–3.' })
+    expect(parseBackup(JSON.stringify({ ...backup, version: 5 }))).toEqual({ ok: false, reason: 'Версия файла 5 — читаются версии 1–4.' })
     expect(parseBackup(JSON.stringify({ ...backup, tables: { secrets: [] } }))).toEqual({ ok: false, reason: 'Неизвестная таблица «secrets».' })
     expect(parseBackup(JSON.stringify({ ...backup, tables: { items: [{ title: 'no id' }] } })).ok).toBe(false)
   })
+  it('v4 carries «Кор»; a v3 file (before it) is still read, but never with those tables; the program before its sessions', () => {
+    expect(BACKUP_VERSION).toBe(4)
+    const v3 = { ...backup, version: 3 }
+    expect(parseBackup(JSON.stringify(v3)).ok).toBe(true)
+    expect(parseBackup(JSON.stringify({ ...v3, tables: { core_sessions: [{ id: 's1' }] } }))).toEqual({ ok: false, reason: 'Неизвестная таблица «core_sessions».' })
+    expect(parseBackup(JSON.stringify({ ...backup, version: 4, tables: { core_programs: [{ id: 'p1' }], core_tests: [{ id: 't1' }] } })).ok).toBe(true)
+    const order = BACKUP_TABLES as readonly string[]
+    for (const t of ['core_sessions', 'core_tests']) expect(order.indexOf('core_programs')).toBeLessThan(order.indexOf(t))
+  })
   it('v3 carries accounts; a v2 file (before them) is still read, but never with that table', () => {
-    expect(BACKUP_VERSION).toBe(3)
     const v2 = { ...backup, version: 2 }
     expect(parseBackup(JSON.stringify(v2)).ok).toBe(true)
     expect(parseBackup(JSON.stringify({ ...v2, tables: { accounts: [{ id: 'a1' }] } }))).toEqual({ ok: false, reason: 'Неизвестная таблица «accounts».' })

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { bandsOn, calendarBands, calendarEvents, monthGrid, parseFilters } from './calendar'
-import { BALANCE_LINE_POINTS, activityWeeks, balanceLine, coffeeSeries, coffeeWeek, enoughForMonths, erfolgeByMonth, habitCalendar, intakeBands, repsSeries, studyHeatmap, wellbeingSeries } from './charts'
+import { BALANCE_LINE_POINTS, COFFEE_SINCE, activityWeeks, balanceLine, coffeeAverage, coffeeSeries, coffeeWeek, cupsOf, enoughForMonths, erfolgeByMonth, habitCalendar, intakeBands, repsSeries, studyHeatmap, wellbeingSeries } from './charts'
 
 const today = '2026-11-11' // Wed
 
@@ -38,34 +38,65 @@ describe('wellbeing series', () => {
 describe('coffee', () => {
   const logs = [
     { date: '2026-11-09', coffee_cups: 2, sleep_h: 7 },
-    { date: '2026-11-10', coffee_cups: 0, sleep_h: 8 },
-    { date: '2026-11-11', coffee_cups: null, sleep_h: 6.5 },
-    { date: '2026-11-02', coffee_cups: 3, sleep_h: null },
+    { date: '2026-11-10', coffee_cups: 3, sleep_h: 8 },
+    { date: '2026-11-12', coffee_cups: 2, sleep_h: 7 },
+    { date: '2026-11-13', coffee_cups: null, sleep_h: 6.5 },
+    { date: '2026-11-15', coffee_cups: 0, sleep_h: null },
   ]
-  it('day: a day without coffee is 0, an unanswered day is a gap', () => {
-    const s = coffeeSeries(logs, today, 'day')
+  const now = '2026-11-18' // Wed
+  it('a day without a mark is 0 from 12.11 on — no gaps; before the coffee question — nothing', () => {
+    expect(cupsOf(null, '2026-11-16')).toBe(0)
+    expect(cupsOf({ coffee_cups: null }, COFFEE_SINCE)).toBe(0)
+    expect(cupsOf(null, '2026-11-11')).toBeNull()
+    expect(cupsOf({ coffee_cups: 2 }, '2026-11-09')).toBe(2)
+  })
+  it('day: 14 days, every day from 12.11 has a value', () => {
+    const s = coffeeSeries(logs, now, 'day')
     expect(s).toHaveLength(14)
-    expect(s.find((p) => p.key === '2026-11-10')).toMatchObject({ cups: 0, sleep: 8 })
-    expect(s.at(-1)).toMatchObject({ key: today, cups: null, sleep: 6.5 })
+    expect(s.filter((p) => p.key >= COFFEE_SINCE).every((p) => p.cups !== null)).toBe(true)
+    expect(s.find((p) => p.key === '2026-11-13')).toMatchObject({ cups: 0, sleep: 6.5 })
+    expect(s.find((p) => p.key === '2026-11-14')).toMatchObject({ cups: 0, sleep: null }) // no row at all
+    expect(s.find((p) => p.key === '2026-11-11')).toMatchObject({ cups: null })
+    expect(s.find((p) => p.key === '2026-11-10')).toMatchObject({ cups: 3 })
   })
-  it('week: average over answered days only', () => {
-    const s = coffeeSeries(logs, today, 'week')
-    expect(s.at(-1)).toMatchObject({ key: '2026-11-09', cups: 1, sleep: 7.2 })
-    expect(s.at(-2)).toMatchObject({ key: '2026-11-02', cups: 3, sleep: null })
+  it('week: average over the days of the week, unmarked days as 0', () => {
+    const s = coffeeSeries(logs, now, 'week')
+    // 16.11–18.11: no marks → 0
+    expect(s.at(-1)).toMatchObject({ key: '2026-11-16', cups: 0 })
+    // 09.11–15.11: 2, 3, (11.11 before the question), 2, 0, 0, 0 → 7 / 6
+    expect(s.at(-2)).toMatchObject({ key: '2026-11-09', cups: 1.2 })
   })
-  it('last 7 days: cups, answered days, days without coffee', () => {
-    expect(coffeeWeek(logs, today)).toEqual({ cups: 2, answered: 2, without: 1 })
-    expect(coffeeWeek([], today)).toEqual({ cups: 0, answered: 0, without: 0 })
+  it('last 7 days: cups, days counted, days without coffee', () => {
+    expect(coffeeWeek(logs, now)).toEqual({ cups: 2, days: 7, without: 6 })
+    expect(coffeeWeek([], '2026-11-12')).toEqual({ cups: 0, days: 1, without: 1 })
+  })
+  it('average of a week for the review', () => {
+    expect(coffeeAverage(logs, ['2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15'])).toBe(0.5)
+    expect(coffeeAverage([], ['2026-11-01'])).toBeNull()
   })
 })
 
 describe('habit calendar, activity weeks, reps', () => {
   it('13 weeks × 7 days, future null, level = counted habits', () => {
-    const cells = habitCalendar([{ date: '2026-11-10', morning: true, water: true, outside: false, minimum_mode: false }], [], today)
+    const cells = habitCalendar([{ date: '2026-11-10', morning: true, water: true, outside: true, minimum_mode: false }], [], today)
     expect(cells).toHaveLength(91)
     expect(cells.find((c) => c.key === '2026-11-10')!.level).toBe(2)
     expect(cells.find((c) => c.key === '2026-11-12')!.level).toBeNull()
     expect(cells.find((c) => c.key === today)!.current).toBe(true)
+  })
+  it('«Кор» from the program start: one more of the day when the session is finished', () => {
+    const logs = [
+      { date: '2026-11-09', outside: true, water: true, minimum_mode: false },
+      { date: '2026-11-10', outside: true, water: false, minimum_mode: false },
+      { date: '2026-11-11', outside: true, water: false, minimum_mode: true },
+    ]
+    const cells = habitCalendar(logs, [], today, { start: '2026-11-10', days: new Set(['2026-11-09', '2026-11-10']) })
+    const at = (d: string) => cells.find((c) => c.key === d)!
+    expect(at('2026-11-09')).toMatchObject({ level: 2, total: 2 }) // before the start the session does not count
+    expect(at('2026-11-10')).toMatchObject({ level: 2, total: 3 })
+    expect(at('2026-11-10').tip).toContain('2 из 3 · кор')
+    expect(at(today)).toMatchObject({ level: 1, total: 3 }) // minimum not complete: only marked habits
+    expect(habitCalendar([{ ...logs[2]!, water: true }], [], today, { start: '2026-11-10', days: new Set() }).find((c) => c.key === today)!.level).toBe(3)
   })
   it('activity points per week with the target of that week', () => {
     const w = activityWeeks([{ date: '2026-11-10', type_id: 't', minutes: 30 }], [{ id: 't', points_per_10min: 2 }], [], today, () => 20)

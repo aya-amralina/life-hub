@@ -42,7 +42,7 @@ export function HabitsCard({ date, to }: { date: ISODate; to?: string }) {
     <Card>
       <CardHeader title="Привычки дня" dotClass="bg-body" context={context} to={to} />
       {minimum && <p className="m-0 text-cap text-ink2">Минимум: {minimumPhrase(set)}. Остальное подождёт.</p>}
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.max(2, Math.min(3, shown.length))}, minmax(0, 1fr))` }}>
         {shown.map((key) => {
           const meta = HABIT_META[key]
           return (

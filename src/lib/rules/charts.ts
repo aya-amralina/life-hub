@@ -1,6 +1,6 @@
 import { addDaysISO, daysBetween, formatDayMonth, weekStart, type ISODate } from '../dates'
 import { activityPoints, type ActivityLike, type ActivityTypeLike } from './activities'
-import { activeHabits, habitsDone, minimumSet, stageForDate, type HabitLog, type StageLike } from './habits'
+import { activeHabits, habitsDone, minimumDone, minimumSet, stageForDate, type HabitLog, type StageLike } from './habits'
 import { balanceAt, type TxLike } from './money'
 import { weekCapacity, type WeekCapacityLike } from './study'
 
@@ -61,28 +61,41 @@ export function wellbeingSeries(logs: readonly WellbeingLog[], today: ISODate, p
 export type CoffeeLog = { date: ISODate; coffee_cups: number | null; sleep_h: number | null }
 export type CoffeePoint = { key: ISODate; label: string; cups: number | null; sleep: number | null }
 
+/** The first day of the coffee question («Вечер», migration 0013): from it on, a day without a mark is 0 cups. */
+export const COFFEE_SINCE: ISODate = '2026-11-12'
+
+/** Cups of a day: «Нет» is the default — no mark (or no row at all) is 0; before the question existed — null. */
+export function cupsOf(log: Pick<CoffeeLog, 'coffee_cups'> | null | undefined, date: ISODate): number | null {
+  if (date < COFFEE_SINCE) return log?.coffee_cups == null ? null : Number(log.coffee_cups)
+  return Number(log?.coffee_cups ?? 0)
+}
+
 /**
- * Coffee chart: cups per day (0 — a day without coffee, a real zero; null — not answered, a gap), averages per
- * week / month over the answered days only. Sleep alongside — to compare.
+ * Coffee chart: cups per day — a day without a mark is 0, no gaps (from COFFEE_SINCE on); averages per week / month
+ * over the days of the bucket. Sleep alongside — to compare (sleep keeps its gaps).
  */
 export function coffeeSeries(logs: readonly CoffeeLog[], today: ISODate, period: Period): CoffeePoint[] {
   const byDate = new Map(logs.map((l) => [l.date, l]))
   return periodBuckets(today, period).map(({ key, label, days }) => {
-    const rows = days.map((d) => byDate.get(d)).filter((l): l is CoffeeLog => Boolean(l))
-    const pick = (f: (l: CoffeeLog) => number | null) => avg(rows.map(f).filter((v): v is number => v !== null).map(Number))
-    return { key, label, cups: pick((l) => l.coffee_cups), sleep: pick((l) => l.sleep_h) }
+    const cups = avg(days.map((d) => cupsOf(byDate.get(d), d)).filter((v): v is number => v !== null))
+    const sleep = avg(days.map((d) => byDate.get(d)?.sleep_h ?? null).filter((v): v is number => v !== null).map(Number))
+    return { key, label, cups, sleep }
   })
 }
 
-/** The last 7 days (today included): cups in total, answered days, days without coffee. */
-export function coffeeWeek(logs: readonly CoffeeLog[], today: ISODate): { cups: number; answered: number; without: number } {
-  const from = addDaysISO(today, -6)
-  const days = logs.filter((l) => l.date >= from && l.date <= today && l.coffee_cups !== null)
-  return {
-    cups: days.reduce((s, l) => s + Number(l.coffee_cups), 0),
-    answered: days.length,
-    without: days.filter((l) => Number(l.coffee_cups) === 0).length,
-  }
+/** The last 7 days (today included): cups in total, days counted (from COFFEE_SINCE), days without coffee. */
+export function coffeeWeek(logs: readonly CoffeeLog[], today: ISODate): { cups: number; days: number; without: number } {
+  const byDate = new Map(logs.map((l) => [l.date, l]))
+  const cups = Array.from({ length: 7 }, (_, i) => addDaysISO(today, i - 6))
+    .map((d) => cupsOf(byDate.get(d), d))
+    .filter((v): v is number => v !== null)
+  return { cups: cups.reduce((s, c) => s + c, 0), days: cups.length, without: cups.filter((c) => c === 0).length }
+}
+
+/** Cups a day on average over the given days (a day without a mark is 0); null — none of the days counts. */
+export function coffeeAverage(logs: readonly CoffeeLog[], days: readonly ISODate[]): number | null {
+  const byDate = new Map(logs.map((l) => [l.date, l]))
+  return avg(days.map((d) => cupsOf(byDate.get(d), d)).filter((v): v is number => v !== null))
 }
 
 export type Band = { from: string; to: string; label: string }
@@ -111,26 +124,37 @@ export type GridCell = { key: ISODate; level: number | null; tip: string; curren
 
 /**
  * Habit calendar like GitHub: 13 weeks × 7 days, column per week. Level = habits counted that day (rule 13/14:
- * a complete minimum day counts fully); future days are null.
+ * a complete minimum day counts fully), plus a finished «Кор» session from the program start; future days are null.
  */
-export function habitCalendar(logs: readonly Partial<HabitLog>[], stages: readonly StageLike[], today: ISODate): GridCell[] {
+export function habitCalendar(
+  logs: readonly Partial<HabitLog>[],
+  stages: readonly StageLike[],
+  today: ISODate,
+  core?: { start: ISODate; days: ReadonlySet<ISODate> } | null,
+): (GridCell & { total: number })[] {
   const first = addDaysISO(weekStart(today), -12 * 7)
   const byDate = new Map(logs.map((l) => [l.date, l]))
-  const cells: GridCell[] = []
+  const cells: (GridCell & { total: number })[] = []
   for (let i = 0; i < 13 * 7; i++) {
     const d = addDaysISO(first, i)
-    if (d > today) {
-      cells.push({ key: d, level: null, tip: `${formatDayMonth(d)} · впереди` })
-      continue
-    }
     const stage = stages.length ? stageForDate(stages, d) : null
     const active = activeHabits(stage)
-    const done = habitsDone(byDate.get(d), active, minimumSet(stage))
+    const withCore = Boolean(core && d >= core.start)
+    const total = active.length + (withCore ? 1 : 0)
+    if (d > today) {
+      cells.push({ key: d, level: null, total, tip: `${formatDayMonth(d)} · впереди` })
+      continue
+    }
+    const log = byDate.get(d)
+    const set = minimumSet(stage)
+    const coreDone = withCore && core!.days.has(d) ? 1 : 0
+    const done = minimumDone(log, set) ? total : habitsDone(log, active, set) + coreDone
     cells.push({
       key: d,
       level: done,
+      total,
       current: d === today,
-      tip: `${formatDayMonth(d)} · ${done} из ${active.length}${done === 0 ? ' · пропуск — это сигнал, а не провал' : ''}`,
+      tip: `${formatDayMonth(d)} · ${done} из ${total}${coreDone ? ' · кор' : ''}${done === 0 ? ' · пропуск — это сигнал, а не провал' : ''}`,
     })
   }
   return cells

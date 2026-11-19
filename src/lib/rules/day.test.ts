@@ -6,9 +6,9 @@ describe('day rules', () => {
     expect(isEvening(17)).toBe(false)
     expect(isEvening(18)).toBe(true)
   })
-  it('answered questions of «Вечер»: 0 and false are answers', () => {
-    expect(eveningAnswered(null)).toEqual({ answered: 0, total: 4 })
-    expect(eveningAnswered({ energy: 6, mood: null, slump: false, coffee_cups: 0 })).toEqual({ answered: 3, total: 4 })
+  it('answered questions of «Вечер» (coffee is not one — «Нет» by default): false is an answer', () => {
+    expect(eveningAnswered(null)).toEqual({ answered: 0, total: 3 })
+    expect(eveningAnswered({ energy: 6, mood: null, slump: false })).toEqual({ answered: 2, total: 3 })
   })
   it('last answer before the day', () => {
     const logs = [

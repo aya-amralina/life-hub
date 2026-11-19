@@ -8,15 +8,15 @@ export function isEvening(hour: number): boolean {
   return hour >= EVENING_FROM
 }
 
-export type EveningLog = { energy: number | null; mood: number | null; slump: boolean | null; coffee_cups: number | null }
+export type EveningLog = { energy: number | null; mood: number | null; slump: boolean | null }
 
-/** «Вечер»: how many of its four questions are answered. */
+/** «Вечер»: how many of its three questions are answered. Coffee is not a question — «Нет» is its default. */
 export function eveningAnswered(log: EveningLog | null | undefined): { answered: number; total: number } {
-  const values = log ? [log.energy, log.mood, log.slump, log.coffee_cups] : []
-  return { answered: values.filter((v) => v !== null && v !== undefined).length, total: 4 }
+  const values = log ? [log.energy, log.mood, log.slump] : []
+  return { answered: values.filter((v) => v !== null && v !== undefined).length, total: 3 }
 }
 
-/** The latest answer before the day («как вчера»: sleep, coffee) — looks back over the given logs; null if none. */
+/** The latest answer before the day («как вчера»: sleep) — looks back over the given logs; null if none. */
 export function lastBefore<L extends { date: ISODate }, V>(logs: readonly L[], date: ISODate, pick: (l: L) => V | null | undefined): V | null {
   let best: L | null = null
   for (const l of logs) {

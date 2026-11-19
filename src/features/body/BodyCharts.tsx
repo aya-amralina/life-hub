@@ -10,6 +10,8 @@ import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { addDaysISO, formatDayMonth, todayBerlin, weekStart } from '@/lib/dates'
 import { activityPoints, weekPointsTarget } from '@/lib/rules/activities'
 import { activityWeeks, coffeeSeries, coffeeWeek, habitCalendar, intakeBands, repsSeries, wellbeingSeries, type Period } from '@/lib/rules/charts'
+import { sessionDays } from '@/lib/rules/core'
+import { useCoreProgram, useCoreSessions } from './coreApi'
 import { useActivities, useActivityTypes, useIntake, useStrengthSets } from './activityApi'
 import { useLogsSince, useStages } from './api'
 
@@ -87,14 +89,13 @@ function CoffeeCard() {
   const logs = useLogsSince(addDaysISO(today, -190))
   if (logs.isPending) return <SkeletonCard />
   const data = coffeeSeries(logs.data ?? [], today, period)
-  const answered = (logs.data ?? []).filter((l) => l.coffee_cups !== null).length
   const week = coffeeWeek(logs.data ?? [], today)
   // left axis 0 … an even top, at least 4 cups
   const top = Math.max(4, Math.ceil(Math.max(0, ...data.map((p) => p.cups ?? 0)) / 2) * 2)
   return (
     <ChartCard title="Кофе" dotClass="bg-body" context={period === 'day' ? 'чашек в день' : 'в среднем за день'}>
       <SegmentedTabs label="Период" segments={PERIODS} value={period} onChange={setPeriod} />
-      {week.answered > 0 && (
+      {week.days > 0 && (
         <div className="flex items-baseline gap-2 tabular-nums">
           <span className="text-big font-semibold">{week.cups}</span>
           <span className="text-base text-ink2">
@@ -107,8 +108,8 @@ function CoffeeCard() {
         label={withSleep ? 'Чашки кофе и сон' : 'Чашки кофе'}
         data={data}
         height={168}
-        empty={answered < 3}
-        emptyText="Мало данных — отмечай кофе в «Вечере», график появится через несколько дней"
+        empty={data.filter((p) => p.cups !== null).length < 3}
+        emptyText="Мало данных — график появится через несколько дней"
         bars={[{ key: 'cups', name: 'Кофе', color: 'body', minPointSize: 3 }]}
         lines={withSleep ? [{ key: 'sleep', name: 'Сон', color: 'ink2', dash: true, axis: 'right', unit: ' ч' }] : []}
         yLeft={{ domain: [0, top], ticks: [0, top / 2, top] }}
@@ -127,7 +128,7 @@ function CoffeeCard() {
         <Chip selected={withSleep} onClick={() => setWithSleep(!withSleep)} className="flex-none">
           Сравнить со сном
         </Chip>
-        <span className="text-cap text-ink2">0 — день без кофе. Разрыв — день без отметки.</span>
+        <span className="text-cap text-ink2">День без отметки — 0, без кофе.</span>
       </div>
     </ChartCard>
   )
@@ -137,10 +138,16 @@ function HabitsGridCard() {
   const today = todayBerlin()
   const logs = useLogsSince(addDaysISO(weekStart(today), -12 * 7))
   const stages = useStages()
-  if (logs.isPending || stages.isPending) return <SkeletonCard />
-  const cells = habitCalendar(logs.data ?? [], stages.data ?? [], today)
+  const program = useCoreProgram()
+  const sessions = useCoreSessions()
+  if (logs.isPending || stages.isPending || program.isPending || sessions.isPending) return <SkeletonCard />
+  const core = program.data ? { start: program.data.start_date, days: sessionDays(sessions.data ?? []) } : null
+  const cells = habitCalendar(logs.data ?? [], stages.data ?? [], today, core)
+  // levels 0 … the most a day can hold (habits of the stage + «Кор»)
+  const top = Math.max(1, ...cells.map((c) => c.total))
+  const mix = Array.from({ length: top + 1 }, (_, i) => (i === 0 ? 0 : Math.round(30 + (70 * (i - 1)) / Math.max(1, top - 1))))
   return (
-    <ChartCard title="Календарь привычек" dotClass="bg-body" context="13 недель">
+    <ChartCard title="Календарь привычек" dotClass="bg-body" context={core ? '13 недель · с кором' : '13 недель'}>
       <HeatGrid
         label="Календарь привычек"
         cells={cells}
@@ -149,15 +156,10 @@ function HabitsGridCard() {
         flow="column"
         cell={[20, 20]}
         color="body"
-        mix={[0, 30, 60, 100]}
+        mix={mix}
         rowLabels={['Пн', '', 'Ср', '', 'Пт', '', 'Вс']}
         hint="Нажми на день — покажу, что отмечено"
-        legend={[
-          { level: 0, text: '0' },
-          { level: 1, text: '1' },
-          { level: 2, text: '2' },
-          { level: 3, text: '3 из 3' },
-        ]}
+        legend={Array.from({ length: top + 1 }, (_, i) => ({ level: i, text: i === top ? `${i} из ${top}` : String(i) }))}
       />
     </ChartCard>
   )
