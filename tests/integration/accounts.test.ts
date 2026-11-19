@@ -67,11 +67,10 @@ describe.skipIf(!ready)('live: accounts (0016–0019)', () => {
     const goal = (account_id: string) => sb.from('envelopes').insert({ name: `it-accounts-${account_id.slice(0, 6)}`, type: 'goal', goal_eur: 10, account_id }).select('id').single()
     expect((await goal(id['acct:revolut-main']!)).error?.code).toBe('23514')
     keep('envelopes', (await goal(id['acct:revolut-cushion']!)).data)
-    const balance = (account_id: string, account: string) =>
-      sb.from('actual_balances').insert({ date: '2026-11-20', account, account_id, amount_eur: -5, origin: 'review' }).select('id').single()
-    expect((await balance(id['acct:revolut-cushion']!, 'it-cushion')).error?.code).toBe('23514')
-    keep('actual_balances', (await balance(id['acct:sparkasse']!, 'it-sparkasse')).data)
-    expect(made.filter((m) => m.table !== 'transactions')).toHaveLength(3)
+    const balance = (account_id: string) => sb.from('actual_balances').insert({ date: '2026-11-20', account_id, amount_eur: -5, origin: 'review' }).select('id').single()
+    expect((await balance(id['acct:revolut-cushion']!)).error?.code).toBe('23514')
+    keep('actual_balances', (await balance(id['acct:sparkasse']!)).data)
+    expect(made.filter((m) => m.table !== 'transactions')).toHaveLength(2) // the goal on «Подушка» and Sparkasse below zero
   })
 
   it.skipIf(!secret || !realEmail)('the real user: nine accounts, every transfer after the start «откуда → куда» (counts only)', async () => {
