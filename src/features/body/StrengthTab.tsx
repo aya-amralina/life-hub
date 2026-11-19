@@ -8,6 +8,8 @@ import { Chip } from '@/components/ui/Chip'
 import { SkeletonCard } from '@/components/ui/Feedback'
 import { formatWeekdayDate, todayBerlin } from '@/lib/dates'
 import { bodyDataKeys, useStrengthSets, useWrite, type StrengthSet } from './activityApi'
+import { templateCodes } from '@/lib/rules/workouts'
+import { useWorkouts } from './habitsApi'
 import { parseReps } from './parseReps'
 
 const field = 'h-12 w-full rounded-xl border border-line2 bg-card px-4 text-base text-ink outline-none focus:border-ink2'
@@ -60,6 +62,8 @@ function StrengthSheet({ open, onClose, known }: { open: boolean; onClose: () =>
   const [reps, setReps] = useState('')
   const [load, setLoad] = useState('')
   const [hard, setHard] = useState(false)
+  const workouts = useWorkouts()
+  const codes = templateCodes(workouts.data?.templates ?? [])
   const exercises = [...new Set(known.map((s) => s.exercise))].slice(0, 12)
   const parsed = parseReps(reps)
   return (
@@ -93,7 +97,7 @@ function StrengthSheet({ open, onClose, known }: { open: boolean; onClose: () =>
         )}
         <input value={exercise} onChange={(e) => setExercise(e.target.value)} placeholder="Упражнение" aria-label="Упражнение" className={field} />
         <div className="flex gap-2" aria-label="Тренировка">
-          {['A', 'B'].map((w) => (
+          {codes.map((w) => (
             <Chip key={w} selected={workout === w} onClick={() => setWorkout(workout === w ? null : w)}>
               Тренировка {w}
             </Chip>

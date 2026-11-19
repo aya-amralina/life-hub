@@ -7,6 +7,10 @@ export const BACKUP_TABLES = [
   'weeks',
   'plan_stages',
   'core_programs',
+  'habits',
+  'habit_plan',
+  'workout_templates',
+  'workout_queue',
   'activity_types',
   'envelopes',
   'debts',
@@ -16,6 +20,7 @@ export const BACKUP_TABLES = [
   'transactions',
   'actual_balances',
   'week_limits',
+  'habit_marks',
   'daily_logs',
   'activities',
   'intake',
@@ -33,18 +38,28 @@ export type BackupTable = (typeof BACKUP_TABLES)[number]
 export const BACKUP_FORMAT = 'life-hub-backup'
 /**
  * v2 (16.11.2026) adds `recurring` and the columns of operations that link to it; v3 (18.11.2026) adds `accounts`;
- * v4 (19.11.2026) adds «Кор» (`core_programs`, `core_sessions`, `core_tests`). Older files are still restored.
+ * v4 (19.11.2026) adds «Кор» (`core_programs`, `core_sessions`, `core_tests`); v5 (19.11.2026) adds habits as data (`habits`,
+ * `habit_plan`, `habit_marks`) and strength templates (`workout_templates`, `workout_queue`). Older files are still restored.
  */
-export const BACKUP_VERSION = 4
+export const BACKUP_VERSION = 5
 
 /** Tables each readable version may hold. */
 const CORE: readonly string[] = ['core_programs', 'core_sessions', 'core_tests']
+const HABITS: readonly string[] = ['habits', 'habit_plan', 'habit_marks', 'workout_templates', 'workout_queue']
 const TABLES_OF_VERSION: Record<number, readonly string[]> = {
-  1: BACKUP_TABLES.filter((t) => t !== 'recurring' && t !== 'accounts' && !CORE.includes(t)),
-  2: BACKUP_TABLES.filter((t) => t !== 'accounts' && !CORE.includes(t)),
-  3: BACKUP_TABLES.filter((t) => !CORE.includes(t)),
-  4: BACKUP_TABLES,
+  1: BACKUP_TABLES.filter((t) => t !== 'recurring' && t !== 'accounts' && !CORE.includes(t) && !HABITS.includes(t)),
+  2: BACKUP_TABLES.filter((t) => t !== 'accounts' && !CORE.includes(t) && !HABITS.includes(t)),
+  3: BACKUP_TABLES.filter((t) => !CORE.includes(t) && !HABITS.includes(t)),
+  4: BACKUP_TABLES.filter((t) => !HABITS.includes(t)),
+  5: BACKUP_TABLES,
 }
+
+/**
+ * The key a table is restored by. Marks and days by their natural key: a restored mark writes the old day columns
+ * (and a restored day writes marks) through the triggers of 0021, so the row of the other table may already be there
+ * under another id — it takes the file's id then.
+ */
+export const RESTORE_CONFLICT: Partial<Record<BackupTable, string>> = { daily_logs: 'user_id,date', habit_marks: 'user_id,habit_id,date' }
 
 export type Row = Record<string, unknown> & { id: string }
 export type Backup = { format: string; version: number; exported_at: string; tables: Partial<Record<BackupTable, Row[]>> }
@@ -56,6 +71,11 @@ export const TABLE_LABEL: Record<BackupTable, string> = {
   core_programs: 'Кор · программа',
   core_sessions: 'Кор · сессии',
   core_tests: 'Кор · тесты пальцами',
+  habits: 'Привычки и уход',
+  habit_plan: 'План привычек',
+  habit_marks: 'Отметки привычек',
+  workout_templates: 'Шаблоны силовых',
+  workout_queue: 'Очередь силовых',
   activity_types: 'Типы активностей',
   envelopes: 'Конверты и цели',
   debts: 'Долги',

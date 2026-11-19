@@ -15,8 +15,8 @@ import { MoreList, SectionHeader, type MoreLink } from '@/components/layout/More
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
 import { addDaysISO, formatDayMonth, formatRelativeDay, formatWeekdayDate, todayBerlin, weekStart, type ISODate } from '@/lib/dates'
 import { activityPoints, dayPoints, weekPoints, weekPointsTarget } from '@/lib/rules/activities'
-import { careChoice, careDone, careItems, toggleCare } from '@/lib/rules/care'
-import { activeHabits, minimumSet, stageForDate, weekHabitShare } from '@/lib/rules/habits'
+import { careChoice, careDone, careEntries, careToggle, isCareDone } from '@/lib/rules/care'
+import { activeOn, dayMarks, daySet, minimumOn, minimumPhrase, stageForDate, weekHabitShare } from '@/lib/rules/habits'
 import { isItemOpen, isUpcoming } from '@/lib/rules/items'
 import { plural } from '@/lib/format'
 import { NotesSection } from '@/features/notes/NotesCard'
@@ -33,7 +33,7 @@ import { CoreCard } from './CoreCard'
 import { CoreSession } from './CoreSession'
 import { useDailyLog, useSaveDailyLog, useStages, useWeekLogs } from './api'
 import { EveningCard } from './EveningCard'
-import { HABIT_META, minimumPhrase } from './habitMeta'
+import { useHabitDay, useHabits, useMarks, useSetMarks } from './habitsApi'
 import { HabitsCard } from './HabitsCard'
 import { IntakeTab } from './IntakeTab'
 import { MeasurementsTab } from './MeasurementsTab'
@@ -148,14 +148,14 @@ function useStageFor(date: ISODate) {
   return { stages, stage }
 }
 
-/** Rule 13: the switch names the stage's minimum set. */
+/** Rule 13: the switch names the minimum set (habits marked «в минимуме»). */
 function MinimumCard({ date }: { date: ISODate }) {
   const log = useDailyLog(date)
   const save = useSaveDailyLog(date)
-  const { stage } = useStageFor(date)
-  if (log.isPending) return <SkeletonCard />
+  const habits = useHabits()
+  if (log.isPending || habits.isPending) return <SkeletonCard />
   const on = log.data?.minimum_mode ?? false
-  const phrase = minimumPhrase(minimumSet(stage))
+  const phrase = minimumPhrase(minimumOn(habits.data?.habits ?? [], habits.data?.plans ?? [], date))
   return (
     <Card>
       <div className="flex items-center gap-3">
@@ -228,29 +228,28 @@ function MovementCard({ date }: { date: ISODate }) {
   )
 }
 
-/** «Уход»: the stage's care list (Настройки → Этапы); a past «Вечер: лицо» mark is shown as it was. */
+/** «Уход»: care habits of the day (groups — one choice); a past «Вечер: лицо» mark is shown as it was. */
 function CareCard({ date }: { date: ISODate }) {
   const log = useDailyLog(date)
-  const save = useSaveDailyLog(date)
-  const { stage } = useStageFor(date)
-  if (log.isPending) return <SkeletonCard />
-  const entries = careItems(stage)
-  const marked = log.data?.care ?? []
+  const { isPending, habits, plans, day } = useHabitDay(date, log.data?.minimum_mode ?? false)
+  const mark = useSetMarks(date)
+  if (log.isPending || isPending) return <SkeletonCard />
+  const entries = careEntries(habits, plans, date)
   const plain = entries.filter((e) => !e.options)
   const groups = entries.filter((e) => e.options)
   // a past «Вечер: лицо» mark is shown only when no evening group holds it
   const face = log.data?.face_evening ?? null
-  const faceShown = face && !groups.some((g) => careChoice(marked, g) === face)
+  const faceShown = face && !groups.some((g) => careChoice(day, g)?.name === face)
   return (
     <Card>
-      <CardHeader title="Уход" dotClass="bg-body" context={`${careDone(marked, entries)} из ${entries.length}`} />
+      <CardHeader title="Уход" dotClass="bg-body" context={`${careDone(day, entries)} из ${entries.length}`} />
       {groups.map((g) => (
-        <fieldset key={g.raw} className="m-0 flex flex-col gap-2 border-0 p-0">
+        <fieldset key={g.key} className="m-0 flex flex-col gap-2 border-0 p-0">
           <legend className="mb-2 text-cap text-ink2">{g.label}</legend>
           <div className="flex flex-wrap gap-2">
             {g.options!.map((o) => (
-              <Chip key={o} selected={careChoice(marked, g) === o} onClick={() => save.mutate({ care: toggleCare(marked, g, o) })}>
-                {o}
+              <Chip key={o.id} selected={careChoice(day, g)?.id === o.id} onClick={() => mark.mutate(careToggle(day, g, o.id))}>
+                {o.name}
               </Chip>
             ))}
           </div>
@@ -259,7 +258,7 @@ function CareCard({ date }: { date: ISODate }) {
       {plain.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {plain.map((e) => (
-            <Chip key={e.raw} selected={marked.includes(e.label)} onClick={() => save.mutate({ care: toggleCare(marked, e) })}>
+            <Chip key={e.key} selected={isCareDone(day, e)} onClick={() => mark.mutate(careToggle(day, e))}>
               {e.label}
             </Chip>
           ))}
@@ -273,9 +272,16 @@ function CareCard({ date }: { date: ISODate }) {
 function WeekShare({ date }: { date: ISODate }) {
   const monday = weekStart(date)
   const logs = useWeekLogs(monday)
-  const stages = useStages()
-  if (!logs.data || !stages.data) return null
-  const share = weekHabitShare(logs.data, stages.data, monday, todayBerlin())
+  const habits = useHabits()
+  const marks = useMarks(monday, addDaysISO(monday, 6))
+  if (!logs.data || !habits.data || !marks.data) return null
+  const { habits: list, plans } = habits.data
+  const share = weekHabitShare(
+    (d) => dayMarks(marks.data, d, logs.data.find((l) => l.date === d)?.minimum_mode ?? false),
+    (d) => daySet(list, plans, d),
+    monday,
+    todayBerlin(),
+  )
   if (share === null) return null
   return (
     <Card>
@@ -339,11 +345,14 @@ function StageCard() {
   const openAdd = useOpenAdd()
   useAddAction(() => openAdd('body'))
   const { stages, stage } = useStageFor(today)
-  if (stages.isPending) return null
+  const habits = useHabits()
+  if (stages.isPending || habits.isPending) return null
   const list = stages.data ?? []
   const next = list.find((s) => s.sphere === 'body' && s.start_date > today)
+  const { habits: all, plans } = habits.data ?? { habits: [], plans: [] }
+  const phrase = minimumPhrase(minimumOn(all, plans, today))
   if (!list.length) {
-    return <EmptyState title="Этапов пока нет">Их заводят в настройках. А пока считаются вода и 10 минут на улице, они же — минимум.</EmptyState>
+    return <EmptyState title="Этапов пока нет">{`Их заводят в настройках. А пока считаются ${minimumPhrase(activeOn(all, plans, today))}, минимум — ${phrase}.`}</EmptyState>
   }
   return (
     <>
@@ -352,16 +361,16 @@ function StageCard() {
           <CardHeader title={stage.name} dotClass="bg-body" context={`${formatDayMonth(stage.start_date)}–${formatDayMonth(stage.end_date)}`} />
           <div className="text-cap text-ink2">Привычки этапа</div>
           <div className="flex flex-wrap gap-2">
-            {activeHabits(stage).map((k) => (
-              <span key={k} className="inline-flex h-8 items-center rounded-lg bg-sub px-3 text-cap text-ink">
-                {HABIT_META[k].label}
+            {activeOn(all, plans, today).map((h) => (
+              <span key={h.id} className="inline-flex h-8 items-center rounded-lg bg-sub px-3 text-cap text-ink">
+                {h.name}
               </span>
             ))}
           </div>
-          <div className="text-cap text-ink2">Минимум: {minimumPhrase(minimumSet(stage))}</div>
+          <div className="text-cap text-ink2">Минимум: {phrase}</div>
         </Card>
       ) : (
-        <EmptyState title="Сейчас нет активного этапа">Считаются вода и 10 минут на улице.</EmptyState>
+        <EmptyState title="Сейчас нет активного этапа">{`Считаются ${minimumPhrase(activeOn(all, plans, today))}.`}</EmptyState>
       )}
       {next && (
         <EmptyState title={`Дальше: ${next.name}`}>{`С ${formatDayMonth(next.start_date)}. Новые привычки появятся сами, когда этап начнётся.`}</EmptyState>

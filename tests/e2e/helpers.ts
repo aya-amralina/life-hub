@@ -56,6 +56,7 @@ export async function login(page: Page) {
 
 // Child tables first (FKs).
 const TABLES = [
+  'habit_marks',
   'core_sessions',
   'core_tests',
   'week_limits',
@@ -98,6 +99,7 @@ export async function cleanupTestUser() {
   }
   await resetAccounts(sb)
   await resetCore(sb)
+  await resetHabits(sb)
   await sb.auth.signOut()
 }
 
@@ -120,6 +122,19 @@ async function resetAccounts(sb: Awaited<ReturnType<typeof testClient>>) {
 async function resetCore(sb: Awaited<ReturnType<typeof testClient>>) {
   const up = await sb.from('core_programs').update({ stage: 1, stage_since: '2026-11-19', offer_after: null }).eq('source_id', 'core:program')
   if (up.error) throw new Error(`reset core failed: ${up.error.code}`)
+}
+
+/**
+ * Habits come from migration 0021 and cannot be deleted (archive only): what a test added goes to the archive with its
+ * plan removed, the seeded ones are back in the minimum of the seed (water and outside for a user without stages).
+ */
+async function resetHabits(sb: Awaited<ReturnType<typeof testClient>>) {
+  const plan = await sb.from('habit_plan').delete().is('source_id', null)
+  if (plan.error) throw new Error(`reset habit plan failed: ${plan.error.code}`)
+  const added = await sb.from('habits').update({ archived_at: new Date().toISOString() }).is('source_id', null).is('archived_at', null)
+  if (added.error) throw new Error(`reset habits failed: ${added.error.code}`)
+  const seeded = await sb.from('habits').update({ in_minimum: true }).in('source_id', ['habit:outside', 'habit:water'])
+  if (seeded.error) throw new Error(`reset habits failed: ${seeded.error.code}`)
 }
 
 /** Signed-in client of the TEST user — for seeding rows a scenario needs (RLS keeps them its own). */

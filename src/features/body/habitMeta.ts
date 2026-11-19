@@ -1,17 +1,8 @@
-import { Droplet, Leaf, Sunrise, type LucideIcon } from 'lucide-react'
-import { joinRu } from '@/lib/format'
-import type { HabitKey } from '@/lib/rules/habits'
+import { Circle, Droplet, Leaf, PersonStanding, Sunrise, type LucideIcon } from 'lucide-react'
 
-export const HABIT_META: Record<HabitKey, { label: string; phrase: string; icon: LucideIcon }> = {
-  morning: { label: 'Утренний старт', phrase: 'утренний старт', icon: Sunrise },
-  outside: { label: '10 мин на улице', phrase: '10 минут на улице', icon: Leaf },
-  water: { label: 'Вода', phrase: 'вода', icon: Droplet },
-}
+/** Icons a habit may name (habits.icon); an unknown or empty one — a plain circle. */
+const ICONS: Record<string, LucideIcon> = { sunrise: Sunrise, leaf: Leaf, droplet: Droplet, 'person-standing': PersonStanding }
 
-// Water first reads naturally: «вода и 10 минут на улице».
-const PHRASE_ORDER: HabitKey[] = ['water', 'outside', 'morning']
-
-/** «вода и 10 минут на улице» — the minimum set in words (rule 13: the card names it). */
-export function minimumPhrase(set: readonly HabitKey[]): string {
-  return joinRu(PHRASE_ORDER.filter((k) => set.includes(k)).map((k) => HABIT_META[k].phrase))
+export function habitIcon(icon: string | null | undefined): LucideIcon {
+  return (icon && ICONS[icon]) || Circle
 }

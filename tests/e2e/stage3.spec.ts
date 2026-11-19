@@ -81,7 +81,7 @@ test('режим «минимум»: видны только привычки н
   await page.getByRole('switch', { name: 'Режим минимум' }).click()
   await expect(page.getByText('Сегодня — минимум')).toBeVisible()
   await tab(page, 'Сегодня')
-  await expect(page.getByText('Минимум: вода и 10 минут на улице. Остальное подождёт.')).toBeVisible()
+  await expect(page.getByText('Минимум: 10 минут на улице и вода. Остальное подождёт.')).toBeVisible()
   await expect(page.getByRole('checkbox', { name: /Утренний старт/ })).toBeHidden()
   await page.getByRole('checkbox', { name: /Вода/ }).click()
   await page.getByRole('checkbox', { name: /10 мин на улице/ }).click()

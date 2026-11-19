@@ -6,55 +6,55 @@ import { Stepper } from '@/components/ui/Stepper'
 import { addDaysISO, type ISODate } from '@/lib/dates'
 import { formatHours } from '@/lib/format'
 import { SLEEP_MAX, SLEEP_MIN, lastBefore, stepSleep } from '@/lib/rules/day'
-import { activeHabits, habitsDone, minimumDone, minimumSet, stageForDate, visibleHabits } from '@/lib/rules/habits'
-import { useDailyLog, useLogsSince, useSaveDailyLog, useStages } from './api'
-import { HABIT_META, minimumPhrase } from './habitMeta'
+import { activeOn, habitsDone, minimumDone, minimumOn, minimumPhrase, visibleOn } from '@/lib/rules/habits'
+import { useDailyLog, useLogsSince, useSaveDailyLog } from './api'
+import { habitIcon } from './habitMeta'
+import { useHabitDay, useSetMarks } from './habitsApi'
 
 /**
- * «Привычки дня»: one tap marks, a second unmarks. Habits come from the current stage (rule 12); in
- * «минимум» only the stage's minimum set is shown and the card names it (rule 13). Below — last night's sleep:
- * a morning mark, a counter in half-hour steps that starts from the previous value.
+ * «Привычки дня»: one tap marks, a second unmarks. Habits are data (rule 12: active by their plan); in «минимум» only
+ * the minimum set is shown and the card names it (rule 13). Below — last night's sleep: a morning mark, a counter in
+ * half-hour steps that starts from the previous value.
  */
 export function HabitsCard({ date, to }: { date: ISODate; to?: string }) {
-  const stages = useStages()
   const log = useDailyLog(date)
   const save = useSaveDailyLog(date)
   const recent = useLogsSince(addDaysISO(date, -14))
-
-  if (stages.isPending || log.isPending) return <SkeletonCard />
-
-  const stage = stages.data?.length ? stageForDate(stages.data, date) : null
   const minimum = log.data?.minimum_mode ?? false
-  const set = minimumSet(stage)
-  const shown = visibleHabits(stage, minimum)
-  const marked = shown.filter((k) => log.data?.[k]).length
+  const { isPending, habits, plans, day } = useHabitDay(date, minimum)
+  const mark = useSetMarks(date)
+
+  if (log.isPending || isPending) return <SkeletonCard />
+
+  const active = activeOn(habits, plans, date)
+  const set = minimumOn(habits, plans, date)
+  const shown = visibleOn(habits, plans, date, minimum)
+  const ids = (list: readonly { id: string }[]) => list.map((h) => h.id)
+  const marked = shown.filter((h) => day.done.has(h.id)).length
 
   const sleep = log.data?.sleep_h == null ? null : Number(log.data.sleep_h)
   const lastSleep = lastBefore(recent.data ?? [], date, (l) => (l.sleep_h == null ? null : Number(l.sleep_h)))
 
   const context = minimum
-    ? minimumDone(log.data, set)
+    ? minimumDone(day, ids(set))
       ? 'минимум · засчитан'
       : `минимум · ${marked} из ${set.length}`
-    : `${habitsDone(log.data, activeHabits(stage), set)} из ${activeHabits(stage).length}`
+    : `${habitsDone(day, ids(active), ids(set))} из ${active.length}`
 
   return (
     <Card>
       <CardHeader title="Привычки дня" dotClass="bg-body" context={context} to={to} />
       {minimum && <p className="m-0 text-cap text-ink2">Минимум: {minimumPhrase(set)}. Остальное подождёт.</p>}
       <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.max(2, Math.min(3, shown.length))}, minmax(0, 1fr))` }}>
-        {shown.map((key) => {
-          const meta = HABIT_META[key]
-          return (
-            <HabitButton
-              key={key}
-              icon={meta.icon}
-              label={meta.label}
-              checked={log.data?.[key] ?? false}
-              onToggle={() => save.mutate({ [key]: !(log.data?.[key] ?? false) })}
-            />
-          )
-        })}
+        {shown.map((h) => (
+          <HabitButton
+            key={h.id}
+            icon={habitIcon(h.icon)}
+            label={h.name}
+            checked={day.done.has(h.id)}
+            onToggle={() => mark.mutate([{ habit_id: h.id, done: !day.done.has(h.id) }])}
+          />
+        ))}
       </div>
       <SleepRow value={sleep} last={lastSleep} onChange={(v) => save.mutate({ sleep_h: v })} />
     </Card>

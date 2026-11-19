@@ -14,7 +14,7 @@ import { addDaysISO, formatWeekdayDate, todayBerlin, type ISODate } from '@/lib/
 import { formatEur, formatHours, plural, toCents } from '@/lib/format'
 import { weekPoints, weekPointsTarget } from '@/lib/rules/activities'
 import { coffeeAverage } from '@/lib/rules/charts'
-import { minimumDone, minimumSet, stageForDate, weekHabitShare } from '@/lib/rules/habits'
+import { dayMarks, daySet, minimumDone, stageForDate, weekHabitShare } from '@/lib/rules/habits'
 import { isItemOpen, isStuck } from '@/lib/rules/items'
 import { GROUP_LABEL, accountOptions, parseBalanceInput } from '@/lib/rules/accounts'
 import { isWeekRow, upcomingPlanned } from '@/lib/rules/money'
@@ -23,6 +23,7 @@ import { LOAD_LABEL, isFixed, planRollover, plannedItems, rolloverCandidates, st
 import { nachhaken, statusAltDays } from '@/lib/rules/work'
 import { useActivities, useActivityTypes } from '@/features/body/activityApi'
 import { useStages, useWeekLogs } from '@/features/body/api'
+import { useHabits, useMarks } from '@/features/body/habitsApi'
 import { useCreateItem, useItems, usePatchItems, useUpdateItem, type Item } from '@/features/items/api'
 import { CutNextWeek } from '@/features/money/CutNextWeek'
 import { MoneyQuestions } from '@/features/money/MoneyQuestions'
@@ -163,11 +164,15 @@ export function BodyStep({ monday, note, onNote }: { monday: ISODate; note: stri
   const stages = useStages()
   const activities = useActivities()
   const types = useActivityTypes()
-  if (logs.isPending || stages.isPending || activities.isPending || types.isPending) return <SkeletonCard />
   const sunday = addDaysISO(monday, 6)
-  const share = weekHabitShare(logs.data ?? [], stages.data ?? [], monday, today < sunday ? today : sunday)
+  const habits = useHabits()
+  const marks = useMarks(monday, sunday)
+  if (logs.isPending || stages.isPending || activities.isPending || types.isPending || habits.isPending || marks.isPending) return <SkeletonCard />
+  const { habits: list, plans } = habits.data ?? { habits: [], plans: [] }
+  const day = (d: ISODate) => dayMarks(marks.data ?? [], d, (logs.data ?? []).find((l) => l.date === d)?.minimum_mode ?? false)
+  const share = weekHabitShare(day, (d) => daySet(list, plans, d), monday, today < sunday ? today : sunday)
   const stage = stages.data?.length ? stageForDate(stages.data, monday) : null
-  const minDays = (logs.data ?? []).filter((l) => minimumDone(l, minimumSet(stage))).length
+  const minDays = (logs.data ?? []).filter((l) => minimumDone(day(l.date), daySet(list, plans, l.date).minimum)).length
   const avg = (f: (l: { mood: number | null; energy: number | null; sleep_h: number | null }) => number | null) => {
     const v = (logs.data ?? []).map(f).filter((x): x is number => x !== null).map(Number)
     return v.length ? String(Math.round((v.reduce((s, x) => s + x, 0) / v.length) * 10) / 10).replace('.', ',') : '—'

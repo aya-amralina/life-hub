@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BACKUP_FORMAT, BACKUP_TABLES, BACKUP_VERSION, exportFileName, parseBackup, restorePlan, restoreRow, toCsv, type Backup } from './backup'
+import { BACKUP_FORMAT, BACKUP_TABLES, BACKUP_VERSION, RESTORE_CONFLICT, exportFileName, parseBackup, restorePlan, restoreRow, toCsv, type Backup } from './backup'
 
 const backup: Backup = {
   format: BACKUP_FORMAT,
@@ -19,12 +19,22 @@ describe('backup', () => {
     expect(parseBackup(JSON.stringify(backup)).ok).toBe(true)
     expect(parseBackup('nope')).toEqual({ ok: false, reason: 'Это не JSON-файл.' })
     expect(parseBackup('{"format":"x"}')).toEqual({ ok: false, reason: 'Это не экспорт Life Hub.' })
-    expect(parseBackup(JSON.stringify({ ...backup, version: 5 }))).toEqual({ ok: false, reason: 'Версия файла 5 — читаются версии 1–4.' })
+    expect(parseBackup(JSON.stringify({ ...backup, version: 6 }))).toEqual({ ok: false, reason: 'Версия файла 6 — читаются версии 1–5.' })
     expect(parseBackup(JSON.stringify({ ...backup, tables: { secrets: [] } }))).toEqual({ ok: false, reason: 'Неизвестная таблица «secrets».' })
     expect(parseBackup(JSON.stringify({ ...backup, tables: { items: [{ title: 'no id' }] } })).ok).toBe(false)
   })
+  it('v5 carries habits and workouts; a v4 file is read without them; marks restore before days, by their natural key', () => {
+    expect(BACKUP_VERSION).toBe(5)
+    const v4 = { ...backup, version: 4 }
+    expect(parseBackup(JSON.stringify({ ...v4, tables: { habit_marks: [{ id: 'm1' }] } }))).toEqual({ ok: false, reason: 'Неизвестная таблица «habit_marks».' })
+    expect(parseBackup(JSON.stringify({ ...backup, version: 5, tables: { habits: [{ id: 'h1' }], workout_queue: [{ id: 'q1' }] } })).ok).toBe(true)
+    const order = BACKUP_TABLES as readonly string[]
+    for (const [parent, child] of [['core_programs', 'habits'], ['habits', 'habit_plan'], ['habits', 'habit_marks'], ['habit_marks', 'daily_logs'], ['workout_templates', 'workout_queue']]) {
+      expect(order.indexOf(parent!)).toBeLessThan(order.indexOf(child!))
+    }
+    expect(RESTORE_CONFLICT).toEqual({ daily_logs: 'user_id,date', habit_marks: 'user_id,habit_id,date' })
+  })
   it('v4 carries «Кор»; a v3 file (before it) is still read, but never with those tables; the program before its sessions', () => {
-    expect(BACKUP_VERSION).toBe(4)
     const v3 = { ...backup, version: 3 }
     expect(parseBackup(JSON.stringify(v3)).ok).toBe(true)
     expect(parseBackup(JSON.stringify({ ...v3, tables: { core_sessions: [{ id: 's1' }] } }))).toEqual({ ok: false, reason: 'Неизвестная таблица «core_sessions».' })

@@ -11,7 +11,9 @@ import { addDaysISO, formatDayMonth, todayBerlin, weekStart } from '@/lib/dates'
 import { activityPoints, weekPointsTarget } from '@/lib/rules/activities'
 import { activityWeeks, coffeeSeries, coffeeWeek, habitCalendar, intakeBands, repsSeries, wellbeingSeries, type Period } from '@/lib/rules/charts'
 import { sessionDays } from '@/lib/rules/core'
-import { useCoreProgram, useCoreSessions } from './coreApi'
+import { dayMarks, daySet } from '@/lib/rules/habits'
+import { useCoreSessions } from './coreApi'
+import { useHabits, useMarks } from './habitsApi'
 import { useActivities, useActivityTypes, useIntake, useStrengthSets } from './activityApi'
 import { useLogsSince, useStages } from './api'
 
@@ -136,13 +138,24 @@ function CoffeeCard() {
 
 function HabitsGridCard() {
   const today = todayBerlin()
-  const logs = useLogsSince(addDaysISO(weekStart(today), -12 * 7))
-  const stages = useStages()
-  const program = useCoreProgram()
+  const from = addDaysISO(weekStart(today), -12 * 7)
+  const logs = useLogsSince(from)
+  const habits = useHabits()
+  const marks = useMarks(from, today)
   const sessions = useCoreSessions()
-  if (logs.isPending || stages.isPending || program.isPending || sessions.isPending) return <SkeletonCard />
-  const core = program.data ? { start: program.data.start_date, days: sessionDays(sessions.data ?? []) } : null
-  const cells = habitCalendar(logs.data ?? [], stages.data ?? [], today, core)
+  if (logs.isPending || habits.isPending || marks.isPending || sessions.isPending) return <SkeletonCard />
+  const { habits: all, plans } = habits.data ?? { habits: [], plans: [] }
+  const programs = all.filter((h) => h.kind === 'program')
+  const sessionDone = sessionDays(sessions.data ?? [])
+  const minimumOf = new Map((logs.data ?? []).map((l) => [l.date, l.minimum_mode]))
+  const cells = habitCalendar(
+    // a program is marked by its finished session (one program today — «Кор»)
+    (d) => dayMarks(marks.data ?? [], d, minimumOf.get(d) ?? false, sessionDone.has(d) ? programs.map((p) => p.id) : []),
+    (d) => daySet(all, plans, d, true),
+    today,
+    (id) => programs.find((p) => p.id === id)?.phrase ?? '',
+  )
+  const core = programs.length > 0
   // levels 0 … the most a day can hold (habits of the stage + «Кор»)
   const top = Math.max(1, ...cells.map((c) => c.total))
   const mix = Array.from({ length: top + 1 }, (_, i) => (i === 0 ? 0 : Math.round(30 + (70 * (i - 1)) / Math.max(1, top - 1))))

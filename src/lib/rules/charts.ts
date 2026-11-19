@@ -1,6 +1,6 @@
 import { addDaysISO, daysBetween, formatDayMonth, weekStart, type ISODate } from '../dates'
 import { activityPoints, type ActivityLike, type ActivityTypeLike } from './activities'
-import { activeHabits, habitsDone, minimumDone, minimumSet, stageForDate, type HabitLog, type StageLike } from './habits'
+import { habitsDone, stageForDate, type DayMarks, type DaySet, type StageLike } from './habits'
 import { balanceAt, type TxLike } from './money'
 import { weekCapacity, type WeekCapacityLike } from './study'
 
@@ -124,37 +124,34 @@ export type GridCell = { key: ISODate; level: number | null; tip: string; curren
 
 /**
  * Habit calendar like GitHub: 13 weeks × 7 days, column per week. Level = habits counted that day (rule 13/14:
- * a complete minimum day counts fully), plus a finished «Кор» session from the program start; future days are null.
+ * a complete minimum day counts fully) out of the active ones — programs («Кор») included, marked by a finished
+ * session; future days are null.
  */
 export function habitCalendar(
-  logs: readonly Partial<HabitLog>[],
-  stages: readonly StageLike[],
+  day: (date: ISODate) => DayMarks | null,
+  set: (date: ISODate) => DaySet,
   today: ISODate,
-  core?: { start: ISODate; days: ReadonlySet<ISODate> } | null,
+  label: (id: string) => string = () => '',
 ): (GridCell & { total: number })[] {
   const first = addDaysISO(weekStart(today), -12 * 7)
-  const byDate = new Map(logs.map((l) => [l.date, l]))
   const cells: (GridCell & { total: number })[] = []
   for (let i = 0; i < 13 * 7; i++) {
     const d = addDaysISO(first, i)
-    const stage = stages.length ? stageForDate(stages, d) : null
-    const active = activeHabits(stage)
-    const withCore = Boolean(core && d >= core.start)
-    const total = active.length + (withCore ? 1 : 0)
+    const { active, minimum } = set(d)
+    const total = active.length
     if (d > today) {
       cells.push({ key: d, level: null, total, tip: `${formatDayMonth(d)} · впереди` })
       continue
     }
-    const log = byDate.get(d)
-    const set = minimumSet(stage)
-    const coreDone = withCore && core!.days.has(d) ? 1 : 0
-    const done = minimumDone(log, set) ? total : habitsDone(log, active, set) + coreDone
+    const marks = day(d)
+    const done = habitsDone(marks, active, minimum)
+    const named = active.filter((id) => marks?.done.has(id)).map(label).filter(Boolean)
     cells.push({
       key: d,
       level: done,
       total,
       current: d === today,
-      tip: `${formatDayMonth(d)} · ${done} из ${total}${coreDone ? ' · кор' : ''}${done === 0 ? ' · пропуск — это сигнал, а не провал' : ''}`,
+      tip: `${formatDayMonth(d)} · ${done} из ${total}${named.length ? ` · ${named.join(', ')}` : ''}${done === 0 ? ' · пропуск — это сигнал, а не провал' : ''}`,
     })
   }
   return cells

@@ -526,6 +526,171 @@ export type Database = {
           },
         ]
       }
+      habit_marks: {
+        Row: {
+          created_at: string
+          date: string
+          done: boolean
+          habit_id: string
+          id: string
+          source_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          done?: boolean
+          habit_id: string
+          id?: string
+          source_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          done?: boolean
+          habit_id?: string
+          id?: string
+          source_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "habit_marks_habit_id_fkey"
+            columns: ["habit_id"]
+            isOneToOne: false
+            referencedRelation: "habits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      habit_plan: {
+        Row: {
+          created_at: string
+          from_date: string | null
+          habit_id: string
+          id: string
+          source_id: string | null
+          to_date: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          from_date?: string | null
+          habit_id: string
+          id?: string
+          source_id?: string | null
+          to_date?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          from_date?: string | null
+          habit_id?: string
+          id?: string
+          source_id?: string | null
+          to_date?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "habit_plan_habit_id_fkey"
+            columns: ["habit_id"]
+            isOneToOne: false
+            referencedRelation: "habits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      habits: {
+        Row: {
+          archived_at: string | null
+          created_at: string
+          freq: string
+          freq_per_week: number | null
+          freq_weekdays: number[] | null
+          group_name: string | null
+          icon: string | null
+          id: string
+          in_minimum: boolean
+          kind: string
+          legacy_care: string | null
+          legacy_column: string | null
+          minimum_note: string | null
+          name: string
+          phrase: string | null
+          program_id: string | null
+          sort_order: number
+          source_id: string | null
+          starts_on: string
+          time_of_day: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archived_at?: string | null
+          created_at?: string
+          freq?: string
+          freq_per_week?: number | null
+          freq_weekdays?: number[] | null
+          group_name?: string | null
+          icon?: string | null
+          id?: string
+          in_minimum?: boolean
+          kind: string
+          legacy_care?: string | null
+          legacy_column?: string | null
+          minimum_note?: string | null
+          name: string
+          phrase?: string | null
+          program_id?: string | null
+          sort_order?: number
+          source_id?: string | null
+          starts_on: string
+          time_of_day?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          archived_at?: string | null
+          created_at?: string
+          freq?: string
+          freq_per_week?: number | null
+          freq_weekdays?: number[] | null
+          group_name?: string | null
+          icon?: string | null
+          id?: string
+          in_minimum?: boolean
+          kind?: string
+          legacy_care?: string | null
+          legacy_column?: string | null
+          minimum_note?: string | null
+          name?: string
+          phrase?: string | null
+          program_id?: string | null
+          sort_order?: number
+          source_id?: string | null
+          starts_on?: string
+          time_of_day?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "habits_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "core_programs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       import_baseline: {
         Row: {
           created_at: string
@@ -1314,6 +1479,92 @@ export type Database = {
           price_eur?: number | null
           source_id?: string | null
           title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      workout_queue: {
+        Row: {
+          created_at: string
+          id: string
+          position: number
+          source_id: string | null
+          starts_on: string
+          template_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          position: number
+          source_id?: string | null
+          starts_on: string
+          template_id: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          position?: number
+          source_id?: string | null
+          starts_on?: string
+          template_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workout_queue_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "workout_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workout_templates: {
+        Row: {
+          archived_at: string | null
+          code: string
+          created_at: string
+          exercises: Json
+          focus: string
+          id: string
+          name: string
+          rules: string[]
+          sort_order: number
+          source_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archived_at?: string | null
+          code: string
+          created_at?: string
+          exercises?: Json
+          focus: string
+          id?: string
+          name: string
+          rules?: string[]
+          sort_order?: number
+          source_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          archived_at?: string | null
+          code?: string
+          created_at?: string
+          exercises?: Json
+          focus?: string
+          id?: string
+          name?: string
+          rules?: string[]
+          sort_order?: number
+          source_id?: string | null
           updated_at?: string
           user_id?: string
         }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { bandsOn, calendarBands, calendarEvents, monthGrid, parseFilters } from './calendar'
+import { dayMarks, daySet } from './habits'
 import { BALANCE_LINE_POINTS, COFFEE_SINCE, activityWeeks, balanceLine, coffeeAverage, coffeeSeries, coffeeWeek, cupsOf, enoughForMonths, erfolgeByMonth, habitCalendar, intakeBands, repsSeries, studyHeatmap, wellbeingSeries } from './charts'
 
 const today = '2026-11-11' // Wed
@@ -77,26 +78,49 @@ describe('coffee', () => {
 })
 
 describe('habit calendar, activity weeks, reps', () => {
+  // habits as data (0021): outside, water always; «Кор» (a program) from 10.11 here, marked by a finished session
+  const H = [
+    { id: 'outside', kind: 'habit', name: '10 мин на улице', in_minimum: false, sort_order: 10, archived_at: null },
+    { id: 'water', kind: 'habit', name: 'Вода', in_minimum: true, sort_order: 20, archived_at: null },
+    { id: 'core', kind: 'program', name: 'Кор', phrase: 'кор', in_minimum: false, sort_order: 30, archived_at: null },
+  ]
+  const P = [
+    { habit_id: 'outside', from_date: null, to_date: null },
+    { habit_id: 'water', from_date: null, to_date: null },
+    { habit_id: 'core', from_date: '2026-11-10', to_date: null },
+  ]
+  const calendar = (marks: { habit_id: string; date: string; done: boolean }[], minimum: string[] = [], sessions: string[] = []) =>
+    habitCalendar(
+      (d) => dayMarks(marks, d, minimum.includes(d), sessions.includes(d) ? ['core'] : []),
+      (d) => daySet(H, P, d, true),
+      today,
+      (id) => (id === 'core' ? 'кор' : ''),
+    )
   it('13 weeks × 7 days, future null, level = counted habits', () => {
-    const cells = habitCalendar([{ date: '2026-11-10', morning: true, water: true, outside: true, minimum_mode: false }], [], today)
+    const cells = calendar([
+      { habit_id: 'water', date: '2026-11-10', done: true },
+      { habit_id: 'outside', date: '2026-11-10', done: true },
+    ])
     expect(cells).toHaveLength(91)
     expect(cells.find((c) => c.key === '2026-11-10')!.level).toBe(2)
     expect(cells.find((c) => c.key === '2026-11-12')!.level).toBeNull()
     expect(cells.find((c) => c.key === today)!.current).toBe(true)
   })
   it('«Кор» from the program start: one more of the day when the session is finished', () => {
-    const logs = [
-      { date: '2026-11-09', outside: true, water: true, minimum_mode: false },
-      { date: '2026-11-10', outside: true, water: false, minimum_mode: false },
-      { date: '2026-11-11', outside: true, water: false, minimum_mode: true },
+    const marks = [
+      { habit_id: 'outside', date: '2026-11-09', done: true },
+      { habit_id: 'water', date: '2026-11-09', done: true },
+      { habit_id: 'outside', date: '2026-11-10', done: true },
+      { habit_id: 'outside', date: '2026-11-11', done: true },
     ]
-    const cells = habitCalendar(logs, [], today, { start: '2026-11-10', days: new Set(['2026-11-09', '2026-11-10']) })
+    const cells = calendar(marks, ['2026-11-11'], ['2026-11-09', '2026-11-10'])
     const at = (d: string) => cells.find((c) => c.key === d)!
     expect(at('2026-11-09')).toMatchObject({ level: 2, total: 2 }) // before the start the session does not count
     expect(at('2026-11-10')).toMatchObject({ level: 2, total: 3 })
     expect(at('2026-11-10').tip).toContain('2 из 3 · кор')
-    expect(at(today)).toMatchObject({ level: 1, total: 3 }) // minimum not complete: only marked habits
-    expect(habitCalendar([{ ...logs[2]!, water: true }], [], today, { start: '2026-11-10', days: new Set() }).find((c) => c.key === today)!.level).toBe(3)
+    expect(at(today)).toMatchObject({ level: 0, total: 3 }) // minimum (water) not marked: nothing counts
+    const full = calendar([...marks, { habit_id: 'water', date: today, done: true }], [today])
+    expect(full.find((c) => c.key === today)!.level).toBe(3) // a complete minimum day counts fully
   })
   it('activity points per week with the target of that week', () => {
     const w = activityWeeks([{ date: '2026-11-10', type_id: 't', minutes: 30 }], [{ id: 't', points_per_10min: 2 }], [], today, () => 20)

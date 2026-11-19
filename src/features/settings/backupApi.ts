@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { fetchAllPages } from '@/lib/paging'
-import { BACKUP_FORMAT, BACKUP_TABLES, BACKUP_VERSION, exportFileName, restoreRow, type Backup, type BackupTable, type Row } from '@/lib/backup'
+import { BACKUP_FORMAT, BACKUP_TABLES, BACKUP_VERSION, RESTORE_CONFLICT, exportFileName, restoreRow, type Backup, type BackupTable, type Row } from '@/lib/backup'
 
 async function allRows(table: BackupTable): Promise<Row[]> {
   // (created_at, id): imported rows share created_at, so id keeps the pages stable
@@ -57,7 +57,7 @@ export async function restore(backup: Backup, onTable?: (t: BackupTable) => void
     if (!rows.length) continue
     onTable?.(t)
     for (let i = 0; i < rows.length; i += 500) {
-      const { error } = await supabase.from(t as 'items').upsert(rows.slice(i, i + 500) as never, { onConflict: 'id' })
+      const { error } = await supabase.from(t as 'items').upsert(rows.slice(i, i + 500) as never, { onConflict: RESTORE_CONFLICT[t] ?? 'id' })
       if (error) throw error
     }
     n += rows.length

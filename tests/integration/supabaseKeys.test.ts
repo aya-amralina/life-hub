@@ -33,6 +33,14 @@ const TABLES = [
   'actual_balances',
   'recurring',
   'accounts',
+  'core_programs',
+  'core_sessions',
+  'core_tests',
+  'habits',
+  'habit_plan',
+  'habit_marks',
+  'workout_templates',
+  'workout_queue',
 ] as const
 
 async function adminFindUserId(email: string): Promise<string | undefined> {
@@ -170,6 +178,45 @@ describe.skipIf(!ready)('live: recurring rules and the plan amount (migrations 0
     } finally {
       for (const id of ids) await sb.from('transactions').delete().eq('id', id)
       await sb.from('recurring').delete().eq('title', 'it-rule')
+      await sb.auth.signOut()
+    }
+  })
+})
+
+describe.skipIf(!ready)('live: habits as data (migration 0021)', () => {
+  it('seeded for the test user; a habit cannot be deleted; marks and the old day columns stay equal both ways', async () => {
+    const sb = createClient(url!, publishable!, noSession)
+    expect((await sb.auth.signInWithPassword(user!)).error).toBeNull()
+    const date = '2026-10-01' // a day no other test touches
+    try {
+      const habits = await sb.from('habits').select('id, source_id, in_minimum, archived_at').order('sort_order')
+      expect(habits.error).toBeNull()
+      const by = (sid: string) => habits.data!.find((h) => h.source_id === sid)!
+      expect(habits.data!.map((h) => h.source_id)).toEqual(expect.arrayContaining(['habit:outside', 'habit:water', 'habit:morning', 'habit:core', 'care:body-cream']))
+      expect(by('habit:morning').archived_at).not.toBeNull()
+      const t = await sb.from('workout_templates').select('code').order('sort_order')
+      expect(t.data?.map((x) => x.code)).toEqual(['A', 'B'])
+
+      // archive, never delete: the app has no delete privilege
+      const del = await sb.from('habits').delete().eq('id', by('habit:water').id)
+      expect(del.error?.code).toBe('42501')
+
+      // old way → mark: an older app writes the column
+      expect((await sb.from('daily_logs').upsert({ date, water: true, care: ['Крем для тела'] }, { onConflict: 'user_id,date' })).error).toBeNull()
+      const marks = await sb.from('habit_marks').select('habit_id, done').eq('date', date)
+      expect(marks.data).toEqual(expect.arrayContaining([
+        { habit_id: by('habit:water').id, done: true },
+        { habit_id: by('care:body-cream').id, done: true },
+      ]))
+      // mark → old way: the new app writes the mark, the reserve column follows
+      expect((await sb.from('habit_marks').upsert({ habit_id: by('habit:water').id, date, done: false }, { onConflict: 'user_id,habit_id,date' })).error).toBeNull()
+      expect((await sb.from('habit_marks').upsert({ habit_id: by('habit:outside').id, date, done: true }, { onConflict: 'user_id,habit_id,date' })).error).toBeNull()
+      expect((await sb.from('habit_marks').upsert({ habit_id: by('care:body-cream').id, date, done: false }, { onConflict: 'user_id,habit_id,date' })).error).toBeNull()
+      const log = await sb.from('daily_logs').select('water, outside, care').eq('date', date).single()
+      expect(log.data).toEqual({ water: false, outside: true, care: [] })
+    } finally {
+      await sb.from('habit_marks').delete().eq('date', date)
+      await sb.from('daily_logs').delete().eq('date', date)
       await sb.auth.signOut()
     }
   })
