@@ -119,7 +119,7 @@ export function weekSpendings<T extends TxLike>(txs: readonly T[], monday: ISODa
  * What the week's budget has already covered: expenses with a weekly category (the app's «+» expenses) in
  * Mon–Sun. One-off rows of the plan (a purchase in group «Жизнь» without a weekly category) are separate.
  */
-function spentLifeInWeek(txs: readonly TxLike[], monday: ISODate): number {
+export function spentLifeInWeek(txs: readonly TxLike[], monday: ISODate): number {
   const sunday = addDaysISO(monday, 6)
   return txs
     .filter((t) => t.kind === 'expense' && !isWeekRow(t) && isFact(t) && isWeekCategory(t.category) && t.date >= monday && t.date <= sunday)
