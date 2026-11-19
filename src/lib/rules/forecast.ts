@@ -3,6 +3,7 @@ import { addDaysISO, daysBetween, endOfMonthISO, weekStart, type ISODate } from 
 import { toCents } from '../format'
 import { accountBalanceAt, accountsStart, balanceView, goalAccountNow, groupDelta, groupOfAccount, type AccTx, type AccountLike } from './accounts'
 import { debtSummary, envelopeSummary, forecastEnd, isFact, isInPlan, isWeekRow, signedCents, spentLifeInWeek, type DebtLike, type MonthRow } from './money'
+import { nextPayday, reservesNow, type EnvelopePeriod } from './periods'
 
 /**
  * The forecast of «Деньги» (stage 2, decision 16.11.2026 and 18.11.2026): «Баланс» from the start by accounts to the
@@ -151,16 +152,18 @@ export function forecast(i: { txs: readonly AccTx[]; accounts: readonly AccountL
 }
 export type Forecast = ReturnType<typeof forecast>
 
-export type ReserveEnvelope = { id: string; name: string; type: string; archived: boolean; account_id: string | null; planned_eur: number | null }
+export type ReserveEnvelope = EnvelopePeriod & { id: string; name: string; type: string; archived: boolean; account_id: string | null; planned_eur: number | null }
 export type ReserveDebt = DebtLike & { who: string; account_id: string | null }
 
 /**
- * «Свободно до {дата}»: the next planned income into «Баланс» (none up to the horizon — the horizon); the days before it.
+ * «Свободно до {дата}»: the next day of money (`paydays`, the salary — docs/money-redesign.md phase 1); without days of
+ * money the next planned income into «Баланс»; none up to the horizon — the horizon. The days before it.
  * = the fact now − what leaves «Баланс» by plan in those days (planned waiting for an answer included) + planned
  * transfers into «Баланс» − «Жизнь» by plan in those days (what is left of this week, the share of a partial week) −
  * what is set aside on «Баланс»: envelopes (what is left of them) and debts to pay back on its accounts — goals live on
- * «Подушка». A planned expense of such an envelope or debt is inside its reserve, never twice: the reserve is the larger
- * of what is left and what is planned from it in those days. Below zero — as is.
+ * «Подушка». An envelope of a period that has not started sets nothing aside (unless set aside early); its planned
+ * expenses in those days still leave by plan. A planned expense of a reserving envelope or debt is inside its reserve,
+ * never twice: the reserve is the larger of what is left and what is planned from it in those days. Below zero — as is.
  */
 export function freeUntil(i: {
   txs: readonly AccTx[]
@@ -170,19 +173,26 @@ export function freeUntil(i: {
   debts: readonly ReserveDebt[]
   today: ISODate
   end?: ISODate
+  /** days of money (`periods.ts`) */
+  paydays?: readonly ISODate[]
 }) {
   const { txs, accounts, today } = i
+  const days = i.paydays ?? []
   const end = i.end ?? forecastEnd(today)
   const view = balanceView(txs, accounts, today)
   const groupOf = groupOfAccount(accounts)
   const delta = (t: AccTx) => (view.start ? groupDelta(t, groupOf, 'balance') : signedCents(t))
   const planned = (t: AccTx) => t.is_planned && t.confirmed_at === null && !t.cancelled_at && !isWeekRow(t) && t.kind !== 'opening' && (view.start === null || t.date > view.start)
-  const until = txs.filter((t) => planned(t) && t.kind === 'income' && t.date > today && t.date <= end && delta(t) > 0).reduce<ISODate | null>((m, t) => (m === null || t.date < m ? t.date : m), null)
+  const payday = nextPayday(today, days)
+  const until =
+    payday !== null && payday <= end
+      ? payday
+      : txs.filter((t) => planned(t) && t.kind === 'income' && t.date > today && t.date <= end && delta(t) > 0).reduce<ISODate | null>((m, t) => (m === null || t.date < m ? t.date : m), null)
   const windowEnd = until ? addDaysISO(until, -1) : end
   const inWindow = txs.filter((t) => planned(t) && t.date <= windowEnd)
   // what is set aside on «Баланс» (an envelope or a debt without an account counts as «Баланс»)
   const onBalance = (accountId: string | null) => groupOf(accountId) === 'balance'
-  const envelopes = i.envelopes.filter((e) => !e.archived && e.type === 'envelope' && onBalance(e.account_id))
+  const envelopes = i.envelopes.filter((e) => !e.archived && e.type === 'envelope' && onBalance(e.account_id) && reservesNow(e, today, days))
   const debts = i.debts.filter((d) => d.direction === 'i_owe' && d.status === 'open' && onBalance(d.account_id))
   const reserved = new Set<AccTx>()
   let reservedCents = 0
@@ -205,7 +215,14 @@ export function freeUntil(i: {
   for (let d = today; d <= windowEnd; d = addDaysISO(d, 1)) life += lifeDay(d)
   const lifeCents = Math.round(life)
   const nowCents = view.at(today, 'fact')
-  return { until, windowEnd, cents: nowCents - outCents + inCents - lifeCents - reservedCents, parts: { nowCents, outCents, inCents, lifeCents, reservedCents } }
+  return {
+    until,
+    /** `until` is the day of money (the salary), not just the next income */
+    payday: payday !== null && until === payday,
+    windowEnd,
+    cents: nowCents - outCents + inCents - lifeCents - reservedCents,
+    parts: { nowCents, outCents, inCents, lifeCents, reservedCents },
+  }
 }
 
 export type GoalPace = { perMonthCents: number; closesOn: ISODate } | 'none' | 'not_growing'

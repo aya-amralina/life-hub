@@ -9,6 +9,7 @@ import { forecastEnd } from '@/lib/rules/money'
 import type { WeekLimitSum } from '@/lib/rules/forecast'
 import { toCents } from '@/lib/format'
 import { isVirtual, materialize, withRecurring, type VirtualTx } from '@/lib/rules/recurring'
+import { paydays } from '@/lib/rules/periods'
 import type { WeekCategory } from '@/lib/constants'
 import { ensureWeek, weekKeys } from '@/features/weeks/api'
 
@@ -242,6 +243,18 @@ export function usePlanTransactions() {
   const end = forecastEnd(todayBerlin())
   const data = useMemo(() => (txs.data ? withRecurring(txs.data, rules.data ?? [], end) : undefined), [txs.data, rules.data, end])
   return { data, isPending: txs.isPending || (rules.isPending && rules.fetchStatus === 'fetching') }
+}
+
+/**
+ * Days of money (docs/money-redesign.md, phase 1): the salary's occurrences in the plan; null while the data comes.
+ * No salary rule — an empty list (a month's period then starts on its 1st).
+ */
+export function usePaydays(): ISODate[] | null {
+  const txs = usePlanTransactions()
+  const rules = useRecurring()
+  const accounts = useAccounts()
+  const ready = !txs.isPending && !rules.isPending && !accounts.isPending
+  return useMemo(() => (ready ? paydays(rules.data ?? [], txs.data ?? [], accounts.data ?? []) : null), [ready, rules.data, txs.data, accounts.data])
 }
 
 /**

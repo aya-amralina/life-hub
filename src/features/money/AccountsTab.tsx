@@ -16,7 +16,7 @@ import { GROUP_LABEL, accountsOverview, groupForecast, reconcileAccounts, reserv
 import { BALANCE_LINE_POINTS, balanceLine, niceTicks } from '@/lib/rules/charts'
 import { forecastEnd } from '@/lib/rules/money'
 import { accountsCheckText } from './checkText'
-import { useAccounts, useActualBalances, useDebts, useEnvelopes, usePlanTransactions, useSaveAccount, type Account } from './api'
+import { useAccounts, useActualBalances, useDebts, useEnvelopes, usePaydays, usePlanTransactions, useSaveAccount, type Account } from './api'
 
 const eur = (c: number) => formatEur(c, { whole: true })
 const field = 'h-12 w-full rounded-xl border border-line2 bg-card px-4 text-base text-ink outline-none placeholder:text-ink3 focus:border-ink2'
@@ -33,13 +33,14 @@ export function AccountsTab() {
   const envelopes = useEnvelopes()
   const debts = useDebts()
   const balances = useActualBalances()
+  const paydays = usePaydays()
   const [editing, setEditing] = useState<Account | 'new' | null>(null)
   useAddAction(() => setEditing('new'))
-  if (accounts.isPending || txs.isPending || envelopes.isPending || debts.isPending || balances.isPending) return <SkeletonCard />
+  if (accounts.isPending || txs.isPending || envelopes.isPending || debts.isPending || balances.isPending || paydays === null) return <SkeletonCard />
 
   const list = accounts.data ?? []
   const all = txs.data ?? []
-  const reserves = reservesByAccount({ envelopes: envelopes.data ?? [], debts: debts.data ?? [], txs: all, balances: balances.data ?? [], accounts: list, today })
+  const reserves = reservesByAccount({ envelopes: envelopes.data ?? [], debts: debts.data ?? [], txs: all, balances: balances.data ?? [], accounts: list, today, paydays })
   const groups = accountsOverview(all, list, reserves, today)
   const sheet = <AccountSheet open={editing !== null} onClose={() => setEditing(null)} account={editing === 'new' ? null : editing} count={list.length} />
 

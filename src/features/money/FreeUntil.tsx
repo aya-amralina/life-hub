@@ -5,7 +5,7 @@ import { cn } from '@/components/ui/cn'
 import { formatDayMonth, todayBerlin } from '@/lib/dates'
 import { formatEstimate, formatEur } from '@/lib/format'
 import { freeUntil } from '@/lib/rules/forecast'
-import { useAccounts, useAllWeekLimits, useDebts, useEnvelopes, usePlanTransactions } from './api'
+import { useAccounts, useAllWeekLimits, useDebts, useEnvelopes, usePaydays, usePlanTransactions } from './api'
 
 const eur = (c: number) => formatEur(c, { whole: true })
 const signedEur = (c: number) => (c < 0 ? `−${eur(-c)}` : eur(c))
@@ -17,9 +17,10 @@ function useFreeUntil() {
   const limits = useAllWeekLimits()
   const envelopes = useEnvelopes()
   const debts = useDebts()
-  if (txs.isPending || accounts.isPending || limits.isPending || envelopes.isPending || debts.isPending) return null
+  const paydays = usePaydays()
+  if (txs.isPending || accounts.isPending || limits.isPending || envelopes.isPending || debts.isPending || paydays === null) return null
   if (!(txs.data ?? []).length) return null
-  return freeUntil({ txs: txs.data ?? [], accounts: accounts.data ?? [], limits: limits.data ?? [], envelopes: envelopes.data ?? [], debts: debts.data ?? [], today: todayBerlin() })
+  return freeUntil({ txs: txs.data ?? [], accounts: accounts.data ?? [], limits: limits.data ?? [], envelopes: envelopes.data ?? [], debts: debts.data ?? [], today: todayBerlin(), paydays })
 }
 
 /**
@@ -72,7 +73,7 @@ export function FreeUntilRow({ to }: { to?: string }) {
               </li>
             ))}
           <li className="flex justify-between gap-3 border-t border-line2 pt-1 font-semibold text-ink">
-            <span>{r.until ? `до ${formatDayMonth(r.until)} — следующий доход` : `до ${formatDayMonth(r.windowEnd)}`}</span>
+            <span>{r.until ? `до ${formatDayMonth(r.until)} — ${r.payday ? 'день денег' : 'следующий доход'}` : `до ${formatDayMonth(r.windowEnd)}`}</span>
             <span>{signedEur(r.cents)}</span>
           </li>
         </ul>

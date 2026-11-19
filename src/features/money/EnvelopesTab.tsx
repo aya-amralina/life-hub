@@ -11,21 +11,25 @@ import { MetaChip } from '@/components/ui/MetaChip'
 import { PickSheet } from '@/components/ui/PickSheet'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
+import { Switch } from '@/components/ui/Switch'
 import { formatDayMonth, formatWeekdayDate, todayBerlin } from '@/lib/dates'
-import { formatEstimate, formatEur, parseEurInput, plural } from '@/lib/format'
+import { formatEstimate, formatEur, joinRu, parseEurInput, plural } from '@/lib/format'
 import { accountOptions, goalAccountNow, goalAccountProblem } from '@/lib/rules/accounts'
 import { goalForecast } from '@/lib/rules/forecast'
-import { debtSummary, envelopeSummary, envelopesLeft, goalProgress } from '@/lib/rules/money'
+import { debtSummary, envelopeSummary, goalProgress } from '@/lib/rules/money'
+import { ENVELOPE_STATUS_LABEL, currentPeriodMonth, envelopeStatus, periodMonths, periodName, periodStart, type EnvelopeStatus } from '@/lib/rules/periods'
 import { Choice } from './Choice'
 import { DebtSheet } from './DebtSheet'
-import { useAccounts, useActualBalances, useAllTransactions, useCreateEnvelope, useDebts, useEnvelopes, useSaveGoalBalance, useUpdateEnvelope, type Debt, type Envelope } from './api'
+import { useAccounts, useActualBalances, useAllTransactions, useCreateEnvelope, useDebts, useEnvelopes, usePaydays, useSaveGoalBalance, useUpdateEnvelope, type Debt, type Envelope } from './api'
 
 const field = 'h-12 w-full rounded-xl border border-line2 bg-card px-4 text-base text-ink outline-none focus:border-ink2'
 const DIRECTION: Record<string, string> = { i_owe: 'я должна', owed_to_me: 'мне должны', from_pot: 'заём из копилки' }
 const eur = (c: number) => formatEur(c, { whole: true })
 
 /**
- * Конверты (design 3l, rule 4, docs/EXCEL_FORMAT.md): «Отложено» — what is left in envelopes of type «конверт»;
+ * Конверты (design 3l, rule 4, docs/EXCEL_FORMAT.md): «Отложено» — what is left in envelopes of type «конверт» that
+ * set money aside now (docs/money-redesign.md, phase 1: an envelope of a later period is «Запланировано» until its
+ * day of money or «Отложить сейчас»); spent ones fold into «Готово»;
  * goals — now (the latest «Остатки» row of the pocket) against the target, with the due date and what is
  * borrowed from them; debts — open first, closed folded.
  */
@@ -41,8 +45,12 @@ export function EnvelopesTab() {
   const [debtEdit, setDebtEdit] = useState<Debt | 'new' | null>(null)
   const [closedOpen, setClosedOpen] = useState(false)
   const [picking, setPicking] = useState(false)
+  const [doneOpen, setDoneOpen] = useState(false)
+  const paydays = usePaydays()
+  const update = useUpdateEnvelope()
+  const toast = useToast()
   useAddAction(() => setPicking(true))
-  if (envelopes.isPending || txs.isPending || debts.isPending || balances.isPending) return <SkeletonCard />
+  if (envelopes.isPending || txs.isPending || debts.isPending || balances.isPending || paydays === null) return <SkeletonCard />
   const all = envelopes.data ?? []
   const tx = txs.data ?? []
   const envs = all.filter((e) => e.type === 'envelope')
@@ -50,8 +58,25 @@ export function EnvelopesTab() {
   const debtList = debts.data ?? []
   const open = debtList.filter((d) => d.status === 'open')
   const closed = debtList.filter((d) => d.status !== 'open')
-  const left = envelopesLeft(envs, tx)
-  const spent = envs.reduce((s, e) => s + envelopeSummary(e, tx).spentCents, 0)
+  const today = todayBerlin()
+  const cards = envs.map((e) => {
+    const s = envelopeSummary(e, tx)
+    return { e, s, status: envelopeStatus(e, s, today, paydays) }
+  })
+  const now = cards.filter((c) => c.status === 'reserved' || c.status === 'running')
+  const later = cards.filter((c) => c.status === 'planned')
+  const done = cards.filter((c) => c.status === 'done')
+  const left = now.reduce((s, c) => s + c.s.leftCents, 0)
+  const spent = now.reduce((s, c) => s + c.s.spentCents, 0)
+  const laterCents = later.reduce((s, c) => s + c.s.leftCents, 0)
+  const laterMonths = [...new Set(later.map((c) => c.e.pay_month!.slice(0, 7)))].sort().map((m) => periodName(m, today))
+  const reserveNow = (e: Envelope) => {
+    update.mutate({ id: e.id, patch: { reserved_early: true } })
+    toast({ text: `«${e.name}» — отложено сейчас`, actionLabel: 'Вернуть', onAction: () => update.mutate({ id: e.id, patch: { reserved_early: false } }) })
+  }
+  const card = (c: (typeof cards)[number]) => (
+    <EnvelopeCard key={c.e.id} e={c.e} s={c.s} status={c.status} paydays={paydays} onEdit={() => setEditingEnv(c.e)} onReserve={() => reserveNow(c.e)} />
+  )
 
   return (
     <>
@@ -69,12 +94,24 @@ export function EnvelopesTab() {
             <div className="flex flex-col gap-1">
               <span className="text-cap text-ink2">Отложено в конвертах</span>
               <span className="text-big font-semibold tabular-nums">{eur(left)}</span>
-              <span className="text-cap text-ink2 tabular-nums">осталось в {envs.length} {plural(envs.length, ['конверте', 'конвертах', 'конвертах'])} · потрачено {eur(spent)}</span>
+              <span className="text-cap text-ink2 tabular-nums">
+                осталось в {now.length} {plural(now.length, ['конверте', 'конвертах', 'конвертах'])} · потрачено {eur(spent)}
+              </span>
+              {later.length > 0 && (
+                <span className="text-cap text-ink2 tabular-nums">
+                  ещё {eur(laterCents)} на {joinRu(laterMonths)} — отложится в день денег
+                </span>
+              )}
             </div>
           )}
-          {envs.map((e) => (
-            <EnvelopeCard key={e.id} e={e} s={envelopeSummary(e, tx)} onEdit={() => setEditingEnv(e)} />
-          ))}
+          {now.map(card)}
+          {later.map(card)}
+          {done.length > 0 && (
+            <>
+              <GroupHeader title="Готово" count={done.length} open={doneOpen} onToggle={() => setDoneOpen(!doneOpen)} />
+              {doneOpen && done.map(card)}
+            </>
+          )}
           {goals.length > 0 && <h2 className="m-0 pt-2 text-title font-semibold">Цели</h2>}
           {goals.map((g) => (
             <GoalCard key={g.id} g={g} p={goalProgress(g, balances.data ?? [], debtList, tx)} onAccount={goalAccountNow(g, goals, accounts.data ?? [], tx, todayBerlin())} forecast={goalForecast(g, { goals, accounts: accounts.data ?? [], txs: tx, balances: balances.data ?? [], today: todayBerlin() })} loans={open.filter((d) => d.direction === 'from_pot' && d.pot_id === g.id)} onEdit={() => setEditingEnv(g)} />
@@ -121,7 +158,30 @@ function EditName({ name, onEdit, muted = false }: { name: string; onEdit: () =>
   )
 }
 
-function EnvelopeCard({ e, s, onEdit }: { e: Envelope; s: ReturnType<typeof envelopeSummary>; onEdit: () => void }) {
+/** The status line of an envelope: «Запланировано · Декабрь», «Отложено заранее · Декабрь», «Идёт», … */
+function statusText(e: Envelope, status: EnvelopeStatus, paydays: readonly string[], today: string): string {
+  const month = e.pay_month?.slice(0, 7) ?? null
+  const future = month !== null && today < periodStart(month, paydays)
+  const label = status === 'reserved' && future ? 'Отложено заранее' : ENVELOPE_STATUS_LABEL[status]
+  return month && month !== currentPeriodMonth(today, paydays) ? `${label} · ${periodName(month, today)}` : label
+}
+
+function EnvelopeCard({
+  e,
+  s,
+  status,
+  paydays,
+  onEdit,
+  onReserve,
+}: {
+  e: Envelope
+  s: ReturnType<typeof envelopeSummary>
+  status: EnvelopeStatus
+  paydays: readonly string[]
+  onEdit: () => void
+  onReserve: () => void
+}) {
+  const today = todayBerlin()
   return (
     <Card>
       <div className="flex items-baseline gap-2">
@@ -133,6 +193,14 @@ function EnvelopeCard({ e, s, onEdit }: { e: Envelope; s: ReturnType<typeof enve
       <ProgressBar value={s.spentCents} max={s.plannedCents} fillClass="bg-money" label={e.name} />
       <div className="text-cap text-ink2 tabular-nums">{[`заложено ${eur(s.plannedCents)}`, `потрачено ${eur(s.spentCents)}`, e.when_text].filter(Boolean).join(' · ')}</div>
       {s.overCents > 0 && <div className="text-cap font-semibold text-amber-ink tabular-nums">+{eur(s.overCents)} сверх</div>}
+      <div className="flex flex-wrap items-center gap-2">
+        <MetaChip kind={status === 'planned' ? 'clock' : 'ok'} text={statusText(e, status, paydays, today)} />
+        {status === 'planned' && (
+          <Button variant="secondary" className="ml-auto h-11" onClick={onReserve} aria-label={`Отложить сейчас: ${e.name}`}>
+            Отложить сейчас
+          </Button>
+        )}
+      </div>
     </Card>
   )
 }
@@ -273,6 +341,16 @@ function EnvelopeForm({ env, onClose }: { env: Envelope | null; onClose: () => v
   const [due, setDue] = useState(env?.goal_date ?? '')
   const [type, setType] = useState<'envelope' | 'goal'>(env?.type === 'goal' ? 'goal' : 'envelope')
   const [accountId, setAccountId] = useState<string | null>(env?.account_id ?? null)
+  const paydays = usePaydays() ?? []
+  const today = todayBerlin()
+  const months = periodMonths(today, paydays)
+  // a period of the past (or none, as before) shows as today's; saving writes the chosen one
+  const [payMonth, setPayMonth] = useState<string>(() => {
+    const m = env?.pay_month?.slice(0, 7)
+    return m && m >= months[0]! ? m : months[0]!
+  })
+  const [early, setEarly] = useState(env?.reserved_early ?? false)
+  const future = today < periodStart(payMonth, paydays)
   const accounts = useAccounts()
   const accountList = accounts.data ?? []
   // a goal lives only on «Подушка»; an envelope — on any account (decision 18.11.2026)
@@ -297,6 +375,10 @@ function EnvelopeForm({ env, onClose }: { env: Envelope | null; onClose: () => v
           goal_eur: type === 'goal' && goalCents ? goalCents / 100 : null,
           goal_date: type === 'goal' && due ? due : null,
           account_id: accountId,
+          // an envelope of today's period keeps what it had (null — as before); another period is written
+          ...(type === 'envelope'
+            ? { pay_month: payMonth === months[0] && !env?.pay_month ? null : `${payMonth}-01`, reserved_early: future && early }
+            : {}),
         }
         const done = () => {
           toast({ text: env ? `«${name.trim()}» — сохранено` : type === 'goal' ? `Цель «${name.trim()}» заведена` : `Конверт «${name.trim()}» готов` })
@@ -331,6 +413,22 @@ function EnvelopeForm({ env, onClose }: { env: Envelope | null; onClose: () => v
         <>
           <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="Сколько заложить, €" aria-label="Сумма" className={field} />
           <input value={when} onChange={(e) => setWhen(e.target.value)} placeholder="Когда, например «до 20.12»" aria-label="Когда" className={field} />
+          <Choice
+            label="Из каких денег"
+            options={(months.includes(payMonth) ? months : [...months, payMonth]).map((m) => ({ value: m, label: periodName(m, today) }))}
+            value={payMonth}
+            onChange={(v) => v && setPayMonth(v)}
+          />
+          {future ? (
+            <>
+              <Switch checked={early} onChange={setEarly} label="Отложить сейчас" />
+              <p className="m-0 text-cap text-ink2">
+                {early
+                  ? 'Отложится из сегодняшних денег — «Свободно» станет меньше уже сейчас.'
+                  : `До дня денег (${formatDayMonth(periodStart(payMonth, paydays))}) не трогает «Свободно».`}
+              </p>
+            </>
+          ) : null}
         </>
       )}
       <Choice

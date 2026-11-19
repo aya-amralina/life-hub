@@ -2,6 +2,7 @@ import type { AccountGroup } from '../constants'
 import { parseSignedEurInput, toCents } from '../format'
 import { addDaysISO, type ISODate } from '../dates'
 import { balanceAt, debtSummary, envelopeSummary, isFact, isInPlan, type DebtLike, type TxLike } from './money'
+import { reservesNow, type EnvelopePeriod } from './periods'
 
 /**
  * Accounts (decision 18.11.2026). Every Revolut pocket is an account; accounts are in groups: «Баланс» — the plan and
@@ -235,12 +236,13 @@ export function reviewBalances<A extends AccountLike>(typed: Readonly<Record<str
 }
 
 export type Reserve = { kind: 'envelope' | 'goal' | 'debt'; id: string; name: string; cents: number }
-export type EnvelopeOfAccount = { id: string; name: string; type: string; archived: boolean; account_id: string | null; planned_eur: number | null; goal_eur: number | null }
+export type EnvelopeOfAccount = EnvelopePeriod & { id: string; name: string; type: string; archived: boolean; account_id: string | null; planned_eur: number | null; goal_eur: number | null }
 export type DebtOfAccount = DebtLike & { who: string; account_id: string | null }
 
 /**
  * What is set aside on each account (decision 18.11.2026), never twice with the plan:
- * - an envelope — what is left of it (planned − confirmed expenses with it; a planned expense does not lower it);
+ * - an envelope — what is left of it (planned − confirmed expenses with it; a planned expense does not lower it),
+ *   only once its period has started or it was set aside early (`paydays`, docs/money-redesign.md phase 1);
  * - a goal — min(now, target): now is the account's balance when the goal is alone on it, else its latest share
  *   from «Внести остаток»;
  * - a debt «я должна» — what is left to pay back.
@@ -252,6 +254,8 @@ export function reservesByAccount(i: {
   balances: readonly { date: ISODate; envelope_id: string | null; amount_eur: number | string }[]
   accounts: readonly AccountLike[]
   today: ISODate
+  /** days of money (`periods.ts`); without them a month's period starts on its 1st */
+  paydays?: readonly ISODate[]
 }): Map<string, Reserve[]> {
   const out = new Map<string, Reserve[]>()
   const add = (accountId: string, r: Reserve) => {
@@ -260,6 +264,7 @@ export function reservesByAccount(i: {
   for (const e of i.envelopes) {
     if (e.archived || !e.account_id) continue
     if (e.type === 'envelope') {
+      if (!reservesNow(e, i.today, i.paydays ?? [])) continue
       add(e.account_id, { kind: 'envelope', id: e.id, name: e.name, cents: envelopeSummary(e, i.txs).leftCents })
       continue
     }

@@ -483,7 +483,9 @@ export type Database = {
           id: string
           name: string
           note: string | null
+          pay_month: string | null
           planned_eur: number | null
+          reserved_early: boolean
           source_id: string | null
           type: string
           updated_at: string
@@ -499,7 +501,9 @@ export type Database = {
           id?: string
           name: string
           note?: string | null
+          pay_month?: string | null
           planned_eur?: number | null
+          reserved_early?: boolean
           source_id?: string | null
           type?: string
           updated_at?: string
@@ -515,7 +519,9 @@ export type Database = {
           id?: string
           name?: string
           note?: string | null
+          pay_month?: string | null
           planned_eur?: number | null
+          reserved_early?: boolean
           source_id?: string | null
           type?: string
           updated_at?: string

@@ -266,6 +266,13 @@ describe('accounts: what is set aside, «всего» and «свободно»',
       { kind: 'debt', id: 'l1', name: 'Депозит жильца', cents: 10000 },
     ])
   })
+  it('an envelope of a period that has not started is not set aside on its account; set aside early — it is', () => {
+    const dec = envelopes.map((e) => (e.id === 'trip' ? { ...e, pay_month: '2026-12-01' } : e))
+    const r = (list: typeof dec, today: string) => reservesByAccount({ envelopes: list, debts, txs: withDebt, balances: [], accounts, today, paydays: ['2026-11-27'] })
+    expect(r(dec, '2026-11-22').get('dep')!.map((x) => x.kind)).toEqual(['debt'])
+    expect(r(dec, '2026-11-27').get('dep')!.map((x) => x.kind)).toEqual(['envelope', 'debt'])
+    expect(r(dec.map((e) => ({ ...e, reserved_early: true })), '2026-11-22').get('dep')!.map((x) => x.kind)).toEqual(['envelope', 'debt'])
+  })
   it('a planned expense from an envelope does not lower what is set aside; a confirmed one does', () => {
     const spent = [...withDebt, tx({ date: '2026-11-21', amount_eur: 10, account_id: 'main', envelope_id: 'trip', grp: 'Поездки и события' })]
     const planned = [...withDebt, { ...spent.at(-1)!, is_planned: true }]

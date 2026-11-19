@@ -155,6 +155,29 @@ describe('forecast: «Свободно до …»', () => {
   it('below zero — as is', () => {
     expect(free([...list, plan({ date: '2026-11-20', amount_eur: 500, account_id: 'main' })]).cents).toBe(10300 - 50000)
   })
+  // docs/money-redesign.md, phase 1: an envelope of a period that has not started sets nothing aside
+  const december = envelopes.map((e) => (e.id === 'gift' ? { ...e, pay_month: '2026-12-01' } : e))
+  const byPeriod = (p: { envelopes?: typeof december; paydays?: string[]; rows?: AccTx[] } = {}) =>
+    freeUntil({ txs: p.rows ?? list, accounts, limits, envelopes: p.envelopes ?? december, debts, today: TODAY, end: END, paydays: p.paydays ?? ['2026-11-27', '2026-12-28'] })
+  it('an envelope of the next period is not set aside before its day of money', () => {
+    const r = byPeriod()
+    expect(r.until).toBe('2026-11-27')
+    expect(r.parts.reservedCents).toBe(5000) // only the debt; the 80 left in «Подарки» belong to December
+    expect(r.cents).toBe(10300 + 8000)
+  })
+  it('«Отложить сейчас» sets it aside from today’s money; today’s period or none — as before', () => {
+    expect(byPeriod({ envelopes: december.map((e) => ({ ...e, reserved_early: true })) }).cents).toBe(10300)
+    expect(byPeriod({ envelopes: envelopes.map((e) => ({ ...e, pay_month: '2026-11-01' })) }).cents).toBe(10300)
+  })
+  it('a planned expense of a December envelope in these days still leaves by plan', () => {
+    const rows = [...list, plan({ date: '2026-11-24', amount_eur: 30, account_id: 'main', envelope_id: 'gift' })]
+    expect(byPeriod({ rows }).parts.outCents).toBe(1200 + 3000)
+  })
+  it('the window ends before the day of money, not before any income', () => {
+    const r = byPeriod({ paydays: ['2026-11-30'] })
+    expect(r.until).toBe('2026-11-30')
+    expect(r.windowEnd).toBe('2026-11-29')
+  })
 })
 
 describe('forecast: goals', () => {
