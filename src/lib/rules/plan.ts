@@ -72,7 +72,7 @@ export function isPlannedOperation(t: PlanTx, start: ISODate | null): boolean {
 /**
  * The planned items. `accounts` — groups of accounts (a row without one counts as «Баланс»), `start` — the start by
  * accounts (operations up to it are history). Operations linked to an envelope or a debt are inside that item; income
- * and transfers that do not leave «Баланс» for «Подушка» are not spending and are not items.
+ * and transfers that stay inside «Баланс» are not spending and are not items.
  */
 export function plannedItems(i: {
   envelopes: readonly PlanEnvelope[]
@@ -167,8 +167,10 @@ export function plannedItems(i: {
 
   for (const t of i.txs) {
     if (!t.id || !isPlannedOperation(t, i.start) || t.envelope_id || t.debt_id) continue
-    const toGoal = t.kind === 'transfer' && grp(t.account_id) === 'balance' && grp(t.to_account_id) === 'cushion'
-    if (t.kind !== 'expense' && !toGoal) continue
+    // a transfer leaving «Баланс» is money that goes: to «Подушка» — into a goal, elsewhere (trips, deposit) — spending
+    const leaves = t.kind === 'transfer' && grp(t.account_id) === 'balance' && !!t.to_account_id && grp(t.to_account_id) !== 'balance'
+    const toGoal = leaves && grp(t.to_account_id) === 'cushion'
+    if (t.kind !== 'expense' && !leaves) continue
     const cents = toCents(t.amount_eur)
     const month = periodOfDate(t.date, paydays)
     items.push({

@@ -427,16 +427,19 @@ function EnvelopeForm({ env, onClose }: { env: Envelope | null; onClose: () => v
             value={payMonth}
             onChange={(v) => v && setPayMonth(v)}
           />
-          {future ? (
-            <>
+          {future && (
+            <div className="flex items-center gap-3">
+              <span className="min-w-0 flex-1 text-base">
+                Отложить сейчас
+                <span className="block text-cap text-ink2">
+                  {early
+                    ? 'Отложится из сегодняшних денег — «Свободно» станет меньше уже сейчас.'
+                    : `До дня денег (${formatDayMonth(periodStart(payMonth, paydays))}) не трогает «Свободно».`}
+                </span>
+              </span>
               <Switch checked={early} onChange={setEarly} label="Отложить сейчас" />
-              <p className="m-0 text-cap text-ink2">
-                {early
-                  ? 'Отложится из сегодняшних денег — «Свободно» станет меньше уже сейчас.'
-                  : `До дня денег (${formatDayMonth(periodStart(payMonth, paydays))}) не трогает «Свободно».`}
-              </p>
-            </>
-          ) : null}
+            </div>
+          )}
         </>
       )}
       <Choice

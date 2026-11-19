@@ -2,26 +2,13 @@ import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Link } from 'react-router'
 import { cn } from '@/components/ui/cn'
-import { formatDayMonth, todayBerlin } from '@/lib/dates'
+import { formatDayMonth } from '@/lib/dates'
 import { formatEstimate, formatEur } from '@/lib/format'
-import { freeUntil } from '@/lib/rules/forecast'
-import { useAccounts, useAllWeekLimits, useDebts, useEnvelopes, usePaydays, usePlanTransactions } from './api'
+import { useFreeUntil } from './api'
 
 const eur = (c: number) => formatEur(c, { whole: true })
 const signedEur = (c: number) => (c < 0 ? `−${eur(-c)}` : eur(c))
 
-/** «Свободно до …» (stage 2): the number, or null while the data comes. */
-function useFreeUntil() {
-  const txs = usePlanTransactions()
-  const accounts = useAccounts()
-  const limits = useAllWeekLimits()
-  const envelopes = useEnvelopes()
-  const debts = useDebts()
-  const paydays = usePaydays()
-  if (txs.isPending || accounts.isPending || limits.isPending || envelopes.isPending || debts.isPending || paydays === null) return null
-  if (!(txs.data ?? []).length) return null
-  return freeUntil({ txs: txs.data ?? [], accounts: accounts.data ?? [], limits: limits.data ?? [], envelopes: envelopes.data ?? [], debts: debts.data ?? [], today: todayBerlin(), paydays })
-}
 
 /**
  * «Свободно до 27.11 · −201 €» — one quiet row. On «Деньги» a tap opens the numbers it is made of (no reasons, no

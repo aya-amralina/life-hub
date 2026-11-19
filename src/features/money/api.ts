@@ -6,7 +6,7 @@ import { fetchAllPages } from '@/lib/paging'
 import type { Tables, TablesInsert, TablesUpdate } from '@/lib/db/types'
 import { addDaysISO, todayBerlin, weekStart, type ISODate } from '@/lib/dates'
 import { forecastEnd } from '@/lib/rules/money'
-import type { WeekLimitSum } from '@/lib/rules/forecast'
+import { freeUntil, type WeekLimitSum } from '@/lib/rules/forecast'
 import { toCents } from '@/lib/format'
 import { isVirtual, materialize, withRecurring, type VirtualTx } from '@/lib/rules/recurring'
 import { paydays } from '@/lib/rules/periods'
@@ -267,17 +267,19 @@ export function usePaydays(): ISODate[] | null {
 export function usePlannedItems(): PlannedItem[] | null {
   const txs = usePlanTransactions()
   const envelopes = useEnvelopes()
+  const closed = useClosedEnvelopes()
   const debts = useDebts()
   const wishes = useWishlist()
   const accounts = useAccounts()
   const days = usePaydays()
-  const ready = !txs.isPending && !envelopes.isPending && !debts.isPending && !wishes.isPending && !accounts.isPending && days !== null
+  const ready = !txs.isPending && !envelopes.isPending && !closed.isPending && !debts.isPending && !wishes.isPending && !accounts.isPending && days !== null
   const today = todayBerlin()
   return useMemo(() => {
     if (!ready) return null
     const all = txs.data ?? []
-    return plannedItems({ envelopes: envelopes.data ?? [], debts: debts.data ?? [], wishes: wishes.data ?? [], txs: all, accounts: accounts.data ?? [], start: accountsStart(all), today, paydays: days })
-  }, [ready, txs.data, envelopes.data, debts.data, wishes.data, accounts.data, days, today])
+    // closed (archived) envelopes are items of «Готово»
+    return plannedItems({ envelopes: [...(envelopes.data ?? []), ...(closed.data ?? [])], debts: debts.data ?? [], wishes: wishes.data ?? [], txs: all, accounts: accounts.data ?? [], start: accountsStart(all), today, paydays: days })
+  }, [ready, txs.data, envelopes.data, closed.data, debts.data, wishes.data, accounts.data, days, today])
 }
 
 /**
@@ -332,6 +334,44 @@ export function useEnvelopes() {
       if (error) throw error
       return data
     },
+  })
+}
+
+/** Closed envelopes («Убрать в архив» / «Закрыть»): the history of «Готово» on «План». */
+export function useClosedEnvelopes() {
+  return useQuery({
+    queryKey: [...moneyKeys.all, 'envelopes', 'closed'] as const,
+    queryFn: async (): Promise<Envelope[]> => {
+      const { data, error } = await supabase.from('envelopes').select('*').eq('archived', true).order('updated_at', { ascending: false })
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+/**
+ * A wish goes into a period: it becomes an envelope of that period and the wish row goes (one item, never two).
+ * An envelope with nothing linked goes to «Когда-нибудь» the other way round — a wish decided «берём». Through the
+ * offline queue, in order: the new row first.
+ */
+export function useMovePlanItem() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (
+      m:
+        | { to: 'period'; wishId: string; envelope: TablesInsert<'envelopes'> }
+        | { to: 'someday'; envelopeId: string; wish: { title: string; price_eur: number | null } },
+    ) => {
+      if (m.to === 'period') {
+        await write({ table: 'envelopes', action: 'insert', values: { id: crypto.randomUUID(), ...m.envelope } })
+        await write({ table: 'wishlist', action: 'delete', id: m.wishId })
+      } else {
+        const now = new Date().toISOString()
+        await write({ table: 'wishlist', action: 'insert', values: { id: crypto.randomUUID(), added_at: now, decision: 'buy', decided_at: now, ...m.wish } })
+        await write({ table: 'envelopes', action: 'delete', id: m.envelopeId })
+      }
+    },
+    onSettled: () => Promise.all([qc.invalidateQueries({ queryKey: moneyKeys.all }), qc.invalidateQueries({ queryKey: ['wishlist'] })]),
   })
 }
 
@@ -464,4 +504,17 @@ export function useDeleteDebt() {
     },
     onSettled: () => qc.invalidateQueries({ queryKey: moneyKeys.all }),
   })
+}
+
+/** «Свободно до …» (stage 2): the number, or null while the data comes. */
+export function useFreeUntil() {
+  const txs = usePlanTransactions()
+  const accounts = useAccounts()
+  const limits = useAllWeekLimits()
+  const envelopes = useEnvelopes()
+  const debts = useDebts()
+  const paydays = usePaydays()
+  if (txs.isPending || accounts.isPending || limits.isPending || envelopes.isPending || debts.isPending || paydays === null) return null
+  if (!(txs.data ?? []).length) return null
+  return freeUntil({ txs: txs.data ?? [], accounts: accounts.data ?? [], limits: limits.data ?? [], envelopes: envelopes.data ?? [], debts: debts.data ?? [], today: todayBerlin(), paydays })
 }

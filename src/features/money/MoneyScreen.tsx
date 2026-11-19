@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CalendarRange, ChevronRight, Hourglass, Landmark, NotebookPen, Pencil, PiggyBank, Repeat, Trash2 } from 'lucide-react'
+import { CalendarClock, CalendarRange, ChevronRight, Hourglass, Landmark, NotebookPen, Pencil, PiggyBank, Repeat, Trash2 } from 'lucide-react'
 import { Link, Navigate, useParams } from 'react-router'
 import { useAddAction, useOpenAdd } from '@/app/addSheetContext'
 import { useToast } from '@/app/toastContext'
@@ -28,12 +28,14 @@ import { LimitsSheet } from './LimitsSheet'
 import { MoneyQuestions } from './MoneyQuestions'
 import { MoneyTotal } from './MoneyTotal'
 import { MonthTab } from './MonthTab'
+import { PlanTab } from './PlanTab'
 import { RecurringTab } from './RecurringTab'
 import { WishlistTab } from './WishlistTab'
 import { useMoneyWeek } from './useMoneyWeek'
 
 const BACK = '/money'
 const SECTIONS = {
+  plan: 'План',
   accounts: 'Счета',
   month: 'Месяц',
   recurring: 'Регулярные',
@@ -44,6 +46,7 @@ const SECTIONS = {
 type Section = keyof typeof SECTIONS
 
 const MORE: readonly MoreLink[] = [
+  { to: '/money/plan', label: 'План', icon: CalendarClock, hint: 'по периодам' },
   { to: '/money/accounts', label: 'Счета', icon: Landmark },
   { to: '/money/month', label: 'Месяц', icon: CalendarRange, hint: 'план и баланс' },
   { to: '/money/recurring', label: 'Регулярные', icon: Repeat },
@@ -72,7 +75,8 @@ export function MoneyScreen() {
   return (
     <>
       <SectionHeader title={SECTIONS[s]} back={BACK} sphere="Деньги" right={s === 'month' ? <CalendarLink sphere="money" /> : undefined} />
-      {(s === 'month' || s === 'envelopes') && <PendingLink />}
+      {(s === 'month' || s === 'envelopes' || s === 'plan') && <PendingLink />}
+      {s === 'plan' && <PlanTab />}
       {s === 'accounts' && <AccountsTab />}
       {s === 'month' && <MonthTab />}
       {s === 'recurring' && <RecurringTab />}
