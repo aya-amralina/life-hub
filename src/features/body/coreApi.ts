@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { write } from '@/app/offlineQueue'
+import { useToast } from '@/app/toastContext'
 import { supabase } from '@/lib/supabase'
 import type { Tables, TablesUpdate } from '@/lib/db/types'
 import type { ISODate } from '@/lib/dates'
+import { NOT_SAVED } from './api'
 
 export type CoreProgram = Tables<'core_programs'>
 export type CoreSession = Tables<'core_sessions'>
@@ -61,19 +63,20 @@ type SessionPatch = Partial<Pick<CoreSession, 'done' | 'dome' | 'done_at'>>
  */
 export function useSaveCoreSession(program: Pick<CoreProgram, 'id' | 'stage'>, date: ISODate) {
   const qc = useQueryClient()
+  const toast = useToast()
   return useMutation({
     networkMode: 'always',
     // ticks of one session go out one by one (each sends the whole `done` list — the last one must win)
     scope: { id: `core_sessions:${date}` },
     mutationKey: ['core_sessions', 'save', date],
-    mutationFn: async (patch: SessionPatch) => {
-      await write({
+    // 'sent' — on the server; 'queued' — waits for the network (the offline pill counts it)
+    mutationFn: (patch: SessionPatch) =>
+      write({
         table: 'core_sessions',
         action: 'upsert',
         values: { program_id: program.id, date, stage: program.stage, ...patch },
         onConflict: 'user_id,program_id,date',
-      })
-    },
+      }),
     onMutate: async (patch) => {
       await qc.cancelQueries({ queryKey: coreKeys.sessions })
       const prev = qc.getQueryData<CoreSession[]>(coreKeys.sessions)
@@ -85,7 +88,10 @@ export function useSaveCoreSession(program: Pick<CoreProgram, 'id' | 'stage'>, d
       })
       return { prev }
     },
-    onError: (_e, _v, ctx) => qc.setQueryData(coreKeys.sessions, ctx?.prev),
+    onError: (_e, _v, ctx) => {
+      qc.setQueryData(coreKeys.sessions, ctx?.prev)
+      toast({ text: NOT_SAVED })
+    },
     onSettled: () => (qc.isMutating({ mutationKey: ['core_sessions', 'save', date] }) <= 1 ? qc.invalidateQueries({ queryKey: coreKeys.sessions }) : undefined),
   })
 }
@@ -93,6 +99,7 @@ export function useSaveCoreSession(program: Pick<CoreProgram, 'id' | 'stage'>, d
 /** «Перейти» / «Ещё неделю». */
 export function useUpdateCoreProgram() {
   const qc = useQueryClient()
+  const toast = useToast()
   return useMutation({
     networkMode: 'always',
     mutationFn: async ({ id, patch }: { id: string; patch: TablesUpdate<'core_programs'> }) => {
@@ -104,7 +111,10 @@ export function useUpdateCoreProgram() {
       if (prev) qc.setQueryData<CoreProgram>(coreKeys.program, { ...prev, ...patch } as CoreProgram)
       return { prev }
     },
-    onError: (_e, _v, ctx) => qc.setQueryData(coreKeys.program, ctx?.prev),
+    onError: (_e, _v, ctx) => {
+      qc.setQueryData(coreKeys.program, ctx?.prev)
+      toast({ text: 'Не сохранилось: сервер не принял. Этап остался прежним' })
+    },
     onSettled: () => qc.invalidateQueries({ queryKey: coreKeys.program }),
   })
 }
@@ -114,9 +124,8 @@ export function useSaveCoreTest(programId: string) {
   const qc = useQueryClient()
   return useMutation({
     networkMode: 'always',
-    mutationFn: async (row: { date: ISODate; fingers: number | null; dome: boolean | null }) => {
-      await write({ table: 'core_tests', action: 'upsert', values: { program_id: programId, ...row }, onConflict: 'user_id,program_id,date' })
-    },
+    mutationFn: (row: { date: ISODate; fingers: number | null; dome: boolean | null }) =>
+      write({ table: 'core_tests', action: 'upsert', values: { program_id: programId, ...row }, onConflict: 'user_id,program_id,date' }),
     onSettled: () => qc.invalidateQueries({ queryKey: coreKeys.tests }),
   })
 }

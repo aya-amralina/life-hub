@@ -36,8 +36,11 @@ function TestForm({ programId, date, onDone }: { programId: string; date: ISODat
       <Button
         disabled={fingers === null && dome === null}
         onClick={() => {
-          save.mutate({ date, fingers, dome })
-          toast({ text: `Тест записан${fingers !== null ? ` · ${fingersText(fingers)}` : ''}` })
+          const what = fingers !== null ? ` · ${fingersText(fingers)}` : ''
+          save
+            .mutateAsync({ date, fingers, dome })
+            .then((r) => toast({ text: r === 'queued' ? `Тест сохранён на телефоне${what} — отправится, когда будет сеть` : `Тест записан${what}` }))
+            .catch(() => toast({ text: 'Не сохранилось: сервер не принял тест. Попробуй ещё раз' }))
           onDone()
         }}
       >

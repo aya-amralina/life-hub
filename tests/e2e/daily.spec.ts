@@ -84,3 +84,22 @@ test('«Кор»: «Начать» → отметки, «Домик был?», �
   await page.getByRole('button', { name: 'Готово' }).click()
   await expect(page.getByRole('link', { name: 'Кор засчитан — открыть' })).toBeVisible()
 })
+
+test('сервер не принял отметку: она возвращается как была, и об этом сказано', async ({ page }) => {
+  test.skip(!live, NEEDS)
+  await login(page)
+  // a server rejection (not a missing network): the check of the base says no
+  await page.route('**/rest/v1/daily_logs*', (route) =>
+    route.request().method() === 'POST'
+      ? route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ code: '23514', message: 'check violation', details: null, hint: null }) })
+      : route.fallback(),
+  )
+  const habit = page.getByRole('checkbox', { name: /Вода/ })
+  await habit.click()
+  await expect(page.getByText('Не сохранилось: сервер не принял. Отметка вернулась как была')).toBeVisible()
+  await expect(habit).toHaveAttribute('aria-checked', 'false')
+  await expect(page.getByText(/ждут? сети/)).toHaveCount(0) // rejected, not queued
+  await page.unroute('**/rest/v1/daily_logs*')
+  await page.reload()
+  await expect(page.getByRole('checkbox', { name: /Вода/ })).toHaveAttribute('aria-checked', 'false')
+})

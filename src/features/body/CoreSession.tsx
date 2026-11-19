@@ -102,8 +102,18 @@ export function CoreSession() {
               variant="secondary"
               disabled={dome === null}
               onClick={() => {
-                save.mutate({ done_at: new Date().toISOString() })
-                toast({ text: 'Кор засчитан', actionLabel: 'Отменить', onAction: () => save.mutate({ done_at: null }) })
+                // the toast waits for the answer: «засчитан» only when the server has it (or it honestly waits for the network);
+                // a rejection rolls the mark back and says so (useSaveCoreSession)
+                save
+                  .mutateAsync({ done_at: new Date().toISOString() })
+                  .then((r) =>
+                    toast({
+                      text: r === 'queued' ? 'Кор засчитан на телефоне — отправится, когда будет сеть' : 'Кор засчитан',
+                      actionLabel: 'Отменить',
+                      onAction: () => save.mutate({ done_at: null }),
+                    }),
+                  )
+                  .catch(() => {})
                 back()
               }}
             >
