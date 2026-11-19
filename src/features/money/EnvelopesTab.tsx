@@ -20,7 +20,7 @@ import { debtSummary, envelopeSummary, goalProgress } from '@/lib/rules/money'
 import { ENVELOPE_STATUS_LABEL, currentPeriodMonth, envelopeStatus, periodMonths, periodName, periodStart, type EnvelopeStatus } from '@/lib/rules/periods'
 import { Choice } from './Choice'
 import { DebtSheet } from './DebtSheet'
-import { useAccounts, useActualBalances, useAllTransactions, useCreateEnvelope, useDebts, useEnvelopes, usePaydays, useSaveGoalBalance, useUpdateEnvelope, type Debt, type Envelope } from './api'
+import { useAccounts, useActualBalances, useAllTransactions, useCreateEnvelope, useDebts, useEnvelopes, usePaydays, usePlannedItems, useSaveGoalBalance, useUpdateEnvelope, type Debt, type Envelope } from './api'
 
 const field = 'h-12 w-full rounded-xl border border-line2 bg-card px-4 text-base text-ink outline-none focus:border-ink2'
 const DIRECTION: Record<string, string> = { i_owe: 'я должна', owed_to_me: 'мне должны', from_pot: 'заём из копилки' }
@@ -47,10 +47,11 @@ export function EnvelopesTab() {
   const [picking, setPicking] = useState(false)
   const [doneOpen, setDoneOpen] = useState(false)
   const paydays = usePaydays()
+  const items = usePlannedItems()
   const update = useUpdateEnvelope()
   const toast = useToast()
   useAddAction(() => setPicking(true))
-  if (envelopes.isPending || txs.isPending || debts.isPending || balances.isPending || paydays === null) return <SkeletonCard />
+  if (envelopes.isPending || txs.isPending || debts.isPending || balances.isPending || paydays === null || items === null) return <SkeletonCard />
   const all = envelopes.data ?? []
   const tx = txs.data ?? []
   const envs = all.filter((e) => e.type === 'envelope')
@@ -59,9 +60,16 @@ export function EnvelopesTab() {
   const open = debtList.filter((d) => d.status === 'open')
   const closed = debtList.filter((d) => d.status !== 'open')
   const today = todayBerlin()
+  // statuses and sums from the plan (phase 2: the screens read the planned items)
+  const byKey = new Map(items.map((it) => [it.key, it]))
   const cards = envs.map((e) => {
-    const s = envelopeSummary(e, tx)
-    return { e, s, status: envelopeStatus(e, s, today, paydays) }
+    const it = byKey.get(`envelope:${e.id}`)
+    if (!it) {
+      const s = envelopeSummary(e, tx)
+      return { e, s, status: envelopeStatus(e, s, today, paydays) }
+    }
+    const s = { plannedCents: it.amountCents, spentCents: it.spentCents, leftCents: it.leftCents, overCents: Math.max(0, it.spentCents - it.amountCents) }
+    return { e, s, status: it.status }
   })
   const now = cards.filter((c) => c.status === 'reserved' || c.status === 'running')
   const later = cards.filter((c) => c.status === 'planned')

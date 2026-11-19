@@ -1,8 +1,9 @@
 import type { AccountGroup } from '../constants'
 import { parseSignedEurInput, toCents } from '../format'
 import { addDaysISO, type ISODate } from '../dates'
-import { balanceAt, debtSummary, envelopeSummary, isFact, isInPlan, type DebtLike, type TxLike } from './money'
-import { reservesNow, type EnvelopePeriod } from './periods'
+import { balanceAt, isFact, isInPlan, type DebtLike, type TxLike } from './money'
+import type { EnvelopePeriod } from './periods'
+import { plannedItems } from './plan'
 
 /**
  * Accounts (decision 18.11.2026). Every Revolut pocket is an account; accounts are in groups: «Баланс» — the plan and
@@ -245,7 +246,7 @@ export type DebtOfAccount = DebtLike & { who: string; account_id: string | null 
  *   only once its period has started or it was set aside early (`paydays`, docs/money-redesign.md phase 1);
  * - a goal — min(now, target): now is the account's balance when the goal is alone on it, else its latest share
  *   from «Внести остаток»;
- * - a debt «я должна» — what is left to pay back.
+ * - a debt «я должна» — what is left to pay back; a loan from a goal — what is left to return, once its period started.
  */
 export function reservesByAccount(i: {
   envelopes: readonly EnvelopeOfAccount[]
@@ -261,11 +262,14 @@ export function reservesByAccount(i: {
   const add = (accountId: string, r: Reserve) => {
     if (r.cents > 0) out.set(accountId, [...(out.get(accountId) ?? []), r])
   }
+  // envelopes, debts and loans to return — the planned items that reserve today (`plan.ts`)
+  const items = plannedItems({ envelopes: i.envelopes, debts: i.debts, txs: i.txs, accounts: i.accounts, start: accountsStart(i.txs), today: i.today, paydays: i.paydays ?? [] })
+  const reserving = new Map(items.filter((it) => it.counts === 'reserve').map((it) => [it.key, it]))
   for (const e of i.envelopes) {
     if (e.archived || !e.account_id) continue
     if (e.type === 'envelope') {
-      if (!reservesNow(e, i.today, i.paydays ?? [])) continue
-      add(e.account_id, { kind: 'envelope', id: e.id, name: e.name, cents: envelopeSummary(e, i.txs).leftCents })
+      const item = reserving.get(`envelope:${e.id}`)
+      if (item) add(e.account_id, { kind: 'envelope', id: e.id, name: e.name, cents: item.leftCents })
       continue
     }
     const own = goalAccountNow(e, i.envelopes, i.accounts, i.txs, i.today)
@@ -275,8 +279,8 @@ export function reservesByAccount(i: {
     add(e.account_id, { kind: 'goal', id: e.id, name: e.name, cents: Math.max(0, target === null ? now : Math.min(now, target)) })
   }
   for (const d of i.debts) {
-    if (d.direction !== 'i_owe' || d.status !== 'open' || !d.account_id) continue
-    add(d.account_id, { kind: 'debt', id: d.id, name: d.who, cents: debtSummary(d, i.txs).leftCents })
+    const item = reserving.get(`debt:${d.id}`)
+    if (item && d.account_id) add(d.account_id, { kind: 'debt', id: d.id, name: d.who, cents: item.leftCents })
   }
   return out
 }

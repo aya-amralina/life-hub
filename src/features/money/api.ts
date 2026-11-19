@@ -10,6 +10,9 @@ import type { WeekLimitSum } from '@/lib/rules/forecast'
 import { toCents } from '@/lib/format'
 import { isVirtual, materialize, withRecurring, type VirtualTx } from '@/lib/rules/recurring'
 import { paydays } from '@/lib/rules/periods'
+import { plannedItems, type PlannedItem } from '@/lib/rules/plan'
+import { accountsStart } from '@/lib/rules/accounts'
+import { useWishlist } from './wishlistApi'
 import type { WeekCategory } from '@/lib/constants'
 import { ensureWeek, weekKeys } from '@/features/weeks/api'
 
@@ -255,6 +258,26 @@ export function usePaydays(): ISODate[] | null {
   const accounts = useAccounts()
   const ready = !txs.isPending && !rules.isPending && !accounts.isPending
   return useMemo(() => (ready ? paydays(rules.data ?? [], txs.data ?? [], accounts.data ?? []) : null), [ready, rules.data, txs.data, accounts.data])
+}
+
+/**
+ * The plan as one model (docs/money-redesign.md, phase 2): envelopes, wishes, debts and loans to return, planned
+ * operations and recurring occurrences as planned items (`rules/plan.ts`); null while the data comes.
+ */
+export function usePlannedItems(): PlannedItem[] | null {
+  const txs = usePlanTransactions()
+  const envelopes = useEnvelopes()
+  const debts = useDebts()
+  const wishes = useWishlist()
+  const accounts = useAccounts()
+  const days = usePaydays()
+  const ready = !txs.isPending && !envelopes.isPending && !debts.isPending && !wishes.isPending && !accounts.isPending && days !== null
+  const today = todayBerlin()
+  return useMemo(() => {
+    if (!ready) return null
+    const all = txs.data ?? []
+    return plannedItems({ envelopes: envelopes.data ?? [], debts: debts.data ?? [], wishes: wishes.data ?? [], txs: all, accounts: accounts.data ?? [], start: accountsStart(all), today, paydays: days })
+  }, [ready, txs.data, envelopes.data, debts.data, wishes.data, accounts.data, days, today])
 }
 
 /**
