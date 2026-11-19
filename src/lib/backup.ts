@@ -104,11 +104,24 @@ export function restorePlan(backup: Backup, existing: Partial<Record<BackupTable
   })
 }
 
-/** A row as it goes back: the owner comes from the session (RLS), generated columns are dropped. */
-export function restoreRow(table: BackupTable, row: Row): Row {
+/** The old text «Счёт» (until migration 0019): Revolut was the main account, the rest keep their names. */
+const legacyAccountName = (text: string) => (text === 'Revolut' ? 'Revolut · Основной' : text)
+
+/**
+ * A row as it goes back: the owner comes from the session (RLS), generated columns are dropped. The old text «Счёт»
+ * of files made before migration 0019 (v1, v2 and early v3) is gone from the base: an operation or a rule gets the
+ * account by its name (`accountIdByName` — the accounts of the base), «Остатки» keep it as `legacy_account`.
+ */
+export function restoreRow(table: BackupTable, row: Row, accountIdByName: ReadonlyMap<string, string> = new Map()): Row {
   const out: Row = { ...row }
   delete out.user_id
   for (const c of GENERATED[table] ?? []) delete out[c]
+  if ('account' in out && (table === 'transactions' || table === 'recurring' || table === 'actual_balances')) {
+    const text = typeof out.account === 'string' && out.account ? out.account : null
+    delete out.account
+    if (text && table === 'actual_balances') out.legacy_account ??= text
+    else if (text && !out.account_id) out.account_id = accountIdByName.get(legacyAccountName(text)) ?? null
+  }
   return out
 }
 

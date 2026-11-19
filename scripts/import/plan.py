@@ -155,6 +155,11 @@ def app_forecast_all(txs: list[dict], today: dt.date, end: str = ARCHIVE_END) ->
 ACCOUNTS = ("Revolut", "Sparkasse", "Наличные", "Казахстанская карта")
 
 
+def pot_rows(txs: list[dict]) -> list[dict]:
+    """The common pot of the Excel archive: without the start rows by accounts (openings with an account, 18.11)."""
+    return [t for t in txs if not (t["kind"] == "opening" and t.get("account_id"))]
+
+
 def fact_balance(txs: list[dict], date: str) -> float:
     """«сейчас» as money.ts balanceAt(fact): start + operations with status «факт», not cancelled; a week with
     «итог недели» counts that total instead of the app's weekly-category expenses of the week."""

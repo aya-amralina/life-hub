@@ -139,3 +139,32 @@ class UpdateTest(unittest.TestCase):
         [c] = upd.diff("plan_stages", [new_row], old, {"glow:stage:1": base_row}, self.ctx, set(), D(2026, 11, 11))
         self.assertEqual(c.kind, "update")
         self.assertEqual(c.patch, {"targets": {"activity_points_week": 60, "niacinamide_per_week": 7}})
+
+
+class AccountsTest(unittest.TestCase):
+    """Excel «Счёт» (text) ↔ the base's account by id (decision 18.11.2026)."""
+
+    ids = {"Revolut · Основной": "main", "Sparkasse": "spark", "Revolut · Подушка": "cushion"}
+
+    def test_excel_text_of_an_account(self):
+        from update import excel_account
+
+        self.assertEqual(excel_account("Revolut · Основной"), "Revolut")
+        self.assertEqual(excel_account("Sparkasse"), "Sparkasse")
+        self.assertEqual(excel_account("Revolut · Подушка"), "Revolut · Подушка")  # an app-only account: never equal to Excel's
+        self.assertIsNone(excel_account(None))
+
+    def test_excel_row_for_the_base(self):
+        from update import account_to_base
+
+        self.assertEqual(account_to_base("transactions", {"title": "x", "account": "Revolut"}, self.ids), {"title": "x", "account_id": "main"})
+        self.assertEqual(account_to_base("transactions", {"account": "Банк X"}, self.ids), {"account_id": None})
+        self.assertEqual(account_to_base("transactions", {"account": None}, self.ids), {"account_id": None})
+        self.assertEqual(account_to_base("actual_balances", {"account": "Revolut", "amount_eur": 1}, self.ids), {"legacy_account": "Revolut", "amount_eur": 1})
+        self.assertEqual(account_to_base("transactions", {"title": "x"}, self.ids), {"title": "x"})
+
+    def test_pot_without_the_start_by_accounts(self):
+        from plan import pot_rows
+
+        rows = [{"kind": "opening", "account_id": None}, {"kind": "opening", "account_id": "main"}, {"kind": "expense", "account_id": "main"}]
+        self.assertEqual(pot_rows(rows), [rows[0], rows[2]])

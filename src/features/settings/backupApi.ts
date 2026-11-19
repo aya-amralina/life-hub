@@ -45,8 +45,15 @@ export async function existingIds(tables: readonly BackupTable[]): Promise<Parti
 /** Restore: upsert by id, parents first, in chunks. Rows of the base that are not in the file stay. */
 export async function restore(backup: Backup, onTable?: (t: BackupTable) => void): Promise<number> {
   let n = 0
+  // the accounts of the base once «accounts» (the first table) is back: old files name an account by its text
+  let accountIds: Map<string, string> | null = null
   for (const t of BACKUP_TABLES) {
-    const rows = (backup.tables[t] ?? []).map((r) => restoreRow(t, r))
+    if (t !== 'accounts' && accountIds === null) {
+      const { data, error } = await supabase.from('accounts').select('id, name')
+      if (error) throw error
+      accountIds = new Map(data.map((a) => [a.name, a.id]))
+    }
+    const rows = (backup.tables[t] ?? []).map((r) => restoreRow(t, r, accountIds ?? undefined))
     if (!rows.length) continue
     onTable?.(t)
     for (let i = 0; i < rows.length; i += 500) {

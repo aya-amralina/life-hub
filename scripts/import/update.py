@@ -46,6 +46,38 @@ ITEM_META = {"source_id", "sphere", "sort_order", "created_at", "updated_at", "d
 # link fields of Excel rows → the uuid column of the base
 KEY_FIELDS = {"envelope_key": "envelope_id", "debt_key": "debt_id", "pot_key": "pot_id"}
 
+# Accounts (decision 18.11.2026): Excel has «Счёт» as text, the base an account by id. Excel «Revolut» is
+# Revolut · Основной (as migration 0017 linked it); other names are the same on both sides.
+MAIN_ACCOUNT = "Revolut · Основной"
+
+
+def excel_account(name: str | None) -> str | None:
+    """The base's account name → the text of Excel's «Счёт»."""
+    if not name:
+        return None
+    return "Revolut" if name == MAIN_ACCOUNT else name
+
+
+def base_account_id(text: str | None, id_of_name: dict[str, str]) -> str | None:
+    """Excel's «Счёт» → the account id of the base (None — no account, or a name the base does not have)."""
+    if not text:
+        return None
+    return id_of_name.get(MAIN_ACCOUNT if text == "Revolut" else text)
+
+
+def account_to_base(table: str, row: dict[str, Any], id_of_name: dict[str, str]) -> dict[str, Any]:
+    """An Excel row (or patch) for the base: operations get account_id; «Остатки» from Excel are the archive before the
+    start by accounts — the text goes to legacy_account."""
+    if "account" not in row:
+        return row
+    out = dict(row)
+    text = out.pop("account")
+    if table == "actual_balances":
+        out["legacy_account"] = text
+    else:
+        out["account_id"] = base_account_id(text, id_of_name)
+    return out
+
 
 def family(key: str) -> str:
     """Kind of row from one source: «budget:env:E2» → «budget:env», «budget:N8» → «budget», «glow:task:…» →

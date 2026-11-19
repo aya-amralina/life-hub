@@ -47,6 +47,17 @@ describe('backup', () => {
     const v2: Backup = { ...backup, version: 2, tables: { transactions: [{ id: 't1', recurring_id: 'r1' }], recurring: [{ id: 'r1' }] } }
     expect(restorePlan(v2, {}).map((l) => l.table)).toEqual(['recurring', 'transactions'])
   })
+  it('the old text «Счёт» (files before 0019): operations and rules by account name, «Остатки» as the old label', () => {
+    const ids = new Map([['Revolut · Основной', 'main'], ['Sparkasse', 'spark']])
+    expect(restoreRow('transactions', { id: 't', account: 'Revolut' }, ids)).toEqual({ id: 't', account_id: 'main' })
+    expect(restoreRow('recurring', { id: 'r', account: 'Sparkasse', account_id: null }, ids)).toEqual({ id: 'r', account_id: 'spark' })
+    expect(restoreRow('transactions', { id: 't', account: 'Revolut', account_id: 'month' }, ids)).toEqual({ id: 't', account_id: 'month' }) // v3: the id wins
+    expect(restoreRow('transactions', { id: 't', account: 'Банк X' }, ids)).toEqual({ id: 't', account_id: null })
+    expect(restoreRow('transactions', { id: 't', account: null, account_id: 'main' }, ids)).toEqual({ id: 't', account_id: 'main' })
+    expect(restoreRow('actual_balances', { id: 'b', account: 'Revolut', amount_eur: 1 }, ids)).toEqual({ id: 'b', legacy_account: 'Revolut', amount_eur: 1 })
+    expect(restoreRow('actual_balances', { id: 'b', account: 'Revolut', legacy_account: 'Revolut' }, ids)).toEqual({ id: 'b', legacy_account: 'Revolut' })
+    expect(restoreRow('items', { id: 'i', account: 'x' }, ids)).toEqual({ id: 'i', account: 'x' }) // other tables untouched
+  })
   it('restore preview: rows in the file, updated by id, new — parents first', () => {
     expect(restorePlan(backup, { items: new Set(['i1']) })).toEqual([
       { table: 'weeks', inFile: 1, update: 0, insert: 1 },

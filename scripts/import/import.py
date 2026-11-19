@@ -128,11 +128,11 @@ def load(today: dt.date, anchor: dt.date | None, folder=DATA, fallback=DATA) -> 
 
 
 COLUMNS = {
-    "transactions": "id,source_id,date,amount_eur,title,note,account,grp,kind,entry_kind,week_no,envelope_id,debt_id,is_planned,confirmed_at,cancelled_at,category",
+    "transactions": "id,source_id,date,amount_eur,title,note,account_id,grp,kind,entry_kind,week_no,envelope_id,debt_id,is_planned,confirmed_at,cancelled_at,category",
     "week_limits": "id,source_id,limit_eur,week_id,category",
     "envelopes": "id,source_id,name,type,planned_eur,when_text,note,goal_eur,goal_date,archived",
     "debts": "id,source_id,who,direction,amount_eur,repaid_eur,due_date,status,pot_id,note",
-    "actual_balances": "id,source_id,date,account,envelope_id,amount_eur",
+    "actual_balances": "id,source_id,date,legacy_account,envelope_id,amount_eur",
     "items": "*",
     "notes": "id,source_id,title,body_md,pinned",
     "people": "id,source_id,name,role",
@@ -145,9 +145,17 @@ class State:
 
     def __init__(self, rest: SupabaseRest, uid: str):
         f = {"user_id": f"eq.{uid}"}
+        accounts = rest.select("accounts", "id,name", f)
+        self.account_id_of = {a["name"]: a["id"] for a in accounts}
+        name_of = {a["id"]: a["name"] for a in accounts}
         self.rows: dict[str, dict[str, dict]] = {}
         for t in THREE_WAY:
             self.rows[t] = {r["source_id"]: r for r in rest.select(t, COLUMNS[t], {**f, "source_id": "not.is.null"})}
+        # compared in Excel's terms: an operation's account by its «Счёт» text, «Остатки» by the archive label
+        for r in self.rows.get("transactions", {}).values():
+            r["account"] = upd.excel_account(name_of.get(r.pop("account_id") or ""))
+        for r in self.rows.get("actual_balances", {}).values():
+            r["account"] = r.pop("legacy_account")
         self.source_ids = {t: set(v) for t, v in self.rows.items()}
         for t in ("activity_types", "activities", "strength_sets", "measurements", "daily_logs"):
             self.source_ids[t] = {r["source_id"] for r in rest.select(t, "source_id", {**f, "source_id": "not.is.null"})}
@@ -156,8 +164,13 @@ class State:
         self.types = {r["name"]: r["id"] for r in rest.select("activity_types", "id,name", f)}
         self.activities = {(r["date"], r["type_id"]) for r in rest.select("activities", "date,type_id", f)}
         self.measure_days = {r["date"] for r in rest.select("measurements", "date", f)}
-        self.balances = rest.select("actual_balances", "date,account,amount_eur,source_id", f)
-        self.all_tx = rest.select("transactions", "source_id,date,amount_eur,kind,grp,category,entry_kind,is_planned,confirmed_at,cancelled_at", f)
+        # the archive's «Остатки»: rows before the start by accounts carry their old label; rows by account are not the archive's
+        self.balances = [
+            {"date": r["date"], "account": r["legacy_account"], "amount_eur": r["amount_eur"], "source_id": r["source_id"]}
+            for r in rest.select("actual_balances", "date,legacy_account,amount_eur,source_id", f)
+            if r["legacy_account"]
+        ]
+        self.all_tx = rest.select("transactions", "source_id,date,amount_eur,kind,grp,category,entry_kind,is_planned,confirmed_at,cancelled_at,account_id", f)
         # source keys of linked rows (envelopes incl. archived, debts) — links are compared by key
         self.keys = {r["id"]: r["source_id"] for t in ("envelopes", "debts") for r in rest.select(t, "id,source_id", {**f, "source_id": "not.is.null"})}
         self.baseline: dict[str, dict[str, dict]] = {}
@@ -258,13 +271,15 @@ def summary(b: Batch, st: State, changes: dict[str, list[upd.Change]], note: str
 
 
 def checks(b: Batch, st: State, tx_changes: list[upd.Change]) -> list[str]:
-    before = plan.app_forecast_all(st.all_tx, b.today)
-    after = plan.app_forecast_all(simulate_tx(st, b, tx_changes), b.today)
+    # the archive compares the common pot of Excel: the start rows by accounts (18.11) are not in it — «Счета» in the app
+    before_tx = plan.pot_rows(st.all_tx)
+    after_tx = plan.pot_rows(simulate_tx(st, b, tx_changes))
+    before = plan.app_forecast_all(before_tx, b.today)
+    after = plan.app_forecast_all(after_tx, b.today)
     excel = plan.balance_end([t for t in b.rows["transactions"]])
     today = b.today.isoformat()
-    after_tx = simulate_tx(st, b, tx_changes)
-    out = ["", "=== Баланс «сейчас» (старт + «факт») ==="]
-    out.append(f"сейчас в приложении: {plan.fact_balance(st.all_tx, today):.2f} € → после записи: {plan.fact_balance(after_tx, today):.2f} €")
+    out = ["", "=== Баланс «сейчас» общего котла, как в Excel (старт 13.10 + «факт»; старт по счетам 18.11 — в «Счетах» приложения) ==="]
+    out.append(f"сейчас в приложении: {plan.fact_balance(before_tx, today):.2f} € → после записи: {plan.fact_balance(after_tx, today):.2f} €")
     # «Остатки» after the run: rows of the base (review ones stay) + the Excel ones
     excel_bal = {r["source_id"]: r for r in b.rows.get("actual_balances", [])}
     balances = [r for r in st.balances if r.get("source_id") not in excel_bal] + list(excel_bal.values())
@@ -304,7 +319,7 @@ def write(b: Batch, rest: SupabaseRest, uid: str, st: State, changes: dict[str, 
             if k in r:
                 key = r.pop(k)
                 r[col] = ctx["id_of"].get(key) if key else None
-        return r
+        return upd.account_to_base(t, r, st.account_id_of)
 
     def insert_groups(t: str, rows: list[dict]) -> None:
         groups: dict[frozenset, list] = defaultdict(list)
@@ -335,7 +350,7 @@ def write(b: Batch, rest: SupabaseRest, uid: str, st: State, changes: dict[str, 
                     if "week" in patch:
                         w = patch.pop("week")
                         patch["week_id"] = week_id.get(w.isoformat()) if w else None
-                    rest.patch(t, {"id": f"eq.{c.db_id}"}, patch)
+                    rest.patch(t, {"id": f"eq.{c.db_id}"}, upd.account_to_base(t, patch, st.account_id_of))
             if t in ("envelopes", "debts"):  # children of this run point to the rows just added
                 fresh = {r["id"]: r["source_id"] for r in rest.select(t, "id,source_id", {"user_id": f"eq.{uid}", "source_id": "not.is.null"})}
                 ctx["key_of"].update(fresh)
