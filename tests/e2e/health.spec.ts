@@ -13,6 +13,7 @@ test('приём: «+ Добавить» → строка → карточка �
   const sheet = page.getByRole('dialog', { name: 'Приём' })
   await sheet.getByLabel('Название').fill('Магний e2e')
   await sheet.getByLabel('Доза').fill('200 мг')
+  await sheet.getByLabel('С какого числа').fill(berlinDate(-3)) // started earlier — so it can end yesterday
   await sheet.getByRole('button', { name: 'Сохранить' }).click()
   await expect(sheet).toBeHidden()
   const row = page.getByRole('list', { name: 'Сейчас принимаю' }).getByRole('button', { name: /Магний e2e/ })
