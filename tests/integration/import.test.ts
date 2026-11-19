@@ -54,17 +54,22 @@ describe.skipIf(!ready)('live base: the operations are in shape', () => {
   it('operations are there: one start row, a finite plan to the horizon', async () => {
     const { admin, uid } = await setup()
     // paged: more than max_rows (1000) operations must not be cut short
-    const txs: TxLike[] = await fetchAllPages((from, to) =>
+    const txs: (TxLike & { account_id: string | null })[] = await fetchAllPages((from, to) =>
       admin
         .from('transactions')
-        .select('id, date, amount_eur, kind, category, envelope_id, is_planned, confirmed_at, cancelled_at, entry_kind, grp')
+        .select('id, date, amount_eur, kind, category, envelope_id, is_planned, confirmed_at, cancelled_at, entry_kind, grp, account_id')
         .eq('user_id', uid)
         .order('date')
         .order('id')
         .range(from, to),
     )
     expect(txs.length).toBeGreaterThan(0)
-    expect(txs.filter((t) => t.kind === 'opening' && !t.cancelled_at)).toHaveLength(1)
+    const openings = txs.filter((t) => t.kind === 'opening' && !t.cancelled_at)
+    // the start of the pot (13.10, no account) and, from the start by accounts (SPEC rule 30), at most one per account, one day
+    expect(openings.filter((t) => !t.account_id)).toHaveLength(1)
+    const byAccount = openings.filter((t) => t.account_id)
+    expect(new Set(byAccount.map((t) => t.account_id)).size).toBe(byAccount.length)
+    expect(new Set(byAccount.map((t) => t.date)).size).toBeLessThanOrEqual(1)
     expect(Number.isFinite(balanceAt(txs, forecastEnd(todayBerlin()), 'plan', todayBerlin()))).toBe(true)
   })
 })
