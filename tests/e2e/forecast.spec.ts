@@ -32,11 +32,15 @@ test('«Свободно до …»: на «Сегодня» строкой, в 
   // 300 on «Баланс» − 100 in the envelope; no limits — no «Жизнь» by plan; the salary goes to Sparkasse
   const row = new RegExp(`^Свободно до ${formatDayMonth(berlinDate(9)).replace('.', '\\.')} · 200\\s€`)
   await expect(page.getByRole('link', { name: row })).toBeVisible()
+  // «Сейчас» (phase 4): the main number, and how it is counted
   await tab(page, 'Деньги')
-  const free = page.getByRole('button', { name: row })
-  await free.click()
-  await expect(free).toHaveAttribute('aria-expanded', 'true')
-  await expect(page.getByText('отложено на «Балансе»')).toBeVisible()
+  const hero = page.getByRole('region', { name: 'Свободно до дня денег' })
+  await expect(hero.getByText(`Свободно до ${formatDayMonth(berlinDate(9))}`)).toBeVisible()
+  await expect(hero.getByText(/^200\s€$/)).toBeVisible()
+  const how = hero.getByRole('button', { name: 'как посчитано' })
+  await how.click()
+  await expect(how).toHaveAttribute('aria-expanded', 'true')
+  await expect(hero.getByText('отложено на «Балансе»')).toBeVisible()
 })
 
 test('Месяц: три сценария на горизонте, темп «Жизни» и самая низкая точка; цель — сколько в месяц, темпа пока нет', async ({ page }) => {

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { CalendarClock, CalendarRange, ChevronRight, Hourglass, Landmark, NotebookPen, Pencil, PiggyBank, Repeat, Trash2 } from 'lucide-react'
 import { Link, Navigate, useParams } from 'react-router'
 import { useAddAction, useOpenAdd } from '@/app/addSheetContext'
@@ -6,7 +6,6 @@ import { useToast } from '@/app/toastContext'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { EmptyState, SkeletonCard } from '@/components/ui/Feedback'
-import { ProgressBar } from '@/components/ui/ProgressBar'
 import { Swipeable } from '@/components/ui/Swipeable'
 import { WeekSwitcher } from '@/components/ui/WeekSwitcher'
 import { CalendarLink } from '@/components/layout/CalendarLink'
@@ -14,16 +13,18 @@ import { MoreList, SectionHeader, type MoreLink } from '@/components/layout/More
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
 import { addDaysISO, formatDayMonth, formatRelativeDay, todayBerlin, weekStart } from '@/lib/dates'
 import { formatAmount, formatEstimate, formatEur, plural, toCents } from '@/lib/format'
-import { groupBalanceAt } from '@/lib/rules/accounts'
+import { accountsStart, groupBalanceAt } from '@/lib/rules/accounts'
+import { currentPeriodMonth } from '@/lib/rules/periods'
+import { planPeriods } from '@/lib/rules/planPeriods'
 import { weekPace } from '@/lib/rules/forecast'
 import { forecastEnd, plannedQuestions, weekSpendings } from '@/lib/rules/money'
 import { nextOccurrence, ruleState } from '@/lib/rules/recurringEdit'
 import { NotesSection } from '@/features/notes/NotesCard'
-import { useAccountName, useAccounts, useAddExpense, useAllTransactions, useDeleteTransaction, usePlanTransactions, useRecurring, useWeekLimits, type Transaction } from './api'
+import { useAccountName, useAccounts, useAddExpense, useAllTransactions, useAllWeekLimits, useDeleteTransaction, usePaydays, usePlanTransactions, usePlannedItems, useRecurring, useWeekLimits, type Transaction } from './api'
 import { CutNextWeek } from './CutNextWeek'
 import { AccountsTab } from './AccountsTab'
 import { EnvelopesTab } from './EnvelopesTab'
-import { FreeUntilRow } from './FreeUntil'
+import { FreeUntilHero } from './FreeUntil'
 import { LimitsSheet } from './LimitsSheet'
 import { MoneyQuestions } from './MoneyQuestions'
 import { MoneyTotal } from './MoneyTotal'
@@ -55,7 +56,11 @@ const MORE: readonly MoreLink[] = [
   { to: '/money/notes', label: 'Заметки', icon: NotebookPen },
 ]
 
-/** Деньги: the week on the main view; month, envelopes, wishes and notes one tap deeper («Ещё»). */
+/**
+ * Деньги: «Сейчас» on the main view (docs/money-redesign.md, phase 4) — the questions, one main number («Свободно до
+ * …» and how it is counted), the week in one block, what leaves before the day of money, the week's spending; the
+ * plan, accounts, month and the rest one tap deeper («Ещё»).
+ */
 export function MoneyScreen() {
   const section = useParams()['*'] ?? ''
   if (section === '') {
@@ -64,8 +69,8 @@ export function MoneyScreen() {
         <ScreenHeader title="Деньги" right={<CalendarLink sphere="money" />} />
         {/* the questions themselves — on the week (and «Сегодня»); sections only say that some are waiting */}
         <MoneyQuestions />
-        <FreeUntilRow />
-        <WeekTab />
+        <FreeUntilHero />
+        <WeekTab untilPayday={<UntilPayday />} />
         <MoneyMore />
       </>
     )
@@ -126,7 +131,7 @@ function PendingLink() {
   )
 }
 
-function WeekTab() {
+function WeekTab({ untilPayday }: { untilPayday: ReactNode }) {
   const today = todayBerlin()
   const thisMonday = weekStart(today)
   const [monday, setMonday] = useState(thisMonday)
@@ -136,62 +141,67 @@ function WeekTab() {
   const openAdd = useOpenAdd()
   useAddAction(() => openAdd('expense'))
   const spendings = weekSpendings(txs, monday)
+  const [allSpendings, setAllSpendings] = useState(false)
+  const shown = allSpendings ? spendings.list : spendings.list.slice(0, SPENDINGS_SHOWN)
+  const switcher = (
+    <WeekSwitcher
+      label={`${week?.budget_week_no ? `Неделя ${week.budget_week_no} · ` : ''}${formatDayMonth(monday)}–${formatDayMonth(addDaysISO(monday, 6))}`}
+      onPrev={() => setMonday(addDaysISO(monday, -7))}
+      onNext={() => setMonday(addDaysISO(monday, 7))}
+      onReset={monday !== thisMonday ? () => setMonday(thisMonday) : undefined}
+      resetLabel="Эта неделя"
+    />
+  )
 
   return (
     <>
-      <WeekSwitcher
-        label={`${week?.budget_week_no ? `Неделя ${week.budget_week_no} · ` : ''}${formatDayMonth(monday)}–${formatDayMonth(addDaysISO(monday, 6))}`}
-        onPrev={() => setMonday(addDaysISO(monday, -7))}
-        onNext={() => setMonday(addDaysISO(monday, 7))}
-        onReset={monday !== thisMonday ? () => setMonday(thisMonday) : undefined}
-        resetLabel="Эта неделя"
-      />
       {pending ? (
         <SkeletonCard />
       ) : !summary.hasLimits ? (
-        <EmptyState title="Лимиты недели не заданы">
-          <span className="flex flex-col items-start gap-3">
-            Задай их — и неделя начнёт считаться.
-            <Button variant="secondary" onClick={() => setEditLimits(true)}>
-              Задать лимиты
-            </Button>
-          </span>
-        </EmptyState>
+        <>
+          {switcher}
+          <EmptyState title="Лимиты недели не заданы">
+            <span className="flex flex-col items-start gap-3">
+              Задай их — и неделя начнёт считаться.
+              <Button variant="secondary" onClick={() => setEditLimits(true)}>
+                Задать лимиты
+              </Button>
+            </span>
+          </EmptyState>
+        </>
       ) : (
         <>
+          {/* the week in one block: the total, the pace, the categories compact (phase 4) */}
           <Card>
-            <CardHeader title="Неделя" dotClass="bg-money" context={summary.status === 'over' ? 'перерасход' : 'в лимите'} />
+            {switcher}
             <MoneyTotal summary={summary} />
             {monday === thisMonday && <WeekPaceLine spentCents={summary.spentCents} limitCents={summary.limitCents} monday={monday} today={today} />}
-          </Card>
-          {summary.status === 'over' && monday <= thisMonday && <CutNextWeek monday={monday} summary={summary} />}
-          <Card>
-            <CardHeader title="Категории" />
-            <div className="flex flex-col gap-4">
+            <ul className="m-0 flex list-none flex-col gap-2 border-t border-line px-0 pt-3 pb-0">
               {summary.categories
                 .filter((c) => c.limitCents > 0 || c.spentCents > 0)
                 .map((c) => (
-                  <div key={c.category} className="flex flex-col gap-2">
+                  <li key={c.category} className="flex flex-col">
                     <div className="flex justify-between gap-3 text-base">
                       <span>{c.category}</span>
                       <span className="tabular-nums">
-                        {formatAmount(c.spentCents, { whole: true })}{' '}
-                        <span className="text-ink2">/ {formatEur(c.limitCents, { whole: true })}</span>
+                        {formatAmount(c.spentCents, { whole: true })}
+                        {c.limitCents > 0 && <span className="text-ink2"> из {formatAmount(c.limitCents, { whole: true })}</span>}
                       </span>
                     </div>
-                    <ProgressBar value={c.spentCents} max={c.limitCents} fillClass="bg-money" label={c.category} />
-                    {c.deviationCents > 0 && (
-                      <div className="text-cap font-semibold text-amber-ink tabular-nums">+{formatEur(c.deviationCents)} сверх лимита</div>
-                    )}
-                  </div>
+                    {/* a category without a limit just shows its sum — «сверх лимита» only where there is one */}
+                    {c.limitCents > 0 && c.deviationCents > 0 && <span className="text-cap font-semibold text-amber-ink tabular-nums">+{formatEur(c.deviationCents)} сверх лимита</span>}
+                  </li>
                 ))}
-            </div>
-            <Button variant="secondary" className="h-11 self-start" icon={<Pencil size={16} strokeWidth={1.75} aria-hidden="true" className="text-ink2" />} onClick={() => setEditLimits(true)}>
+            </ul>
+            <Button variant="quiet" className="h-11 self-start" icon={<Pencil size={16} strokeWidth={1.75} aria-hidden="true" className="text-ink2" />} onClick={() => setEditLimits(true)}>
               Изменить лимиты
             </Button>
           </Card>
+          {summary.status === 'over' && monday <= thisMonday && <CutNextWeek monday={monday} summary={summary} />}
         </>
       )}
+
+      {monday === thisMonday && untilPayday}
 
       <Card>
         <CardHeader title="Траты недели" context={spendings.list.length ? formatEur(spendings.limitCents) : undefined} />
@@ -200,18 +210,64 @@ function WeekTab() {
         ) : (
           <>
             <ul className="m-0 flex list-none flex-col p-0">
-              {spendings.list.map((t) => (
+              {shown.map((t) => (
                 <li key={t.id} className="border-t border-line first:border-t-0">
                   <SpendingRow t={t} today={today} />
                 </li>
               ))}
             </ul>
+            {spendings.list.length > SPENDINGS_SHOWN && (
+              <Button variant="quiet" className="h-11 self-start" aria-expanded={allSpendings} onClick={() => setAllSpendings(!allSpendings)}>
+                {allSpendings ? 'Свернуть' : `Все · ${spendings.list.length}`}
+              </Button>
+            )}
           </>
         )}
       </Card>
 
       <LimitsSheet open={editLimits} onClose={() => setEditLimits(false)} monday={monday} current={limits.data ?? []} />
     </>
+  )
+}
+
+/** The week's spending shows the latest few; «Все · N» opens the rest. */
+const SPENDINGS_SHOWN = 5
+
+/**
+ * «До дня денег» (phase 4): what is still to leave before the next day of money — the open items of today's period
+ * (`planPeriods`), recurring ones too; nothing to leave — no block. «весь план» leads to «План».
+ */
+function UntilPayday() {
+  const items = usePlannedItems()
+  const txs = usePlanTransactions()
+  const accounts = useAccounts()
+  const limits = useAllWeekLimits()
+  const paydays = usePaydays()
+  if (items === null || paydays === null || txs.isPending || accounts.isPending || limits.isPending) return null
+  const today = todayBerlin()
+  const all = txs.data ?? []
+  const [now] = planPeriods({ items, txs: all, accounts: accounts.data ?? [], limits: limits.data ?? [], start: accountsStart(all), today, paydays, currentMonth: currentPeriodMonth(today, paydays), count: 1 })
+  const list = [...now!.items, ...now!.recurring].sort((a, b) => (a.date ?? '9').localeCompare(b.date ?? '9') || a.title.localeCompare(b.title))
+  if (!list.length) return null
+  return (
+    <Card>
+      <CardHeader title={`До дня денег · ${formatDayMonth(addDaysISO(now!.end, 1))}`} dotClass="bg-money" />
+      <ul className="m-0 flex list-none flex-col p-0">
+        {list.map((it) => (
+          <li key={it.key} className="flex min-h-11 items-center gap-3 border-t border-line py-2 first:border-t-0">
+            <span className="min-w-0 flex-1">
+              <span className="block text-base [overflow-wrap:anywhere]">{it.title}</span>
+              {it.date && <span className="block text-cap text-ink2">{formatRelativeDay(it.date, today)}</span>}
+            </span>
+            <span className="text-base tabular-nums">{formatEur(it.leftCents, { whole: true })}</span>
+          </li>
+        ))}
+      </ul>
+      <Link to="/money/plan" className="flex min-h-11 items-center gap-1 self-start text-cap text-ink2 no-underline">
+        весь план
+        <ChevronRight size={16} strokeWidth={1.75} aria-hidden="true" />
+      </Link>
+    </Card>
   )
 }
 

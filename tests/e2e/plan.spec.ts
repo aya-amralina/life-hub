@@ -32,6 +32,10 @@ test('План: периоды от дня денег, «не сходится»
   await seed()
   await login(page)
   await tab(page, 'Деньги')
+  // «Сейчас» (phase 4): what leaves before the day of money, from the plan
+  const until = card(page, new RegExp(`^До дня денег · ${formatDayMonth(payday()).replace('.', '\\.')}`))
+  await expect(until.getByText('Берлин e2e')).toBeVisible()
+  await expect(until.getByText('Подарки e2e')).toBeHidden()
   await more(page, 'План')
 
   // today's period runs to the day of money: «Берлин» is set aside, «Подарки» belong to the next one
