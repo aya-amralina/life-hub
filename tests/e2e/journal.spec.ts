@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { NEEDS, berlinDate, cleanupTestUser, live, login, tab, testClient } from './helpers'
+import { NEEDS, berlinDate, cleanupTestUser, eveningClock, live, login, tab, testClient } from './helpers'
 
 test.beforeEach(cleanupTestUser)
 test.afterAll(cleanupTestUser)
@@ -12,6 +12,8 @@ test('заметка дня: «Сохранить» только после пр
   expect((await sb.from('daily_logs').insert({ date: berlinDate(-2), note: 'Старая запись про сон', mood: 3, sleep_h: 7 })).error).toBeNull()
   await sb.auth.signOut()
 
+  // the day's note is in «Вечер», open from 18:00 (Тело, step 3)
+  await eveningClock(page)
   await login(page)
   await tab(page, 'Тело')
   const note = page.getByRole('textbox', { name: 'Заметка дня' })
@@ -46,7 +48,7 @@ test('заметка дня: «Сохранить» только после пр
   const { data } = await check.from('daily_logs').select('date, note').order('date')
   expect(data).toEqual([
     { date: berlinDate(-2), note: 'Старая запись: спала плохо' },
-    { date: berlinDate(), note: 'Тревожка с утра, но справилась' },
+    { date: berlinDate(-1), note: 'Тревожка с утра, но справилась' }, // the page's clock is yesterday evening
   ])
   await check.auth.signOut()
 })
