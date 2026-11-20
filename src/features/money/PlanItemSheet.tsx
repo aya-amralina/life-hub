@@ -62,6 +62,8 @@ function PlanItemForm({ item, onClose }: { item: PlannedItem | null; onClose: ()
     return m && m >= months[0]! ? m : months[0]!
   })
   const [early, setEarly] = useState(env?.reserved_early ?? false)
+  // a new «когда-нибудь»: decided («берём») or a wish to think over for 48 hours (rule 5)
+  const [think, setThink] = useState(false)
 
   const cents = parseEurInput(amount)
   const someday = period === SOMEDAY
@@ -96,7 +98,8 @@ function PlanItemForm({ item, onClose }: { item: PlannedItem | null; onClose: ()
     const price = cents === null ? null : cents / 100
     const where = someday ? 'Когда-нибудь' : periodName(period, today)
     if (!item) {
-      if (someday) addWish.mutate({ title: name, price_eur: price, decision: 'buy', decided_at: new Date().toISOString() }, { onSuccess: () => done(`«${name}» — когда-нибудь`) })
+      if (someday && think) addWish.mutate({ title: name, price_eur: price }, { onSuccess: () => done(`${name} — подождём до послезавтра`) })
+      else if (someday) addWish.mutate({ title: name, price_eur: price, decision: 'buy', decided_at: new Date().toISOString() }, { onSuccess: () => done(`«${name}» — когда-нибудь`) })
       else create.mutate(envelopeValues(), { onSuccess: () => done(`«${name}» — в плане, ${where}`) })
       return
     }
@@ -122,6 +125,15 @@ function PlanItemForm({ item, onClose }: { item: PlannedItem | null; onClose: ()
       <input autoFocus={!item} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="На что" aria-label="Название" className={field} />
       <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="Сколько, €" aria-label="Сумма" className={field} />
       <Choice label="Из каких денег" options={options} value={period} onChange={(v) => v && setPeriod(v)} />
+      {someday && !item && (
+        <div className="flex items-center gap-3">
+          <span className="min-w-0 flex-1 text-base">
+            Подумать 48 часов
+            <span className="block text-cap text-ink2">{think ? 'Через 48 часов спрошу один раз: всё ещё нужно?' : 'Уже решила — просто без срока.'}</span>
+          </span>
+          <Switch checked={think} onChange={setThink} label="Подумать 48 часов" />
+        </div>
+      )}
       {someday && linked && <p className="m-0 text-cap font-semibold text-amber-ink">К этой трате уже привязаны операции — её можно перенести в другой месяц, но не в «Когда-нибудь».</p>}
       {!someday && (
         <>

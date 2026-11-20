@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { addDaysISO, formatDayMonth, weekStart } from '../../src/lib/dates'
-import { NEEDS, berlinAt, berlinDate, cleanupTestUser, live, login, more, tab, testClient } from './helpers'
+import { NEEDS, berlinAt, berlinDate, cleanupTestUser, live, login, moneyTab, more, tab, testClient } from './helpers'
 
 // Stage 2 — the forecast: «Свободно до …», the scenarios of «Месяц», goals, the pace of the week. Numbers and dates only.
 test.beforeEach(cleanupTestUser)
@@ -55,7 +55,7 @@ test('Месяц: три сценария на горизонте, темп «Ж
   await expect(page.getByText('коридор сценариев')).toBeVisible()
 
   await page.getByRole('link', { name: 'Назад: Деньги' }).click()
-  await more(page, 'Конверты и долги')
+  await moneyTab(page, 'Счета')
   await expect(page.getByText(/нужно ≈ \d+\s€ в месяц до/)).toBeVisible()
   await expect(page.getByText('темпа пока нет')).toBeVisible()
 })

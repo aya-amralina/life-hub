@@ -41,6 +41,11 @@ export async function more(page: Page, name: string) {
   await page.getByRole('navigation', { name: 'Ещё' }).getByRole('link', { name: new RegExp(`^${name}`) }).click()
 }
 
+/** A tab of «Деньги» (phase 5): «Сейчас · План · Счета». */
+export async function moneyTab(page: Page, name: 'Сейчас' | 'План' | 'Счета') {
+  await page.getByRole('navigation', { name: 'Вкладки «Денег»' }).getByRole('link', { name, exact: true }).click()
+}
+
 /** «+» of the current screen. */
 export async function plus(page: Page) {
   await page.getByRole('button', { name: 'Добавить', exact: true }).click()

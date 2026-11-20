@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
+import { Link } from 'react-router'
 import { useAddAction } from '@/app/addSheetContext'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { SkeletonCard } from '@/components/ui/Feedback'
@@ -8,7 +9,8 @@ import { MetaChip } from '@/components/ui/MetaChip'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { cn } from '@/components/ui/cn'
 import { addDaysISO, formatDayMonth, todayBerlin } from '@/lib/dates'
-import { formatEur, joinRu } from '@/lib/format'
+import { formatEur, joinRu, plural } from '@/lib/format'
+import { wishDue, wishHoursLeft, wishSavedCents } from '@/lib/rules/wishlist'
 import { accountsStart } from '@/lib/rules/accounts'
 import { currentPeriodMonth, periodName } from '@/lib/rules/periods'
 import type { PlannedItem } from '@/lib/rules/plan'
@@ -16,6 +18,8 @@ import { doneItems, planPeriods, somedayItems, type PeriodLine } from '@/lib/rul
 import { DebtSheet } from './DebtSheet'
 import { OperationSheet } from './OperationSheet'
 import { PlanItemSheet } from './PlanItemSheet'
+import { WishQuestions } from './WishQuestions'
+import { useWishlist } from './wishlistApi'
 import { useAccounts, useAllWeekLimits, useDebts, useEnvelopes, useFreeUntil, usePaydays, usePlanTransactions, usePlannedItems, type Debt, type PlanTx } from './api'
 
 const eur = (c: number) => formatEur(c, { whole: true })
@@ -37,6 +41,7 @@ export function PlanTab() {
   const debts = useDebts()
   const envelopes = useEnvelopes()
   const free = useFreeUntil()
+  const wishes = useWishlist()
   const [editing, setEditing] = useState<PlannedItem | 'new' | null>(null)
   const [debt, setDebt] = useState<Debt | null>(null)
   const [operation, setOperation] = useState<PlanTx | null>(null)
@@ -50,6 +55,12 @@ export function PlanTab() {
   const names = new Map(accountList.map((a) => [a.id, a.name]))
   const periods = planPeriods({ items, txs: all, accounts: accountList, limits: limits.data ?? [], start: accountsStart(all), today, paydays, currentMonth: currentPeriodMonth(today, paydays) })
   const someday = somedayItems(items)
+  // wishes (the old «Хотелки», phase 5): still thinking — «ещё N ч»; what deciding «не покупать» saved
+  const wishList = wishes.data ?? []
+  const nowDate = new Date()
+  const thinking = new Map(wishList.filter((w) => w.decision === null && !wishDue(w, nowDate)).map((w) => [w.id, wishHoursLeft(w, nowDate)]))
+  const skipped = wishList.filter((w) => w.decision === 'skip')
+  const saved = wishSavedCents(wishList)
   const done = doneItems(items)
   const open = (it: PlannedItem) => {
     if (it.source === 'envelope' || it.source === 'wish') setEditing(it)
@@ -63,18 +74,27 @@ export function PlanTab() {
         <PeriodCard key={p.month} p={p} today={today} names={names} free={p.current ? free : null} onOpen={open} />
       ))}
 
+      <WishQuestions />
       <Card>
         <CardHeader title="Когда-нибудь" context={someday.length ? eur(someday.reduce((s, it) => s + it.amountCents, 0)) : undefined} />
         {someday.length === 0 ? (
-          <p className="m-0 text-cap text-ink2">То, что хочется, но без срока. Хотелка, которую решила взять, тоже ждёт здесь, пока не выберешь месяц.</p>
+          <p className="m-0 text-cap text-ink2">То, что хочется, но без срока. Захотелось купить сразу — «+», «Когда-нибудь» и «Подумать 48 часов»: потом спрошу один раз, нужно ли ещё.</p>
         ) : (
           <ul className="m-0 flex list-none flex-col p-0">
-            {someday.map((it) => (
-              <li key={it.key}>
-                <ItemRow it={it} names={names} apart={false} onOpen={open} />
-              </li>
-            ))}
+            {someday.map((it) => {
+              const h = it.source === 'wish' ? thinking.get(it.sourceId) : undefined
+              return (
+                <li key={it.key}>
+                  <ItemRow it={it} names={names} apart={false} onOpen={open} extra={h !== undefined ? `думаю · ещё ${h} ${plural(h, ['час', 'часа', 'часов'])}` : undefined} />
+                </li>
+              )
+            })}
           </ul>
+        )}
+        {saved > 0 && (
+          <p className="m-0 text-cap text-ink2 tabular-nums">
+            Решила не покупать: {skipped.length} · не потрачено {eur(saved)}
+          </p>
         )}
       </Card>
 
@@ -92,6 +112,14 @@ export function PlanTab() {
           )}
         </Card>
       )}
+
+      {/* every operation of a month (income, transfers, «Показать убранные») and the forecast — one tap deeper */}
+      <Link to="/money/month" className="flex min-h-12 items-center gap-3 rounded-2xl border border-line bg-card px-4 text-base text-ink no-underline active:bg-sub">
+        <span className="min-w-0 flex-1">
+          Все операции и прогноз <span className="text-ink2">· «Месяц»</span>
+        </span>
+        <ChevronRight size={16} strokeWidth={1.75} aria-hidden="true" className="flex-none text-ink3" />
+      </Link>
 
       <PlanItemSheet open={editing !== null} onClose={() => setEditing(null)} item={editing === 'new' ? null : editing} />
       <DebtSheet open={debt !== null} onClose={() => setDebt(null)} debt={debt} goals={(envelopes.data ?? []).filter((e) => e.type === 'goal')} />
@@ -203,8 +231,8 @@ function SumRow({ label, cents }: { label: string; cents: number }) {
 const KIND_META: Record<string, string> = { debt: 'вернуть долг', to_goal: 'в копилку' }
 
 /** One item: title, what matters for a decision (date, where the money is), the sum on the right. */
-function ItemRow({ it, names, apart, onOpen }: { it: PlannedItem; names: Map<string, string>; apart: boolean; onOpen: (it: PlannedItem) => void }) {
-  const meta: string[] = []
+function ItemRow({ it, names, apart, onOpen, extra }: { it: PlannedItem; names: Map<string, string>; apart: boolean; onOpen: (it: PlannedItem) => void; extra?: string }) {
+  const meta: string[] = extra ? [extra] : []
   if (KIND_META[it.kind]) meta.push(KIND_META[it.kind]!)
   if (it.date) meta.push(it.source === 'debt' ? `до ${formatDayMonth(it.date)}` : formatDayMonth(it.date))
   if (apart && it.reservedEarly) meta.push('отложено заранее')

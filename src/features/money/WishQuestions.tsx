@@ -6,7 +6,7 @@ import { formatEur, toCents } from '@/lib/format'
 import { wishDue } from '@/lib/rules/wishlist'
 import { useUpdateWish, useWishlist, type Wish } from './wishlistApi'
 
-/** Rule 5: after 48 hours a wish asks «Всё ещё нужно?» — on «Сегодня» and in «Хотелки». */
+/** Rule 5: after 48 hours a wish asks «Всё ещё нужно?» — on «Сегодня» and in «План» → «Когда-нибудь». */
 export function WishQuestions({ only }: { only?: number } = {}) {
   const wishes = useWishlist()
   const update = useUpdateWish()
@@ -17,7 +17,7 @@ export function WishQuestions({ only }: { only?: number } = {}) {
   const decide = (w: Wish, decision: 'buy' | 'skip') => {
     update.mutate({ id: w.id, patch: { decision, decided_at: new Date().toISOString() } })
     toast({
-      text: decision === 'buy' ? `${w.title} — берём. Трату внеси через «+», когда купишь` : `${w.title} — не покупаем`,
+      text: decision === 'buy' ? `${w.title} — берём. Она в «Плане» → «Когда-нибудь»` : `${w.title} — не покупаем`,
       actionLabel: 'Вернуть',
       onAction: () => update.mutate({ id: w.id, patch: { decision: null, decided_at: null } }),
     })

@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { addMonthsISO, formatDayMonth } from '../../src/lib/dates'
 import { periodMonthOf, periodName } from '../../src/lib/rules/periods'
-import { NEEDS, berlinDate, cleanupTestUser, live, login, more, plus, tab, testClient } from './helpers'
+import { NEEDS, berlinDate, cleanupTestUser, live, login, moneyTab, plus, tab, testClient } from './helpers'
 
 // Money, phase 3 — «План»: periods from the day of money, «на жизнь», «не сходится», one form, «Когда-нибудь», «Готово».
 test.beforeEach(cleanupTestUser)
@@ -36,7 +36,7 @@ test('План: периоды от дня денег, «не сходится»
   const until = card(page, new RegExp(`^До дня денег · ${formatDayMonth(payday()).replace('.', '\\.')}`))
   await expect(until.getByText('Берлин e2e')).toBeVisible()
   await expect(until.getByText('Подарки e2e')).toBeHidden()
-  await more(page, 'План')
+  await moneyTab(page, 'План')
 
   // today's period runs to the day of money: «Берлин» is set aside, «Подарки» belong to the next one
   const now = card(page, new RegExp(`до ${formatDayMonth(payday()).replace('.', '\\.')}`))

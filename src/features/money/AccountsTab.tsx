@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, HandCoins, Landmark, PiggyBank } from 'lucide-react'
+import { Link } from 'react-router'
 import { useAddAction } from '@/app/addSheetContext'
 import { useToast } from '@/app/toastContext'
 import { XYChart } from '@/components/charts/Chart'
@@ -7,6 +8,7 @@ import { BottomSheet } from '@/components/ui/BottomSheet'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { EmptyState, SkeletonCard } from '@/components/ui/Feedback'
+import { PickSheet } from '@/components/ui/PickSheet'
 import { SegmentedTabs } from '@/components/ui/SegmentedTabs'
 import { cn } from '@/components/ui/cn'
 import { ACCOUNT_GROUPS, type AccountGroup } from '@/lib/constants'
@@ -15,16 +17,20 @@ import { formatEur } from '@/lib/format'
 import { GROUP_LABEL, accountsOverview, groupForecast, reconcileAccounts, reservesByAccount, type AccountLine, type GroupLine } from '@/lib/rules/accounts'
 import { BALANCE_LINE_POINTS, balanceLine, niceTicks } from '@/lib/rules/charts'
 import { forecastEnd } from '@/lib/rules/money'
+import { ruleState } from '@/lib/rules/recurringEdit'
+import { DebtSheet } from './DebtSheet'
+import { DebtsCard, GoalSheet, GoalsCard } from './SavingsDebts'
 import { accountsCheckText } from './checkText'
-import { useAccounts, useActualBalances, useDebts, useEnvelopes, usePaydays, usePlanTransactions, useSaveAccount, type Account } from './api'
+import { useAccounts, useActualBalances, useDebts, useEnvelopes, usePaydays, usePlanTransactions, useRecurring, useSaveAccount, type Account, type Debt, type Envelope } from './api'
 
 const eur = (c: number) => formatEur(c, { whole: true })
 const field = 'h-12 w-full rounded-xl border border-line2 bg-card px-4 text-base text-ink outline-none placeholder:text-ink3 focus:border-ink2'
 
 /**
- * Счета (decision 18.11.2026): every account — all and free (all minus what is set aside on it: envelopes, goals,
- * debts to pay back), by group with totals; «Подушка» with its own forecast to the horizon; the reconciliation with
- * «Остатки». «+» — a new account; a tap — its name, group, archive.
+ * Счета (decision 18.11.2026; docs/money-redesign.md, phase 5 — a tab of «Деньги»): every account — all and free (all
+ * minus what is set aside on it), by group with totals; «Подушка» with its own forecast; the reconciliation with
+ * «Остатки»; then Копилки (goals) and Долги, a row each, and the recurring rules one tap deeper. «+» — a new account,
+ * копилка or debt; a tap — its sheet.
  */
 export function AccountsTab() {
   const today = todayBerlin()
@@ -35,14 +41,45 @@ export function AccountsTab() {
   const balances = useActualBalances()
   const paydays = usePaydays()
   const [editing, setEditing] = useState<Account | 'new' | null>(null)
-  useAddAction(() => setEditing('new'))
+  const [goalEdit, setGoalEdit] = useState<Envelope | 'new' | null>(null)
+  const [debtEdit, setDebtEdit] = useState<Debt | 'new' | null>(null)
+  const [picking, setPicking] = useState(false)
+  const rules = useRecurring()
+  useAddAction(() => setPicking(true))
   if (accounts.isPending || txs.isPending || envelopes.isPending || debts.isPending || balances.isPending || paydays === null) return <SkeletonCard />
 
   const list = accounts.data ?? []
   const all = txs.data ?? []
   const reserves = reservesByAccount({ envelopes: envelopes.data ?? [], debts: debts.data ?? [], txs: all, balances: balances.data ?? [], accounts: list, today, paydays })
   const groups = accountsOverview(all, list, reserves, today)
-  const sheet = <AccountSheet open={editing !== null} onClose={() => setEditing(null)} account={editing === 'new' ? null : editing} count={list.length} />
+  const goals = (envelopes.data ?? []).filter((e) => e.type === 'goal')
+  const ruleCount = (rules.data ?? []).filter((r) => ruleState(r, today) !== 'ended').length
+  // goals and debts (phase 5: from the old «Конверты и долги»), the recurring rules one tap deeper, and the sheets
+  const sheet = (
+    <>
+      <GoalsCard goals={goals} debts={debts.data ?? []} txs={all} balances={balances.data ?? []} accounts={list} onEdit={setGoalEdit} />
+      <DebtsCard debts={debts.data ?? []} goals={goals} txs={all} onEdit={setDebtEdit} />
+      <Link to="/money/recurring" className="flex min-h-12 items-center gap-3 rounded-2xl border border-line bg-card px-4 text-base text-ink no-underline active:bg-sub">
+        <span className="min-w-0 flex-1">
+          Регулярные платежи {ruleCount > 0 && <span className="text-ink2 tabular-nums">· {ruleCount}</span>}
+        </span>
+        <ChevronRight size={16} strokeWidth={1.75} aria-hidden="true" className="flex-none text-ink3" />
+      </Link>
+      <AccountSheet open={editing !== null} onClose={() => setEditing(null)} account={editing === 'new' ? null : editing} count={list.length} />
+      <GoalSheet open={goalEdit !== null} onClose={() => setGoalEdit(null)} goal={goalEdit === 'new' ? null : goalEdit} />
+      <DebtSheet open={debtEdit !== null} onClose={() => setDebtEdit(null)} debt={debtEdit === 'new' ? null : debtEdit} goals={goals} />
+      <PickSheet
+        open={picking}
+        onClose={() => setPicking(false)}
+        label="Добавить"
+        options={[
+          { label: 'Счёт', hint: 'новый счёт или кармашек', icon: Landmark, sphere: 'money', onPick: () => setEditing('new') },
+          { label: 'Копилка', hint: 'копить к сумме', icon: PiggyBank, sphere: 'money', onPick: () => setGoalEdit('new') },
+          { label: 'Долг', hint: 'я должна, мне должны, заём из копилки', icon: HandCoins, sphere: 'money', onPick: () => setDebtEdit('new') },
+        ]}
+      />
+    </>
+  )
 
   if (groups === null) {
     return (

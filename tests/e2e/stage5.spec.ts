@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
-import { NEEDS, cleanupTestUser, live, login, more, plus, tab, testClient } from './helpers'
+import { NEEDS, cleanupTestUser, live, login, moneyTab, plus, tab, testClient } from './helpers'
 
 test.beforeEach(cleanupTestUser)
 test.afterAll(cleanupTestUser)
@@ -85,15 +85,18 @@ test('хотелка: ждёт 48 часов, потом «Всё ещё нуж�
   await card.getByRole('button', { name: 'Не покупать' }).click()
   await expect(card).toBeHidden()
 
+  // phase 5: wishes live in «План» → «Когда-нибудь»; «+» there with «Подумать 48 часов»
   await tab(page, 'Деньги')
-  await more(page, 'Хотелки')
+  await moneyTab(page, 'План')
   await plus(page)
-  const wish = page.getByRole('dialog', { name: 'Новая хотелка' })
-  await wish.getByLabel('Что хочется').fill('Buch e2e')
-  await wish.getByLabel('Цена').fill('20')
-  await wish.getByRole('button', { name: 'Отложить на 48 часов' }).click()
-  await expect(page.getByText('ещё 48 часов')).toBeVisible()
-  await expect(page.getByText('не потрачено 79 €')).toBeVisible()
+  const wish = page.getByRole('dialog', { name: 'Новая трата в план' })
+  await wish.getByLabel('Название').fill('Buch e2e')
+  await wish.getByLabel('Сумма').fill('20')
+  await wish.getByRole('button', { name: 'Когда-нибудь', exact: true }).click()
+  await wish.getByRole('switch', { name: 'Подумать 48 часов' }).click()
+  await wish.getByRole('button', { name: 'Сохранить' }).click()
+  await expect(page.getByText(/думаю · ещё 48 часов/)).toBeVisible()
+  await expect(page.getByText(/не потрачено 79\s€/)).toBeVisible()
 })
 
 test('без сети: отметка встаёт в очередь и уходит, когда сеть вернулась', async ({ page, context }) => {

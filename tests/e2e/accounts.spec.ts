@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { NEEDS, berlinDate, cleanupTestUser, live, login, more, plus, tab, testClient } from './helpers'
+import { NEEDS, berlinDate, cleanupTestUser, live, login, moneyTab, more, plus, tab, testClient } from './helpers'
 
 // The start by accounts (decision 18.11.2026): «Деньги» count «Баланс» from the start; the quick expense goes only
 // from «Баланс»; a goal alone on its account shows that account's balance. Seeded by the test user's own client.
@@ -71,9 +71,10 @@ test('цель одна на своём счёте: «сейчас» — ост�
 
   await login(page)
   await tab(page, 'Деньги')
-  await more(page, 'Конверты и долги')
-  await expect(page.getByText('550 €')).toBeVisible() // 500 + 50 from «Баланс»
-  await expect(page.getByText('остаток счёта Revolut · Подушка')).toBeVisible()
+  await moneyTab(page, 'Счета')
+  const goals = page.locator('section', { has: page.getByRole('heading', { name: 'Копилки', exact: true }) })
+  await expect(goals.getByText(/^550\s€/)).toBeVisible() // 500 + 50 from «Баланс»
+  await expect(goals.getByText('остаток счёта Revolut · Подушка')).toBeVisible()
   await expect(page.getByRole('button', { name: /Внести остаток|Обновить остаток/ })).toBeHidden()
 })
 
@@ -90,8 +91,7 @@ test('Счета: всего и свободно по счетам и групп
 
   await login(page)
   await tab(page, 'Деньги')
-  await expect(page.getByRole('navigation', { name: 'Ещё' }).getByRole('link', { name: /^Счета/ })).toContainText(/«Баланс» 230\s€/)
-  await more(page, 'Счета')
+  await moneyTab(page, 'Счета')
   const card = (name: string) => page.locator('section', { has: page.getByRole('heading', { name, exact: true }) })
   await expect(card('Баланс')).toContainText(/230\s€/)
   await expect(card('Подушка')).toContainText(/свободно 15\s€/) // 550 − the goal's 535
@@ -101,7 +101,9 @@ test('Счета: всего и свободно по счетам и групп
   await expect(card('Отдельно')).toContainText(/отложено 100\s€ · Депозит e2e/)
 
   // a new account, then into the archive
+  // phase 5: «+» on «Счета» asks what to add
   await plus(page)
+  await page.getByRole('dialog', { name: 'Добавить' }).getByRole('button', { name: /^Счёт/ }).click()
   const sheet = page.getByRole('dialog', { name: 'Новый счёт' })
   await sheet.getByLabel('Название').fill('Revolut · Отпуск e2e')
   await sheet.getByRole('tab', { name: 'Отдельно' }).click()

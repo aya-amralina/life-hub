@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { NEEDS, berlinDate, cleanupTestUser, live, login, more, plus, testClient } from './helpers'
+import { NEEDS, berlinDate, cleanupTestUser, live, login, moneyTab, more, plus, testClient } from './helpers'
 
 /** The scenario «по плану» on the horizon (stage 2): its row of the table holds the sum. */
 const planOn = (eur: number) => new RegExp(`^по плану.*${eur}\\s€`)
@@ -7,7 +7,7 @@ const planOn = (eur: number) => new RegExp(`^по плану.*${eur}\\s€`)
 test.beforeEach(cleanupTestUser)
 test.afterAll(cleanupTestUser)
 
-test('Конверты: «Отложено» только по конвертам, цель из «Остатков», заём из копилки и долги', async ({ page }) => {
+test('Счета: копилки из «Остатков», заём из копилки и долги одной строкой; конверт — в «Плане»', async ({ page }) => {
   test.skip(!live, NEEDS)
   const sb = await testClient()
   const one = async (t: string, row: Record<string, unknown>) => {
@@ -26,17 +26,25 @@ test('Конверты: «Отложено» только по конверта�
   await sb.auth.signOut()
 
   await login(page)
-  await page.goto('/money')
-  await more(page, 'Конверты и долги')
-  await expect(page.getByText('Отложено в конвертах')).toBeVisible()
-  await expect(page.getByText('120 €', { exact: true })).toHaveCount(2) // total and the card: 200 − 80, the goal is not counted
-  await expect(page.getByRole('progressbar', { name: 'Подушка: накоплено' })).toHaveAttribute('aria-valuenow', '39000')
-  await expect(page.getByText(/Взято в долг из этой цели: 150\s€ · на Франкфурт/)).toBeVisible()
-  await expect(page.getByText(/ещё не возвращено 100\s€/)).toBeVisible()
-  await expect(page.getByText('открыто 2')).toBeVisible()
-  await expect(page.getByText('Сестра')).toBeHidden()
-  await page.getByRole('button', { name: /Закрытые/ }).click()
-  await expect(page.getByText('Сестра')).toBeVisible()
+  // old addresses lead to the new places (phase 5)
+  await page.goto('/money/envelopes')
+  await expect(page).toHaveURL(/\/money\/accounts$/)
+  const card = (name: string) => page.locator('section', { has: page.getByRole('heading', { name, exact: true }) })
+  await expect(card('Копилки').getByRole('progressbar', { name: 'Подушка: накоплено' })).toHaveAttribute('aria-valuenow', '39000')
+  await expect(card('Копилки').getByText(/взято в долг, не возвращено 100\s€/)).toBeVisible()
+  const debts = card('Долги')
+  await expect(debts.getByText('открыто 2')).toBeVisible()
+  await expect(debts.getByRole('button', { name: /^Жилец/ })).toContainText(/100\s€/)
+  await expect(debts.getByRole('button', { name: /^Подушка/ })).toContainText(/заём из копилки/)
+  await expect(debts.getByText('Сестра')).toBeHidden()
+  await debts.getByRole('button', { name: /Закрытые/ }).click()
+  await expect(debts.getByText('Сестра')).toBeVisible()
+
+  // the envelope is a spending of the plan: 200 − 80 left
+  await moneyTab(page, 'План')
+  await expect(page.getByRole('button', { name: /^Подарки/ })).toContainText(/120\s€/)
+  await page.goto('/money/wishes')
+  await expect(page).toHaveURL(/\/money\/plan$/)
 })
 
 test('без Excel: плановая операция, её правка и долг заводятся в приложении', async ({ page }) => {
@@ -70,7 +78,7 @@ test('без Excel: плановая операция, её правка и до
 
   // a debt
   await page.getByRole('link', { name: 'Назад: Деньги' }).click()
-  await more(page, 'Конверты и долги')
+  await moneyTab(page, 'Счета')
   await plus(page)
   await page.getByRole('dialog', { name: 'Добавить' }).getByRole('button', { name: /^Долг/ }).click()
   const debt = page.getByRole('dialog', { name: 'Новый долг' })

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { CalendarClock, CalendarRange, ChevronRight, Hourglass, Landmark, NotebookPen, Pencil, PiggyBank, Repeat, Trash2 } from 'lucide-react'
+import { CalendarRange, ChevronRight, NotebookPen, Pencil, Repeat, Trash2 } from 'lucide-react'
 import { Link, Navigate, useParams } from 'react-router'
 import { useAddAction, useOpenAdd } from '@/app/addSheetContext'
 import { useToast } from '@/app/toastContext'
@@ -10,10 +10,11 @@ import { Swipeable } from '@/components/ui/Swipeable'
 import { WeekSwitcher } from '@/components/ui/WeekSwitcher'
 import { CalendarLink } from '@/components/layout/CalendarLink'
 import { MoreList, SectionHeader, type MoreLink } from '@/components/layout/MoreList'
+import { RouteTabs, type RouteTab } from '@/components/layout/RouteTabs'
 import { ScreenHeader } from '@/components/layout/ScreenHeader'
 import { addDaysISO, formatDayMonth, formatRelativeDay, todayBerlin, weekStart } from '@/lib/dates'
 import { formatAmount, formatEstimate, formatEur, plural, toCents } from '@/lib/format'
-import { accountsStart, groupBalanceAt } from '@/lib/rules/accounts'
+import { accountsStart } from '@/lib/rules/accounts'
 import { currentPeriodMonth } from '@/lib/rules/periods'
 import { planPeriods } from '@/lib/rules/planPeriods'
 import { weekPace } from '@/lib/rules/forecast'
@@ -23,7 +24,6 @@ import { NotesSection } from '@/features/notes/NotesCard'
 import { useAccountName, useAccounts, useAddExpense, useAllTransactions, useAllWeekLimits, useDeleteTransaction, usePaydays, usePlanTransactions, usePlannedItems, useRecurring, useWeekLimits, type Transaction } from './api'
 import { CutNextWeek } from './CutNextWeek'
 import { AccountsTab } from './AccountsTab'
-import { EnvelopesTab } from './EnvelopesTab'
 import { FreeUntilHero } from './FreeUntil'
 import { LimitsSheet } from './LimitsSheet'
 import { MoneyQuestions } from './MoneyQuestions'
@@ -31,62 +31,72 @@ import { MoneyTotal } from './MoneyTotal'
 import { MonthTab } from './MonthTab'
 import { PlanTab } from './PlanTab'
 import { RecurringTab } from './RecurringTab'
-import { WishlistTab } from './WishlistTab'
 import { useMoneyWeek } from './useMoneyWeek'
 
 const BACK = '/money'
+/** Sub-pages one tap deeper (from «Ещё» and links); the three tabs are their own views. */
 const SECTIONS = {
-  plan: 'План',
-  accounts: 'Счета',
   month: 'Месяц',
   recurring: 'Регулярные',
-  envelopes: 'Конверты и долги',
-  wishes: 'Хотелки',
   notes: 'Заметки',
 } as const
 type Section = keyof typeof SECTIONS
+/** Old addresses (phase 5): envelopes live in «План», goals and debts in «Счета», wishes in «План» → «Когда-нибудь». */
+const MOVED: Record<string, string> = { envelopes: '/money/accounts', wishes: '/money/plan' }
+
+/** «Сейчас · План · Счета» (docs/money-redesign.md, phase 5) — addresses, so back / forward and links work. */
+const TABS: readonly RouteTab[] = [
+  { to: '/money', label: 'Сейчас', end: true },
+  { to: '/money/plan', label: 'План' },
+  { to: '/money/accounts', label: 'Счета' },
+]
 
 const MORE: readonly MoreLink[] = [
-  { to: '/money/plan', label: 'План', icon: CalendarClock, hint: 'по периодам' },
-  { to: '/money/accounts', label: 'Счета', icon: Landmark },
-  { to: '/money/month', label: 'Месяц', icon: CalendarRange, hint: 'план и баланс' },
+  { to: '/money/month', label: 'Месяц', icon: CalendarRange, hint: 'операции и прогноз' },
   { to: '/money/recurring', label: 'Регулярные', icon: Repeat },
-  { to: '/money/envelopes', label: 'Конверты и долги', icon: PiggyBank },
-  { to: '/money/wishes', label: 'Хотелки', icon: Hourglass },
   { to: '/money/notes', label: 'Заметки', icon: NotebookPen },
 ]
 
 /**
- * Деньги: «Сейчас» on the main view (docs/money-redesign.md, phase 4) — the questions, one main number («Свободно до
- * …» and how it is counted), the week in one block, what leaves before the day of money, the week's spending; the
- * plan, accounts, month and the rest one tap deeper («Ещё»).
+ * Деньги (docs/money-redesign.md): three tabs — «Сейчас» (the questions, one main number, the week, what leaves before
+ * the day of money, the week's spending), «План» (everything about the future by periods), «Счета» (accounts, goals,
+ * debts); «Ещё» on «Сейчас» — the month's operations and forecast, the recurring rules, notes.
  */
 export function MoneyScreen() {
   const section = useParams()['*'] ?? ''
-  if (section === '') {
+  if (section === '' || section === 'plan' || section === 'accounts') {
     return (
       <>
         <ScreenHeader title="Деньги" right={<CalendarLink sphere="money" />} />
-        {/* the questions themselves — on the week (and «Сегодня»); sections only say that some are waiting */}
-        <MoneyQuestions />
-        <FreeUntilHero />
-        <WeekTab untilPayday={<UntilPayday />} />
-        <MoneyMore />
+        <RouteTabs tabs={TABS} label="Вкладки «Денег»" />
+        {section === '' && (
+          <>
+            {/* the questions themselves — on «Сейчас» (and «Сегодня»); other views only say that some are waiting */}
+            <MoneyQuestions />
+            <FreeUntilHero />
+            <WeekTab untilPayday={<UntilPayday />} />
+            <MoneyMore />
+          </>
+        )}
+        {section === 'plan' && (
+          <>
+            <PendingLink />
+            <PlanTab />
+          </>
+        )}
+        {section === 'accounts' && <AccountsTab />}
       </>
     )
   }
+  if (section in MOVED) return <Navigate to={MOVED[section]!} replace />
   if (!(section in SECTIONS)) return <Navigate to={BACK} replace />
   const s = section as Section
   return (
     <>
       <SectionHeader title={SECTIONS[s]} back={BACK} sphere="Деньги" right={s === 'month' ? <CalendarLink sphere="money" /> : undefined} />
-      {(s === 'month' || s === 'envelopes' || s === 'plan') && <PendingLink />}
-      {s === 'plan' && <PlanTab />}
-      {s === 'accounts' && <AccountsTab />}
+      {s === 'month' && <PendingLink />}
       {s === 'month' && <MonthTab />}
       {s === 'recurring' && <RecurringTab />}
-      {s === 'envelopes' && <EnvelopesTab />}
-      {s === 'wishes' && <WishlistTab />}
       {s === 'notes' && <NotesSection sphere="money" />}
     </>
   )
@@ -100,11 +110,8 @@ function MoneyMore() {
 function useMoreLinks(): readonly MoreLink[] {
   const rules = useRecurring()
   const txs = useAllTransactions()
-  const accounts = useAccounts()
   const today = todayBerlin()
-  // «Счета» — what «Баланс» holds now, once there is a start by accounts
-  const balance = groupBalanceAt(txs.data ?? [], accounts.data ?? [], 'balance', today, 'fact')
-  const links = balance === null ? MORE : MORE.map((l) => (l.to === '/money/accounts' ? { ...l, hint: `«Баланс» ${formatEur(balance, { whole: true })}` } : l))
+  const links = MORE
   const current = (rules.data ?? []).filter((r) => ruleState(r, today) !== 'ended')
   if (!current.length) return links
   const end = forecastEnd(today)
