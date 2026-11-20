@@ -1,11 +1,13 @@
-import { Wallet } from 'lucide-react'
+import { ChevronRight, Wallet } from 'lucide-react'
+import { Link } from 'react-router'
 import { useToast } from '@/app/toastContext'
 import { QuestionCard } from '@/components/ui/QuestionCard'
 import { dayChipLabel, formatWeekdayDate, todayBerlin } from '@/lib/dates'
 import { formatEur, toCents } from '@/lib/format'
 import { plannedQuestions } from '@/lib/rules/money'
+import { paydayRule } from '@/lib/rules/periods'
 import { confirmPatch, unconfirmPatch } from '@/lib/rules/operation'
-import { useAccountName, useAnswerPlanned, usePlanTransactions, type PlanTx } from './api'
+import { useAccountName, useAccounts, useAnswerPlanned, usePlanTransactions, useRecurring, type PlanTx } from './api'
 
 /**
  * Rule 18: a planned operation whose day has come asks once — income «Пришло?», expense «Списалось?».
@@ -17,6 +19,8 @@ export function MoneyQuestions({ only }: { only?: number } = {}) {
   const txs = usePlanTransactions()
   const answerPlanned = useAnswerPlanned()
   const toast = useToast()
+  // the salary (day of money, phase 6) also offers to distribute it
+  const salaryRule = paydayRule(useRecurring().data ?? [], useAccounts().data ?? [])
   const list = plannedQuestions(txs.data ?? [], today).filter((_, i) => only === undefined || i === only)
 
   type Patch = Parameters<typeof answerPlanned>[1]
@@ -32,8 +36,8 @@ export function MoneyQuestions({ only }: { only?: number } = {}) {
         const income = question === 'Пришло?'
         const cents = toCents(tx.amount_eur)
         return (
+          <div key={tx.id} className="flex flex-col gap-2">
           <QuestionCard
-            key={tx.id}
             sphere="money"
             icon={Wallet}
             question={question}
@@ -59,6 +63,14 @@ export function MoneyQuestions({ only }: { only?: number } = {}) {
             }}
             onCancel={() => answer(tx, { cancelled_at: new Date().toISOString() }, `${tx.title} — убрала из плана`)}
           />
+          {salaryRule && tx.recurring_id === salaryRule.id && (
+            <Link to="/money/payday" className="flex min-h-11 items-center gap-2 rounded-xl bg-sub px-4 text-base text-ink no-underline active:bg-line2">
+              <span className="size-2 flex-none rounded-full bg-money" />
+              <span className="min-w-0 flex-1">День денег — распределить</span>
+              <ChevronRight size={20} strokeWidth={1.75} aria-hidden="true" className="flex-none text-ink3" />
+            </Link>
+          )}
+          </div>
         )
       })}
     </>

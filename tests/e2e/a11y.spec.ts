@@ -14,6 +14,7 @@ const SCREENS: { name: string; go: (p: Page) => Promise<void> }[] = [
   { name: 'Деньги · Регулярные', go: async (p) => void (await p.goto('/money/recurring')) },
   { name: 'Деньги · План', go: async (p) => void (await p.goto('/money/plan')) },
   { name: 'Деньги · Счета', go: async (p) => void (await p.goto('/money/accounts')) },
+  { name: 'Деньги · День денег', go: async (p) => void (await p.goto('/money/payday')) },
   { name: 'Работа', go: async (p) => void (await p.goto('/work')) },
   { name: 'Работа · Люди', go: async (p) => void (await p.goto('/work/people')) },
   { name: 'Работа · Архив', go: async (p) => void (await p.goto('/work/archive')) },

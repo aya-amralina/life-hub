@@ -29,6 +29,7 @@ import { LimitsSheet } from './LimitsSheet'
 import { MoneyQuestions } from './MoneyQuestions'
 import { MoneyTotal } from './MoneyTotal'
 import { MonthTab } from './MonthTab'
+import { PaydayTab } from './PaydayTab'
 import { PlanTab } from './PlanTab'
 import { RecurringTab } from './RecurringTab'
 import { useMoneyWeek } from './useMoneyWeek'
@@ -36,6 +37,7 @@ import { useMoneyWeek } from './useMoneyWeek'
 const BACK = '/money'
 /** Sub-pages one tap deeper (from «Ещё» and links); the three tabs are their own views. */
 const SECTIONS = {
+  payday: 'День денег',
   month: 'Месяц',
   recurring: 'Регулярные',
   notes: 'Заметки',
@@ -95,6 +97,7 @@ export function MoneyScreen() {
     <>
       <SectionHeader title={SECTIONS[s]} back={BACK} sphere="Деньги" right={s === 'month' ? <CalendarLink sphere="money" /> : undefined} />
       {s === 'month' && <PendingLink />}
+      {s === 'payday' && <PaydayTab />}
       {s === 'month' && <MonthTab />}
       {s === 'recurring' && <RecurringTab />}
       {s === 'notes' && <NotesSection sphere="money" />}

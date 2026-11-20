@@ -84,6 +84,17 @@ function lifeByDay(weekly: (m: ISODate) => number, spentThisWeek: number, today:
   }
 }
 
+/**
+ * «Жизнь» by plan for the days from `from` to `to` (both included, none when `to` < `from`), counted from today: what is
+ * left of this week over its days, other weeks by plan (rule 34). For «День денег»: what the old period still needs.
+ */
+export function lifePlanCents(txs: readonly AccTx[], limits: readonly WeekLimitSum[], today: ISODate, from: ISODate, to: ISODate): number {
+  const lifeDay = lifeByDay(lifePlanWeeks(txs, limits), spentLifeInWeek(txs, weekStart(today)), today)
+  let life = 0
+  for (let d = from; d <= to; d = addDaysISO(d, 1)) life += lifeDay(d)
+  return Math.round(life)
+}
+
 /** A day of the forecast, cents; `lifePlan` — «Жизнь» by plan from today through that day (for «Месяцы»). */
 export type ForecastDay = { date: ISODate; plan: number; tempo: number | null; careful: number | null; lifePlan: number }
 export type ScenarioResult = { endCents: number; pit: { date: ISODate; cents: number } }

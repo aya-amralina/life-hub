@@ -70,8 +70,8 @@ export function PlanTab() {
 
   return (
     <>
-      {periods.map((p) => (
-        <PeriodCard key={p.month} p={p} today={today} names={names} free={p.current ? free : null} onOpen={open} />
+      {periods.map((p, i) => (
+        <PeriodCard key={p.month} p={p} today={today} names={names} free={p.current ? free : null} onOpen={open} distribute={i === 1 && paydays.length > 0} />
       ))}
 
       <WishQuestions />
@@ -134,8 +134,11 @@ function PeriodCard({
   names,
   free,
   onOpen,
+  distribute = false,
 }: {
   p: PeriodLine
+  /** the next period starts with the salary: «День денег» opens from here (phase 6) */
+  distribute?: boolean
   today: string
   names: Map<string, string>
   free: ReturnType<typeof useFreeUntil>
@@ -214,6 +217,12 @@ function PeriodCard({
             )
           )}
         </div>
+      )}
+      {distribute && (
+        <Link to="/money/payday" className="-mb-2 flex min-h-11 items-center gap-2 border-t border-line text-base text-ink no-underline active:bg-sub">
+          <span className="min-w-0 flex-1">День денег · {formatDayMonth(p.start)} — как распределить</span>
+          <ChevronRight size={16} strokeWidth={1.75} aria-hidden="true" className="flex-none text-ink3" />
+        </Link>
       )}
     </Card>
   )
